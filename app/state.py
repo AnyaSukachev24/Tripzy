@@ -18,4 +18,5 @@ class AgentState(TypedDict):
     next_step: str                          # Router decision
     critique_feedback: Optional[str]        # Feedback from the Critic node
     revision_count: int                     # Safety counter for loops
-    steps: List[Dict[str, Any]]             # REQUIRED: Grading Log
+    user_query: str                         # The original prompt
+    steps: Annotated[List[Dict[str, Any]], operator.add]             # REQUIRED: Grading Log

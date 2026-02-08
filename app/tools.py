@@ -43,7 +43,6 @@ def search_flights_tool(origin: str, destination: str, date: str) -> str:
 
 # --- 3. PROFILE RAG (Pinecone - Placeholder) ---
 @tool
-@tool
 def search_user_profile_tool(query: str) -> str:
     """
     Searches the user's profile in Pinecone for preferences.

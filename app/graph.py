@@ -11,8 +11,7 @@ import os
 import json
 
 # Prompts
-# Prompts
-from app.prompts.supervisor_system_prompt import SUPERVISOR_SYSTEM_PROMPT
+from app.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
 from app.prompts.planner_prompt import PLANNER_SYSTEM_PROMPT
 from app.prompts.critique_prompt import CRITIQUE_SYSTEM_PROMPT
 
@@ -48,7 +47,11 @@ class CritiqueOutput(BaseModel):
 
 # 0. PROFILE LOADER NODE
 def profile_loader_node(state: AgentState) -> Dict[str, Any]:
-    print("--- NODE: PROFILE LOADER ---")
+    import sys
+    print(f"--- NODE: PROFILE LOADER --- State keys: {list(state.keys())}")
+    user_query = state.get("user_query")
+    print(f"  User Query in Loader: {user_query}")
+    sys.stdout.flush()
     user_id = "default_user" # In prod, get from request
     
     # Fetch Profile
@@ -63,13 +66,17 @@ def profile_loader_node(state: AgentState) -> Dict[str, Any]:
     
     return {
         "user_profile": {"summary": profile_text},
-        "steps": [step_log]
+        "steps": [step_log],
+        "user_query": user_query
     }
 
 # 1. SUPERVISOR NODE
 def supervisor_node(state: AgentState) -> Dict[str, Any]:
-    print("--- NODE: SUPERVISOR ---")
+    print(f"--- NODE: SUPERVISOR --- State keys: {list(state.keys())}")
     user_query = state.get("user_query", "")
+    print(f"  User Query in Supervisor: {user_query}")
+    import sys
+    sys.stdout.flush()
     
     # Simple Router Logic (Optimization: Don't call LLM for "Hi")
     if user_query.lower() in ["hi", "hello", "test"]:
@@ -85,8 +92,10 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
     
     chain = prompt | llm.with_structured_output(SupervisorOutput)
     
+    print(f"  Supervisor Query: {user_query}")
     try:
         result = chain.invoke({"query": user_query})
+        print(f"  Supervisor Result: {result}")
         
         step_log = {
             "module": "Supervisor",
@@ -100,6 +109,7 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             "steps": [step_log]
         }
     except Exception as e:
+        print(f"  Supervisor Error: {str(e)}")
         return {"next_step": "End", "steps": [{"module": "Supervisor", "error": str(e)}]}
 
 # 2. PLANNER NODE
