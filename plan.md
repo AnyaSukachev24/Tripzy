@@ -46,14 +46,32 @@
   - **Action:** Loop through clients, embed their `summary` text, and store them in the Vector DB (e.g., ChromaDB local or Pinecone).
   - **Metadata:** Ensure you attach the `client_id`, `name`, and `status` as metadata to each vector for filtering later.
 
-### 2.2 Wikivoyage Data Integration [SKIPED]
-- [ ] **Data Loader:**
-  - *If using a Dump:* Create a script to load your Wikivoyage data and index it (similar to the clients) so it is searchable by tags (e.g., "beaches", "history").
-  - *If using API:* Create a wrapper function in `app/tools.py` to query Wikivoyage dynamically.
-- [ ] **Create Search Tool:** Implement `search_destinations_tool(query: str)`:
-  - Input: "Italian wine region".
-  - Logic: Search the Wikivoyage index/data.
-  - Output: Top 3 matching destinations with description and tags.
+### 2.2 Wikivoyage Data Integration (Pain Point 2)
+*Goal: Enable the Trip Planner to recommend destinations based on vague requests (e.g., "warm place with history").*
+- [ ] **Data Ingestion (JSONL Dump):**
+  - Download the processed Wikivoyage `jsonl` dump (~400MB).
+  - **Script (`app/ingest_wiki.py`):**
+    - Read the `jsonl` line-by-line.
+    - **Chunking Strategy:** Create separate text chunks for `intro`, `history`, `see`, and `do` sections to stay within token limits.
+    - **Metadata:** Store `city`, `country`, and `climate` tags with each vector.
+    - **Embedding:** Use Gemini `text-embedding-004` to create vectors and upsert to Pinecone.
+- [ ] **Create Search Tool:** Update `search_destinations_tool(tags: list)`:
+  - **Logic:** Query the Vector DB with the user's vague description.
+  - **Output:** Return top 3 cities with a 2-sentence "Why this fits" summary generated from the `intro`.
+
+### 2.3 Hotel Data Strategy (Pain Point 1)
+*Goal: Provide real hotel options with prices and amenities.*
+> [!IMPORTANT]
+> **Decision Point: Static DB vs. Live API**
+> We have two options. We will start with a **Hybrid Approach**:
+> 1.  **Primary (Development):** Use the Kaggle TBO Hotels Dataset (Local RAG) to avoid API costs and rate limits.
+> 2.  **Secondary (Production):** If data freshness (live prices) is critical later, we will swap the "search" function to call a live Hotel API (e.g., Amadeus/Booking.com).
+
+- [ ] **Option A: Kaggle Dataset (RAG):**
+  - **Ingest:** Write a script to index the 1M+ hotels CSV.
+  - **Search:** Query Pinecone for "hotels in [City] with [Amenity]" + filter by `star_rating`.
+- [ ] **Option B: External API (Future):**
+  - Create a wrapper that accepts the same inputs but calls an external endpoint.
 
 ### 2.3 Verification
 - [ ] Create a test script `test_data.py`:
