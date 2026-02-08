@@ -155,6 +155,16 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
         updates["trip_plan"] = result.update_plan
         # Go to Critique instead of Supervisor
         updates["next_step"] = "Critique" 
+    elif result.final_response:
+        updates["supervisor_instruction"] = "Done"
+        # If finished, go to Supervisor (who will see it's done or user can reply) 
+        # OR go to End. Let's go to End via Supervisor or directly.
+        # Actually Supervisor prompt handles "Finish".
+        # But for now, let's route to Supervisor to confirm.
+        updates["next_step"] = "Supervisor"
+    else:
+        # Default fallback
+        updates["next_step"] = "Supervisor"
         
     return updates
 
