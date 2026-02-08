@@ -11,8 +11,10 @@ import os
 import json
 
 # Prompts
+# Prompts
 from app.prompts.supervisor_system_prompt import SUPERVISOR_SYSTEM_PROMPT
 from app.prompts.planner_prompt import PLANNER_SYSTEM_PROMPT
+from app.prompts.critique_prompt import CRITIQUE_SYSTEM_PROMPT
 
 # Tools
 from app.tools import web_search_tool, search_flights_tool, search_user_profile_tool
@@ -37,7 +39,32 @@ class PlannerOutput(BaseModel):
     final_response: str = Field(description="Response to user if plan is ready.", default="")
     update_plan: Dict[str, Any] = Field(description="Updates to the trip plan state.", default={})
 
+class CritiqueOutput(BaseModel):
+    decision: Literal["APPROVE", "REJECT"] = Field(description="Decision on the plan.")
+    feedback: str = Field(description="Feedback if rejected.", default="")
+    score: int = Field(description="Quality score 1-10.")
+
 # --- NODES ---
+
+# 0. PROFILE LOADER NODE
+def profile_loader_node(state: AgentState) -> Dict[str, Any]:
+    print("--- NODE: PROFILE LOADER ---")
+    user_id = "default_user" # In prod, get from request
+    
+    # Fetch Profile
+    # In a real app, this might call a DB or the tool directly
+    profile_text = search_user_profile_tool.invoke(user_id)
+    
+    step_log = {
+        "module": "ProfileLoader",
+        "prompt": "Loading Profile...",
+        "response": profile_text
+    }
+    
+    return {
+        "user_profile": {"summary": profile_text},
+        "steps": [step_log]
+    }
 
 # 1. SUPERVISOR NODE
 def supervisor_node(state: AgentState) -> Dict[str, Any]:
@@ -82,13 +109,20 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
     
     prompt = ChatPromptTemplate.from_messages([
         ("system", PLANNER_SYSTEM_PROMPT),
-        ("human", "Instruction: {instruction}")
+        ("human", "Instruction: {instruction}\nCritique Feedback: {feedback}")
     ])
+    
+    # Extract Research Info
+    steps = state.get("steps", [])
+    research_steps = [s for s in steps if s.get("module") == "Researcher"]
+    research_info = "\n".join([f"- {s.get('response')}" for s in research_steps[-3:]]) # Top 3 recent
     
     chain = prompt | llm.with_structured_output(PlannerOutput)
     
     result = chain.invoke({
         "instruction": instruction,
+        "feedback": state.get("critique_feedback", "None"),
+        "research_info": research_info if research_info else "None",
         "user_profile": str(state.get("user_profile", "None")),
         "trip_plan": str(state.get("trip_plan", "None")),
         "budget": str(state.get("budget", "None"))
@@ -102,8 +136,51 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
     
     # Update State
     updates = {"steps": [step_log]}
-    if result.update_plan:
+    
+    # Check if research is needed
+    if result.call_researcher:
+        updates["supervisor_instruction"] = result.call_researcher
+        updates["next_step"] = "Researcher"
+    elif result.update_plan:
         updates["trip_plan"] = result.update_plan
+        # Go to Critique instead of Supervisor
+        updates["next_step"] = "Critique" 
+        
+    return updates
+
+# 3. CRITIQUE NODE
+def critique_node(state: AgentState) -> Dict[str, Any]:
+    print("--- NODE: CRITIQUE ---")
+    instruction = state.get("supervisor_instruction", "")
+    
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", CRITIQUE_SYSTEM_PROMPT),
+        ("human", "Plan to Review: {trip_plan}")
+    ])
+    
+    chain = prompt | llm.with_structured_output(CritiqueOutput)
+    
+    result = chain.invoke({
+        "instruction": instruction,
+        "user_profile": str(state.get("user_profile", "None")),
+        "trip_plan": str(state.get("trip_plan", "None")),
+        "budget": str(state.get("budget", "None"))
+    })
+    
+    step_log = {
+        "module": "Critique",
+        "prompt": "Reviewing Plan...",
+        "response": f"{result.decision}: {result.feedback}"
+    }
+    
+    updates = {"steps": [step_log]}
+    
+    if result.decision == "REJECT":
+        updates["critique_feedback"] = result.feedback
+        updates["revision_count"] = state.get("revision_count", 0) + 1
+        updates["next_step"] = "Trip_Planner"
+    else:
+        updates["next_step"] = "Supervisor" # Approved!
         
     return updates
 
@@ -132,11 +209,14 @@ def researcher_node(state: AgentState) -> Dict[str, Any]:
 # --- GRAPH ---
 workflow = StateGraph(AgentState)
 
+workflow.add_node("ProfileLoader", profile_loader_node)
 workflow.add_node("Supervisor", supervisor_node)
 workflow.add_node("Trip_Planner", planner_node)
 workflow.add_node("Researcher", researcher_node)
+workflow.add_node("Critique", critique_node)
 
-workflow.add_edge(START, "Supervisor")
+workflow.add_edge(START, "ProfileLoader")
+workflow.add_edge("ProfileLoader", "Supervisor")
 
 # Conditional Edges
 def route_supervisor(state: AgentState):
@@ -153,7 +233,40 @@ workflow.add_conditional_edges(
 )
 
 # Loop back
-workflow.add_edge("Trip_Planner", "Supervisor") 
+# Planner Conditional Edge
+def route_planner(state: AgentState):
+    return state.get("next_step", "Supervisor")
+
+workflow.add_conditional_edges(
+    "Trip_Planner",
+    route_planner,
+    {
+        "Researcher": "Researcher",
+        "Critique": "Critique",
+        "Supervisor": "Supervisor" # Fallback
+    }
+)
+
+# Critique Logic
+def route_critique(state: AgentState):
+    return state.get("next_step", "Supervisor")
+
+workflow.add_conditional_edges(
+    "Critique",
+    route_critique,
+    {
+        "Trip_Planner": "Trip_Planner",
+        "Supervisor": "Supervisor"
+    }
+)
+
+# Researcher -> Planner (Direct Loop for efficiency)
+# Or Supervisor? Let's go Supervisor to be safe and update context.
+# Actually, if Researcher just ran, Planner needs to see resume.
+# Let's go Researcher -> Planner?
+# But Planner needs "instruction". Instruction is currently "Research X".
+# We need to reset instruction to "Plan a trip"?
+# Supervisor is safer for now.
 workflow.add_edge("Researcher", "Supervisor")
 
 memory = MemorySaver()

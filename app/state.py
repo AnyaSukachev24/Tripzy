@@ -16,4 +16,6 @@ class AgentState(TypedDict):
     
     # --- 4. COORDINATION ---
     next_step: str                          # Router decision
+    critique_feedback: Optional[str]        # Feedback from the Critic node
+    revision_count: int                     # Safety counter for loops
     steps: List[Dict[str, Any]]             # REQUIRED: Grading Log

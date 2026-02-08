@@ -4,6 +4,7 @@ python-dotenv
 langgraph
 langchain
 langchain-openai
+langchain-google-genai
 langchain-community
 duckduckgo-search
 pinecone-client
