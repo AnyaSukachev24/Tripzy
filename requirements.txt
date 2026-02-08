@@ -1,9 +1,12 @@
 fastapi
 uvicorn
-langgraph
-langchain-google-genai
-pydantic
 python-dotenv
+langgraph
+langchain
+langchain-openai
 langchain-community
-langchain-pinecone
+duckduckgo-search
 pinecone-client
+supabase
+pydantic
+langsmith
