@@ -109,7 +109,7 @@
     - [ ] Implement logic to check total cost vs budget.
     - [ ] **Feedback Loop**: If over budget, return to Planner with specific critique.
 - [ ] **Frontend**: Build a minimal HTML/JS UI (Textarea + Run Button).
-- [ ] **LLM Switch**: specific change to **LLMod.ai** API.
+
 - [ ] **Deploy to Render**:
     - [ ] `render.yaml` configuration.
     - [ ] Environment variables setup on Render.

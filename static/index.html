@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tripzy - AI Travel Agent</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Tripzy ✈️</h1>
+            <p>Your AI Travel Companion</p>
+        </header>
+
+        <main>
+            <div class="input-section">
+                <textarea id="promptInput" placeholder="Describe your dream trip... (e.g. Plan a 3-day trip to Tokyo with a $2000 budget)"></textarea>
+                <button id="runBtn">Plan My Trip</button>
+            </div>
+
+            <div id="status" class="hidden">Parsing request...</div>
+
+            <div id="output-section" class="hidden">
+                <h2>Itinerary</h2>
+                <div id="responseContainer" class="markdown-body"></div>
+                
+                <details>
+                    <summary>Debug: Execution Steps</summary>
+                    <pre id="debugLog"></pre>
+                </details>
+            </div>
+        </main>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="/static/script.js"></script>
+</body>
+</html>
