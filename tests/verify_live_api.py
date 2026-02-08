@@ -41,3 +41,14 @@ if __name__ == "__main__":
     test_team_info()
     test_agent_info()
     test_execute()
+    
+    print(f"\n--- Testing Stress Loop (Max Revisions) ---")
+    payload = {"prompt": "Plan a luxury trip to Dubai for $50."}
+    try:
+        response = requests.post(f"{BASE_URL}/api/execute", json=payload, timeout=120) # Longer timeout
+        print(f"Status: {response.status_code}")
+        data = response.json()
+        print(f"Response: {data.get('response')}")
+        print(f"Steps: {len(data.get('steps', []))} steps executed.")
+    except Exception as e:
+        print(f"Error: {e}")

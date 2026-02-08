@@ -138,10 +138,17 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
         "budget": str(state.get("budget", "None"))
     })
     
+    
+    # Robustness: If instruction is to finalize, ensure we have a final response
+    if ("APPROVED" in instruction or "Finalize" in instruction) and not result.final_response:
+        result.final_response = result.thought
+
+    response_text = result.final_response if result.final_response else result.thought
+    
     step_log = {
         "module": "Planner",
         "prompt": instruction,
-        "response": result.thought
+        "response": response_text
     }
     
     # Update State
@@ -157,11 +164,9 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
         updates["next_step"] = "Critique" 
     elif result.final_response:
         updates["supervisor_instruction"] = "Done"
-        # If finished, go to Supervisor (who will see it's done or user can reply) 
-        # OR go to End. Let's go to End via Supervisor or directly.
-        # Actually Supervisor prompt handles "Finish".
-        # But for now, let's route to Supervisor to confirm.
-        updates["next_step"] = "Supervisor"
+        # If finished, go directly to End. 
+        # The main loop will see the last step has the response.
+        updates["next_step"] = "End"
     else:
         # Default fallback
         updates["next_step"] = "Supervisor"
@@ -195,12 +200,20 @@ def critique_node(state: AgentState) -> Dict[str, Any]:
     
     updates = {"steps": [step_log]}
     
-    if result.decision == "REJECT":
+    current_revisions = state.get("revision_count", 0)
+    
+    if result.decision == "REJECT" and current_revisions < 3:
         updates["critique_feedback"] = result.feedback
-        updates["revision_count"] = state.get("revision_count", 0) + 1
+        updates["revision_count"] = current_revisions + 1
         updates["next_step"] = "Trip_Planner"
     else:
-        updates["next_step"] = "Supervisor" # Approved!
+        # Approved OR Max Revisions Reached
+        instruction = "The plan has been APPROVED by the critic. Generate the final response."
+        if current_revisions >= 3:
+             instruction = "Maximum revisions reached. Finalize the plan with the current best effort."
+             
+        updates["supervisor_instruction"] = instruction
+        updates["next_step"] = "Trip_Planner" 
         
     return updates
 
@@ -263,7 +276,8 @@ workflow.add_conditional_edges(
     {
         "Researcher": "Researcher",
         "Critique": "Critique",
-        "Supervisor": "Supervisor" # Fallback
+        "Supervisor": "Supervisor", # Fallback
+        "End": END
     }
 )
 
