@@ -41,6 +41,9 @@ class SupervisorOutput(BaseModel):
     instruction: str = Field(description="Specific instructions for the next worker.")
     duration_days: int = Field(description="Trip duration in days extracted from user query.", default=0)
     destination: str = Field(description="Destination extracted from user query (e.g., 'Bali', 'Paris'). Empty if not specified.", default="")
+    budget_limit: float = Field(description="Budget limit extracted from user query (e.g., '$5000' → 5000.0). 0 if not specified.", default=0.0)
+    budget_currency: str = Field(description="Currency code (USD, EUR, etc.). Default USD.", default="USD")
+    trip_type: str = Field(description="Type of trip: honeymoon, family, business, solo, adventure, cultural. Empty if unclear.", default="")
 
 class PlannerOutput(BaseModel):
     thought: str = Field(description="Internal reasoning.")
@@ -108,6 +111,8 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
         print(f"  Supervisor Result: {result}")
         print(f"  [DEBUG] DURATION EXTRACTED: {result.duration_days} days")
         print(f"  [DEBUG] DESTINATION EXTRACTED: '{result.destination}'")
+        print(f"  [DEBUG] BUDGET EXTRACTED: ${result.budget_limit} {result.budget_currency}")
+        print(f"  [DEBUG] TRIP TYPE DETECTED: '{result.trip_type}'")
         print(f"  [DEBUG] INSTRUCTION: {result.instruction}")
         
         step_log = {
@@ -129,6 +134,15 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
         # Extract destination if provided  
         if result.destination:
             updates["destination"] = result.destination
+            
+        # Extract budget if provided
+        if result.budget_limit and result.budget_limit > 0:
+            updates["budget_limit"] = result.budget_limit
+            updates["budget_currency"] = result.budget_currency or "USD"
+            
+        # Extract trip type if detected
+        if result.trip_type:
+            updates["trip_type"] = result.trip_type
             
         return updates
     except Exception as e:
@@ -160,6 +174,15 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
     destination = state.get("destination", "")
     print(f"  [DEBUG] PLANNER RECEIVED destination: '{destination}'")
     
+    # Get budget from state
+    budget_limit = state.get("budget_limit", 0.0)
+    budget_currency = state.get("budget_currency", "USD")
+    print(f"  [DEBUG] PLANNER RECEIVED budget: ${budget_limit} {budget_currency}")
+    
+    # Get trip type from state
+    trip_type = state.get("trip_type", "")
+    print(f"  [DEBUG] PLANNER RECEIVED trip_type: '{trip_type}'")
+    
     # Extract Research Info
     steps = state.get("steps", [])
     research_steps = [s for s in steps if s.get("module") == "Researcher"]
@@ -167,7 +190,7 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
     
     chain = prompt | llm.with_structured_output(PlannerOutput, method="json_mode")
     
-    print(f"  [DEBUG] CALLING PLANNER with duration_days={duration_days}, destination='{destination}'")
+    print(f"  [DEBUG] CALLING PLANNER with duration_days={duration_days}, destination='{destination}', budget=${budget_limit}, trip_type='{trip_type}'")
     result = chain.invoke({
         "instruction": instruction,
         "feedback": state.get("critique_feedback", "None"),
@@ -176,7 +199,10 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
         "trip_plan": str(state.get("trip_plan", "None")),
         "budget": str(state.get("budget", "None")),
         "duration_days": duration_days,
-        "destination": destination
+        "destination": destination,
+        "budget_limit": budget_limit,
+        "budget_currency": budget_currency,
+        "trip_type": trip_type
     })
     
     

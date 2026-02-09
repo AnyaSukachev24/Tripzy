@@ -21,6 +21,9 @@ Return a JSON object with:
 - "instruction": The specific prompt to pass to the sub-agent.
 - "duration_days": (Optional) Extract trip duration from user request (e.g., "2 weeks" → 14, "10 days" → 10). If not mentioned, set to 0.
 - "destination": (Optional) Extract destination if mentioned (e.g., "Bali", "Paris", "Tokyo"). Empty string if not specified.
+- "budget_limit": (Optional) Extract budget amount from query (e.g., "$5000" → 5000.0, "€3000" → 3000.0). Set to 0 if not mentioned.
+- "budget_currency": (Optional) Extract or infer currency (USD, EUR, GBP, etc.). Default: "USD".
+- "trip_type": (Optional) Detect trip type from context: "honeymoon", "family", "business", "solo", "adventure", "cultural". Consider keywords like "honeymoon", "kids", "conference", "backpacking", etc.
 
 ### CLARIFICATION:
 - If the user's request is vague or missing key details (like destination or budget), DO NOT route to Planner.

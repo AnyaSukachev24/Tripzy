@@ -13,7 +13,10 @@ class AgentState(TypedDict):
     # --- 3. THE TRIP ---
     trip_plan: Optional[Dict[str, Any]]     # The structured itinerary being built
     duration_days: Optional[int]            # Number of days for the trip (extracted from user query)
-    destination: Optional[str]              # Destination extracted from user query (e.g., "Bali", "Paris")  
+    destination: Optional[str]              # Destination extracted from user query (e.g., "Bali", "Paris")
+    budget_limit: Optional[float]           # User's budget limit (e.g., 5000.0)
+    budget_currency: str                     # Currency code (e.g., "USD", "EUR")
+    trip_type: Optional[str]                # Type of trip: honeymoon, family, business, solo, adventure
     budget: Optional[Dict[str, float]]      # {"limit": 2000.0, "current_total": 0.0, "currency": "USD"}
     
     # --- 4. COORDINATION ---
