@@ -158,3 +158,53 @@
 **Goal**: Ensure stability across updates.
 - [ ] **Step 15.1: Unit Tests**: Test individual nodes (Planner, Researcher).
 - [ ] **Step 15.2: Integration Tests**: End-to-end flow validation.
+
+---
+
+## Phase 16: Conversational Enhancement (Next Priority)
+**Goal:** Enable multi-turn conversation and information gathering.
+- [ ] Add conversation memory to state
+- [ ] Update Supervisor to collect missing information (destination, budget, duration)
+- [ ] Maintain conversation context across turns via thread_id
+- [ ] Frontend: Keep thread_id consistent, add "New Trip" button
+
+---
+
+## Phase 17: Destination Discovery
+**Goal:** Help users discover and choose destinations before planning.
+- [ ] Create `Destination_Advisor` node
+- [ ] Ask about travel style, interests, climate preferences
+- [ ] Generate 3-5 destination suggestions based on preferences
+- [ ] Handle user selection and confirm before planning
+
+---
+
+## Phase 18: Proper Duration Handling (CRITICAL FIX)
+**Goal:** Generate complete itineraries matching requested duration.
+- [ ] Improve duration extraction from user input (e.g., "2 weeks" → 14 days)
+- [ ] Update Planner prompt to enforce exact duration
+- [ ] Add Critique validation to reject plans with wrong number of days
+
+---
+
+## Phase 19: Hotel & Flight Integration
+**Goal:** Include accommodation and flights in trip plans.
+- [ ] Gather origin city and travel dates from user
+- [ ] Create `search_flights_tool()` (mock or Amadeus API)
+- [ ] Create `search_hotels_tool()` (mock or Booking.com API)
+- [ ] Update Planner schema to include flights and accommodation
+- [ ] Update UI formatter to display flights, hotels, and budget breakdown
+
+---
+
+## Phase 20: User Personalization & Learning
+**Goal:** Remember and learn from user preferences.
+- [ ] Create user profile database (Supabase)
+- [ ] Extract preferences from conversation (dietary, interests, travel style)
+- [ ] Personalize destination suggestions and activity recommendations
+- [ ] Learn from trip feedback to improve future recommendations
+
+---
+
+> **See `enhancement_plan.md` for detailed implementation steps and architecture analysis.**
+

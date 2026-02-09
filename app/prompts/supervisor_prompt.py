@@ -19,6 +19,8 @@ Return a JSON object with:
 - "next_step": One of ["Trip_Planner", "Researcher", "End"]
 - "reasoning": Why you chose this step.
 - "instruction": The specific prompt to pass to the sub-agent.
+- "duration_days": (Optional) Extract trip duration from user request (e.g., "2 weeks" → 14, "10 days" → 10). If not mentioned, set to 0.
+- "destination": (Optional) Extract destination if mentioned (e.g., "Bali", "Paris", "Tokyo"). Empty string if not specified.
 
 ### CLARIFICATION:
 - If the user's request is vague or missing key details (like destination or budget), DO NOT route to Planner.

@@ -36,9 +36,11 @@ else:
 
 # --- Output Models ---
 class SupervisorOutput(BaseModel):
-    next_step: Literal["Trip_Planner", "Researcher", "End"] = Field(description="The next node to execute.")
+    next_step: Literal["Trip_Planner", "Researcher", "End"] = Field(description="Next worker to call.")
     reasoning: str = Field(description="Reason for selecting this node.")
     instruction: str = Field(description="Specific instructions for the next worker.")
+    duration_days: int = Field(description="Trip duration in days extracted from user query.", default=0)
+    destination: str = Field(description="Destination extracted from user query (e.g., 'Bali', 'Paris'). Empty if not specified.", default="")
 
 class PlannerOutput(BaseModel):
     thought: str = Field(description="Internal reasoning.")
@@ -104,6 +106,9 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
     try:
         result = chain.invoke({"query": user_query})
         print(f"  Supervisor Result: {result}")
+        print(f"  [DEBUG] DURATION EXTRACTED: {result.duration_days} days")
+        print(f"  [DEBUG] DESTINATION EXTRACTED: '{result.destination}'")
+        print(f"  [DEBUG] INSTRUCTION: {result.instruction}")
         
         step_log = {
             "module": "Supervisor",
@@ -111,11 +116,21 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             "response": f"Routing to {result.next_step}: {result.reasoning}"
         }
         
-        return {
+        updates = {
             "next_step": result.next_step,
             "supervisor_instruction": result.instruction,
             "steps": [step_log]
         }
+        
+        # Extract duration if provided
+        if result.duration_days and result.duration_days > 0:
+            updates["duration_days"] = result.duration_days
+            
+        # Extract destination if provided  
+        if result.destination:
+            updates["destination"] = result.destination
+            
+        return updates
     except Exception as e:
         print(f"  Supervisor Error: {str(e)}")
         error_msg = f"System Error: {str(e)}"
@@ -130,10 +145,20 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
     print("--- NODE: PLANNER ---")
     instruction = state.get("supervisor_instruction", "")
     
+    # Note: PLANNER_SYSTEM_PROMPT already has placeholders for:
+    # {instruction}, {user_profile}, {research_info}, {feedback}, {duration_days}, {destination}
     prompt = ChatPromptTemplate.from_messages([
-        ("system", PLANNER_SYSTEM_PROMPT),
-        ("human", "Instruction: {instruction}\nCritique Feedback: {feedback}")
+        ("system", PLANNER_SYSTEM_PROMPT)
     ])
+    
+    # Get duration from state (default to 7 if not specified)
+    duration_days = state.get("duration_days", 7)
+    print(f"  [DEBUG] PLANNER RECEIVED duration_days: {duration_days}")
+    print(f"  [DEBUG] PLANNER RECEIVED instruction: {instruction}")
+    
+    # Get destination from state
+    destination = state.get("destination", "")
+    print(f"  [DEBUG] PLANNER RECEIVED destination: '{destination}'")
     
     # Extract Research Info
     steps = state.get("steps", [])
@@ -142,20 +167,28 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
     
     chain = prompt | llm.with_structured_output(PlannerOutput, method="json_mode")
     
+    print(f"  [DEBUG] CALLING PLANNER with duration_days={duration_days}, destination='{destination}'")
     result = chain.invoke({
         "instruction": instruction,
         "feedback": state.get("critique_feedback", "None"),
         "research_info": research_info if research_info else "None",
         "user_profile": str(state.get("user_profile", "None")),
         "trip_plan": str(state.get("trip_plan", "None")),
-        "budget": str(state.get("budget", "None"))
+        "budget": str(state.get("budget", "None")),
+        "duration_days": duration_days,
+        "destination": destination
     })
     
     
     # Robustness: If instruction is to finalize, ensure we have a final response
     if ("APPROVED" in instruction or "Finalize" in instruction) and not result.final_response:
         result.final_response = result.thought
-
+    print(f"  Planner thought: {result.thought}")
+    print(f"  Planner wants researcher? {result.call_researcher}")
+    print(f"  [DEBUG] PLANNER RESPONSE - update_plan: {result.update_plan}")
+    if result.update_plan:
+        print(f"  [DEBUG] DESTINATION: {result.update_plan.get('destination')}")
+        print(f"  [DEBUG] ITINERARY DAYS: {len(result.update_plan.get('itinerary', []))}")
     response_text = result.final_response if result.final_response else result.thought
     
     step_log = {
@@ -202,7 +235,8 @@ def critique_node(state: AgentState) -> Dict[str, Any]:
         "instruction": instruction,
         "user_profile": str(state.get("user_profile", "None")),
         "trip_plan": str(state.get("trip_plan", "None")),
-        "budget": str(state.get("budget", "None"))
+        "budget": str(state.get("budget", "None")),
+        "duration_days": state.get("duration_days", 7)
     })
     
     step_log = {

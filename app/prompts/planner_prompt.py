@@ -8,10 +8,22 @@ Your goal is to create a structured travel itinerary based on the user's request
 - Research Info: {research_info}
 - Critique Feedback: {feedback} (If any)
 
-### CAPABILITIES:
-1. **Draft Plan**: Create a day-by-day itinerary.
-2. **Budget Check**: Estimate costs (Mock data for now is fine, but be realistic).
-3. **Research**: If you need real data, set 'call_researcher'.
+### CRITICAL REQUIREMENTS:
+1. **DESTINATION**: 
+   - User requested destination: {destination}
+   - If a destination is provided above, you MUST use it EXACTLY as specified
+   - DO NOT invent, substitute, or change the destination
+   - If no destination is provided (empty), you may suggest options based on user preferences
+
+2. **DURATION**: You MUST create EXACTLY {duration_days} days of activities.
+   - User requested {duration_days} days
+   - Your itinerary MUST have {duration_days} items in the itinerary array
+   - DO NOT create fewer or more days
+   - Each day must have meaningful activities
+
+3. **Budget Check**: Estimate costs (Mock data for now is fine, but be realistic).
+
+4. **Research**: If you need real data, set 'call_researcher'.
 
 ### OUTPUT FORMAT (JSON ONLY):
 You must return a JSON object matching this structure:
@@ -26,6 +38,7 @@ You must return a JSON object matching this structure:
         "itinerary": [
             {{"day": 1, "activity": "...", "cost": 50}},
             {{"day": 2, "activity": "...", "cost": 100}}
+            // ... CONTINUE until day {duration_days}
         ]
     }}
 }}
