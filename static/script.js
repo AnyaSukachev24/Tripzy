@@ -75,8 +75,11 @@ runBtn.addEventListener('click', async () => {
         }
 
     } catch (e) {
-        console.error(e);
-        appendMessage('system', 'Connection failed. Please ensure the server is running.');
+        console.error('Stream error:', e);
+        console.error('Error type:', e.name);
+        console.error('Error message:', e.message);
+        console.error('Error stack:', e.stack);
+        appendMessage('system', `Connection failed: ${e.message}. Please check the console for details.`);
         statStatus.textContent = 'Offline';
     } finally {
         runBtn.disabled = false;
@@ -111,7 +114,12 @@ function handleStreamEvent(data) {
             agentThought.textContent = 'The plan is ready for your review. Please approve to finalize.';
             if (data.preview) {
                 const previewMd = formatPreview(data.preview);
-                document.getElementById('plan-preview').innerHTML = marked.parse(previewMd);
+                const previewEl = document.getElementById('plan-preview');
+                if (previewEl) {
+                    previewEl.innerHTML = marked.parse(previewMd);
+                } else {
+                    console.warn('plan-preview element not found - browser cache may need refresh');
+                }
             }
             approvalSection.classList.remove('hidden');
             break;

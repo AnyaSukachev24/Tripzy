@@ -4,6 +4,10 @@ from app.state import AgentState
 from langgraph.graph import StateGraph, START, END
 from langchain_community.chat_models import ChatOllama
 from langchain_openai import AzureChatOpenAI
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field

@@ -241,7 +241,7 @@ def approve_trip(request: ExecuteRequest):
         
         return {
             "status": "ok",
-            "response": f"Trip finalized: {json.dumps(plan, indent=2)}" if plan else "Finalized.",
+            "response": format_plan_to_markdown(plan) if plan else "Trip finalized.",
             "steps": final_state.get("steps", [])
         }
     except Exception as e:
