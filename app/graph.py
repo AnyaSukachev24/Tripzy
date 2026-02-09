@@ -3,7 +3,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from app.state import AgentState
 from langgraph.graph import StateGraph, START, END
 from langchain_community.chat_models import ChatOllama
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import AzureChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
@@ -19,9 +19,13 @@ from app.prompts.critique_prompt import CRITIQUE_SYSTEM_PROMPT
 from app.tools import web_search_tool, search_flights_tool, search_user_profile_tool
 
 # --- LLM Setup ---
-# Use .env to decide model. Default to free/local if key missing.
-if os.getenv("GOOGLE_API_KEY"):
-    llm = ChatGoogleGenerativeAI(model=os.getenv("LLM_MODEL", "gemini-1.5-flash"), temperature=0)
+# Using Azure OpenAI 
+if os.getenv("AZURE_OPENAI_API_KEY"):
+    llm = AzureChatOpenAI(
+        azure_deployment=os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4.1-mini"),
+        api_version=os.environ.get("AZURE_OPENAI_API_VERSION", "2024-02-15-preview"),
+        temperature=0
+    )
 else:
     # Fallback to Ollama (Local)
     llm = ChatOllama(model="llama3", temperature=0)
@@ -110,7 +114,12 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
         }
     except Exception as e:
         print(f"  Supervisor Error: {str(e)}")
-        return {"next_step": "End", "steps": [{"module": "Supervisor", "error": str(e)}]}
+        error_msg = f"System Error: {str(e)}"
+        return {
+            "next_step": "End", 
+            "supervisor_instruction": error_msg,
+            "steps": [{"module": "Supervisor", "error": str(e), "response": error_msg}]
+        }
 
 # 2. PLANNER NODE
 def planner_node(state: AgentState) -> Dict[str, Any]:
@@ -127,7 +136,7 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
     research_steps = [s for s in steps if s.get("module") == "Researcher"]
     research_info = "\n".join([f"- {s.get('response')}" for s in research_steps[-3:]]) # Top 3 recent
     
-    chain = prompt | llm.with_structured_output(PlannerOutput)
+    chain = prompt | llm.with_structured_output(PlannerOutput, method="json_mode")
     
     result = chain.invoke({
         "instruction": instruction,
@@ -258,7 +267,19 @@ workflow.add_node("Human_Approval", human_approval_node)
 workflow.add_edge(START, "ProfileLoader")
 workflow.add_edge("ProfileLoader", "Supervisor")
 
-# ... (Supervisor edges same)
+# Supervisor Routing
+def route_supervisor(state: AgentState):
+    return state.get("next_step", "End")
+
+workflow.add_conditional_edges(
+    "Supervisor",
+    route_supervisor,
+    {
+        "Trip_Planner": "Trip_Planner",
+        "Researcher": "Researcher",
+        "End": END
+    }
+)
 
 # Planner Conditional Edge
 def route_planner(state: AgentState):

@@ -140,9 +140,9 @@
 
 ## Phase 13: Robustness & Error Handling (Next Steps)
 **Goal**: Make the agent resilient to API failures and user interrupts.
-- [ ] **Step 13.1: Global Error Boundary**: Catch-all for graph failures in `app/main.py`.
+- [x] **Step 13.1: Global Error Boundary**: Catch-all for graph failures in `app/graph.py` (Supervisor).
 - [ ] **Step 13.2: Retry Logic**: Implement exponential backoff for Gemini API calls.
-- [ ] **Step 13.3: User Feedback Loop**: Allow users to correct the agent if it gets stuck.
+- [x] **Step 13.3: User Feedback Loop**: Updated Supervisor prompt to ask clarifying questions instead of failing.
 
 ---
 

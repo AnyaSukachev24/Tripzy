@@ -19,4 +19,8 @@ Return a JSON object with:
 - "next_step": One of ["Trip_Planner", "Researcher", "End"]
 - "reasoning": Why you chose this step.
 - "instruction": The specific prompt to pass to the sub-agent.
+
+### CLARIFICATION:
+- If the user's request is vague or missing key details (like destination or budget), DO NOT route to Planner.
+- Instead, route to **End** and set "instruction" to your clarifying question.
 """

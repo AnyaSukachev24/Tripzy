@@ -12,6 +12,24 @@ import asyncio
 # Import the Graph
 from app.graph import graph
 
+def format_plan_to_markdown(plan: Dict[str, Any]) -> str:
+    """Converts the JSON trip plan into a readable Markdown string."""
+    if not plan:
+        return "No plan available."
+        
+    md = f"### Trip to {plan.get('destination', 'Unknown')}\n"
+    md += f"**Budget Estimate:** ${plan.get('budget_estimate', 0)}\n\n"
+    
+    itinerary = plan.get('itinerary', [])
+    if isinstance(itinerary, list):
+        for item in itinerary:
+            day = item.get('day', '?')
+            activity = item.get('activity', 'No activity')
+            cost = item.get('cost', 0)
+            md += f"- **Day {day}**: {activity} (${cost})\n"
+    
+    return md
+
 app = FastAPI(title="Tripzy Travel Agent (Course Project)")
 
 # CORS (Allow all for Render/Testing)
@@ -121,7 +139,7 @@ def execute_agent(request: ExecuteRequest):
         instruction = final_state.get("supervisor_instruction")
         
         if plan:
-            final_text = f"Here is the plan: {json.dumps(plan, indent=2)}"
+            final_text = format_plan_to_markdown(plan)
         elif instruction:
             final_text = instruction
         else:
@@ -174,7 +192,9 @@ async def stream_agent(request: ExecuteRequest):
             # CHECK FOR INTERRUPTS
             snapshot = graph.get_state(config)
             if snapshot.next: # If there are nodes pending (like Human_Approval)
-                yield f"data: {json.dumps({'type': 'waiting_for_approval', 'thread_id': thread_id})}\n\n"
+                # Send the draft plan for preview
+                draft_plan = snapshot.values.get("trip_plan")
+                yield f"data: {json.dumps({'type': 'waiting_for_approval', 'thread_id': thread_id, 'preview': draft_plan})}\n\n"
             else:
                 # Final state retrieval for last response
                 final_state = snapshot.values
@@ -184,7 +204,7 @@ async def stream_agent(request: ExecuteRequest):
                 final_text = "Task completed."
                 
                 if plan:
-                    final_text = f"Here is the plan: {json.dumps(plan, indent=2)}"
+                    final_text = format_plan_to_markdown(plan)
                 elif instruction and instruction != "Done":
                     final_text = instruction
                 else:

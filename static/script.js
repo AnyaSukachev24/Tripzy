@@ -7,6 +7,18 @@ const statStatus = document.getElementById('stat-status');
 const profileSummary = document.getElementById('profile-summary');
 const agentThought = document.getElementById('agent-thought');
 
+function formatPreview(plan) {
+    if (!plan) return "No plan details.";
+    let md = `**Draft Itinerary for ${plan.destination || 'Unknown'}**\n`;
+    md += `*Budget Estimate: $${plan.budget_estimate || 0}*\n\n`;
+
+    const itinerary = plan.itinerary || [];
+    itinerary.forEach(item => {
+        md += `- **Day ${item.day}**: ${item.activity} ($${item.cost})\n`;
+    });
+    return md;
+}
+
 function appendMessage(role, text) {
     const msgDiv = document.createElement('div');
     msgDiv.className = `message ${role}`;
@@ -97,6 +109,10 @@ function handleStreamEvent(data) {
             statStatus.textContent = 'Paused';
             statStatus.style.color = 'var(--primary)';
             agentThought.textContent = 'The plan is ready for your review. Please approve to finalize.';
+            if (data.preview) {
+                const previewMd = formatPreview(data.preview);
+                document.getElementById('plan-preview').innerHTML = marked.parse(previewMd);
+            }
             approvalSection.classList.remove('hidden');
             break;
         case 'final_response':
