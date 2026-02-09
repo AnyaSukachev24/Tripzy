@@ -105,12 +105,56 @@
 - [ ] **Step 7.2: Deploy to Render**
     - **Action**: User to push to GitHub and connect to Render.
     - **Action**: User to add `GOOGLE_API_KEY` (and other secrets) in Render Env Vars.
-    - [ ] **Budget Master Implementation**:
-    - [ ] Implement logic to check total cost vs budget.
-    - [ ] **Feedback Loop**: If over budget, return to Planner with specific critique.
-- [ ] **Frontend**: Build a minimal HTML/JS UI (Textarea + Run Button).
 
-- [ ] **Deploy to Render**:
-    - [ ] `render.yaml` configuration.
-    - [ ] Environment variables setup on Render.
-- [ ] **Final Budget Check**: Verify one full run costs < $0.10
+---
+
+## Phase 8: Premium Dashboard UI (Completed)
+**Goal**: Transform the UI into a luxury travel agent dashboard.
+- [x] **Step 8.1: Modern CSS Foundation**: Implement sleek dark mode, glassmorphism, and Inter typography.
+- [x] **Step 8.2: Dashboard Layout**: Create a sidebar for real-time state visualization (Budget, Destination, Profile).
+- [x] **Step 8.3: Interactive Chat**: Replace the simple textarea with a dynamic chat interface.
+
+---
+
+## Phase 9: Real-Time Stream & Tracing (Completed)
+**Goal**: Show progress updates as the agent works.
+- [x] **Step 9.1: SSE/Streaming Endpoint**: Update `app/main.py` to stream LangGraph events.
+- [x] **Step 9.2: Frontend Step Rendering**: Display "Researcher is searching..." or "Critic is reviewing..." in the UI.
+
+---
+
+## Phase 10: Human-in-the-Loop (Completed)
+**Goal**: Add a final "Approve" button before the trip is fully finalized.
+- [x] **Step 10.1: Interrupt State**: Add an interrupt after `Critique` approved.
+- [x] **Step 10.2: Approval UI**: Add a "Confirm & Finalize" button to the chat.
+
+---
+
+## Phase 12: Debugging & Stabilization (In Progress)
+**Goal**: Fix UI responsiveness and ensure stable execution with Gemini API.
+- [x] **Step 12.1: Reproduce & Fix "No Answer"**: Investigate SSE stream and frontend parsing.
+- [ ] **Step 12.2: Verify Gemini Integration**: Ensure cost-effective model usage.
+- [ ] **Step 12.3: UI Polish**: Fix status indicators (`Connecting...` vs `Completed`).
+
+---
+
+## Phase 13: Robustness & Error Handling (Next Steps)
+**Goal**: Make the agent resilient to API failures and user interrupts.
+- [ ] **Step 13.1: Global Error Boundary**: Catch-all for graph failures in `app/main.py`.
+- [ ] **Step 13.2: Retry Logic**: Implement exponential backoff for Gemini API calls.
+- [ ] **Step 13.3: User Feedback Loop**: Allow users to correct the agent if it gets stuck.
+
+---
+
+## Phase 14: Cost Optimization
+**Goal**: Reduce token usage while maintaining quality.
+- [ ] **Step 14.1: Prompt Compression**: Shorten system prompts without losing context.
+- [ ] **Step 14.2: Caching**: Implement aggressive caching for Research steps.
+- [ ] **Step 14.3: Model Routing**: Use cheaper models for simple routing tasks.
+
+---
+
+## Phase 15: Automated Testing
+**Goal**: Ensure stability across updates.
+- [ ] **Step 15.1: Unit Tests**: Test individual nodes (Planner, Researcher).
+- [ ] **Step 15.2: Integration Tests**: End-to-end flow validation.

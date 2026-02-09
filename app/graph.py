@@ -208,14 +208,20 @@ def critique_node(state: AgentState) -> Dict[str, Any]:
         updates["next_step"] = "Trip_Planner"
     else:
         # Approved OR Max Revisions Reached
-        instruction = "The plan has been APPROVED by the critic. Generate the final response."
+        instruction = "The plan has been APPROVED by the critic. Please confirm if you want to generate the final response."
         if current_revisions >= 3:
              instruction = "Maximum revisions reached. Finalize the plan with the current best effort."
              
         updates["supervisor_instruction"] = instruction
-        updates["next_step"] = "Trip_Planner" 
+        updates["next_step"] = "Human_Approval" 
         
     return updates
+
+# 4. HUMAN APPROVAL NODE
+def human_approval_node(state: AgentState) -> Dict[str, Any]:
+    print("--- NODE: HUMAN APPROVAL (PAUSED) ---")
+    # This node is a placeholder for the interrupt
+    return {"next_step": "Trip_Planner"}
 
 # 3. RESEARCHER NODE
 def researcher_node(state: AgentState) -> Dict[str, Any]:
@@ -247,25 +253,13 @@ workflow.add_node("Supervisor", supervisor_node)
 workflow.add_node("Trip_Planner", planner_node)
 workflow.add_node("Researcher", researcher_node)
 workflow.add_node("Critique", critique_node)
+workflow.add_node("Human_Approval", human_approval_node)
 
 workflow.add_edge(START, "ProfileLoader")
 workflow.add_edge("ProfileLoader", "Supervisor")
 
-# Conditional Edges
-def route_supervisor(state: AgentState):
-    return state.get("next_step", "End")
+# ... (Supervisor edges same)
 
-workflow.add_conditional_edges(
-    "Supervisor",
-    route_supervisor,
-    {
-        "Trip_Planner": "Trip_Planner",
-        "Researcher": "Researcher",
-        "End": END
-    }
-)
-
-# Loop back
 # Planner Conditional Edge
 def route_planner(state: AgentState):
     return state.get("next_step", "Supervisor")
@@ -276,7 +270,7 @@ workflow.add_conditional_edges(
     {
         "Researcher": "Researcher",
         "Critique": "Critique",
-        "Supervisor": "Supervisor", # Fallback
+        "Supervisor": "Supervisor",
         "End": END
     }
 )
@@ -290,9 +284,13 @@ workflow.add_conditional_edges(
     route_critique,
     {
         "Trip_Planner": "Trip_Planner",
+        "Human_Approval": "Human_Approval",
         "Supervisor": "Supervisor"
     }
 )
+
+# Human Approval Logic
+workflow.add_edge("Human_Approval", "Trip_Planner")
 
 # Researcher -> Planner (Direct Loop for efficiency)
 # Or Supervisor? Let's go Supervisor to be safe and update context.
@@ -305,4 +303,4 @@ workflow.add_edge("Researcher", "Supervisor")
 
 memory = MemorySaver()
 
-graph = workflow.compile(checkpointer=memory)
+graph = workflow.compile(checkpointer=memory, interrupt_before=["Human_Approval"])

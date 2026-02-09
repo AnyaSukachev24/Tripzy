@@ -1,12 +1,13 @@
 import uvicorn
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import Response, JSONResponse, FileResponse
+from fastapi.responses import Response, JSONResponse, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import uuid
 import json
+import asyncio
 
 # Import the Graph
 from app.graph import graph
@@ -62,10 +63,10 @@ class ExecuteResponse(BaseModel):
 def get_team_info():
     """Returns student details (Course Requirement)."""
     return {
-        "group_batch_order_number": "BATCH_XX_ORDER_XX", # TODO: User to update
+        "group_batch_order_number": "BATCH_XX_ORDER_XX", 
         "team_name": "Tripzy",
         "students": [
-            {"name": "Student 1", "email": "s1@example.com"}, # TODO: User to update
+            {"name": "Student 1", "email": "s1@example.com"}, 
             {"name": "Student 2", "email": "s2@example.com"},
         ]
     }
@@ -112,26 +113,13 @@ def execute_agent(request: ExecuteRequest):
     """
     thread_id = request.thread_id or str(uuid.uuid4())
     config = {"configurable": {"thread_id": thread_id}}
-    
-    # Input State
     input_payload = {"user_query": request.prompt}
     
-    print(f"--- EXECUTE: {request.prompt} (Thread: {thread_id}) ---")
-    
     try:
-        # Run the Graph
-        # We use invoke (blocking) for the API to get the final state
         final_state = graph.invoke(input_payload, config=config)
-        
-        # Extract Response
-        # The 'Trip_Planner' usually produces the final plan, 
-        # or the 'Supervisor' loops until done.
-        # We look for the most specific instruction or plan update.
-        
         plan = final_state.get("trip_plan")
         instruction = final_state.get("supervisor_instruction")
         
-        # Construct Final Response Text
         if plan:
             final_text = f"Here is the plan: {json.dumps(plan, indent=2)}"
         elif instruction:
@@ -145,15 +133,99 @@ def execute_agent(request: ExecuteRequest):
             "steps": final_state.get("steps", []),
             "error": None
         }
-        
     except Exception as e:
-        print(f"ERROR: {str(e)}")
         return {
             "status": "error",
             "response": "An error occurred during execution.",
-            "steps": [], # Should ideally return partial steps if possible
+            "steps": [],
             "error": str(e)
         }
+
+@app.post("/api/stream")
+async def stream_agent(request: ExecuteRequest):
+    """
+    Streaming Execution Endpoint (SSE).
+    Yields events as they happen in the LangGraph.
+    """
+    thread_id = request.thread_id or str(uuid.uuid4())
+    config = {"configurable": {"thread_id": thread_id}}
+    input_payload = {"user_query": request.prompt}
+
+    async def event_generator():
+        try:
+            async for event in graph.astream_events(input_payload, config, version="v2"):
+                kind = event["event"]
+                
+                if kind == "on_chain_start" and event.get("name") == "LangGraph":
+                    msg = {"type": "status", "content": "Starting Graph..."}
+                    yield f"data: {json.dumps(msg)}\n\n"
+                if kind == "on_chat_model_stream":
+                    # We could stream tokens here if we wanted fine-grained output
+                    pass
+                elif kind == "on_tool_start":
+                    tool_name = event.get('name', 'Tool')
+                    msg = {"type": "status", "content": f"Executing Tool: {tool_name}..."}
+                    yield f"data: {json.dumps(msg)}\n\n"
+                elif kind == "on_chain_end" and "node" in event.get("metadata", {}):
+                    node_name = event["metadata"]["node"]
+                    # Optionally capture the state here if needed
+                    yield f"data: {json.dumps({'type': 'node_complete', 'node': node_name})}\n\n"
+
+            # CHECK FOR INTERRUPTS
+            snapshot = graph.get_state(config)
+            if snapshot.next: # If there are nodes pending (like Human_Approval)
+                yield f"data: {json.dumps({'type': 'waiting_for_approval', 'thread_id': thread_id})}\n\n"
+            else:
+                # Final state retrieval for last response
+                final_state = snapshot.values
+                plan = final_state.get("trip_plan")
+                instruction = final_state.get("supervisor_instruction")
+                
+                final_text = "Task completed."
+                
+                if plan:
+                    final_text = f"Here is the plan: {json.dumps(plan, indent=2)}"
+                elif instruction and instruction != "Done":
+                    final_text = instruction
+                else:
+                    # Fallback: Content from the last step
+                    steps = final_state.get("steps", [])
+                    if steps:
+                        last_step = steps[-1]
+                        if last_step.get("response"):
+                            final_text = last_step["response"]
+
+                msg = {"type": "final_response", "content": final_text}
+                yield f"data: {json.dumps(msg)}\n\n"
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+@app.post("/api/approve")
+def approve_trip(request: ExecuteRequest):
+    """
+    Resumes the graph after a human approval interrupt.
+    """
+    if not request.thread_id:
+        return JSONResponse(status_code=400, content={"error": "thread_id is required for approval."})
+    
+    config = {"configurable": {"thread_id": request.thread_id}}
+    
+    try:
+        # Resuming with None input since we are just triggering the next step
+        final_state = graph.invoke(None, config=config)
+        plan = final_state.get("trip_plan")
+        
+        return {
+            "status": "ok",
+            "response": f"Trip finalized: {json.dumps(plan, indent=2)}" if plan else "Finalized.",
+            "steps": final_state.get("steps", [])
+        }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
