@@ -13,6 +13,18 @@ from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
 import os
 import json
+import logging
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+    before_sleep_log
+)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Prompts
 from app.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
@@ -22,7 +34,49 @@ from app.prompts.critique_prompt import CRITIQUE_SYSTEM_PROMPT
 # Tools
 from app.tools import web_search_tool, search_flights_tool, search_user_profile_tool
 
-# --- LLM Setup ---
+# --- Retry Configuration ---
+def retry_decorator(func):
+    """
+    Decorator for retrying LLM calls with exponential backoff.
+    
+    Retry strategy:
+    - Max 3 attempts
+    - Exponential backoff: 2^x * 1 second (1s, 2s, 4s)
+    - Only retry on specific exceptions (API errors, timeouts)
+    """
+    return retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type((Exception,)),  # Retry on any exception
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True
+    )(func)
+
+# --- Safe LLM Invoke Helper ---
+@retry_decorator
+def safe_llm_invoke(chain, input_data: Dict[str, Any]):
+    """
+    Safely invoke an LLM chain with automatic retry on failures.
+    
+    Args:
+        chain: The LangChain chain to invoke
+        input_data: Input dictionary for the chain
+    
+    Returns:
+        The chain's output
+    
+    Raises:
+        Exception: After 3 failed attempts
+    """
+    logger.info(f"Invoking LLM with input keys: {list(input_data.keys())}")
+    try:
+        result = chain.invoke(input_data)
+        logger.info("LLM invocation successful")
+        return result
+    except Exception as e:
+        logger.error(f"LLM invocation failed: {e}")
+        raise
+
 # Using Azure OpenAI 
 if os.getenv("AZURE_OPENAI_API_KEY"):
     llm = AzureChatOpenAI(
@@ -107,7 +161,7 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
     
     print(f"  Supervisor Query: {user_query}")
     try:
-        result = chain.invoke({"query": user_query})
+        result = safe_llm_invoke(chain, {"query": user_query})
         print(f"  Supervisor Result: {result}")
         print(f"  [DEBUG] DURATION EXTRACTED: {result.duration_days} days")
         print(f"  [DEBUG] DESTINATION EXTRACTED: '{result.destination}'")
@@ -191,7 +245,7 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
     chain = prompt | llm.with_structured_output(PlannerOutput, method="json_mode")
     
     print(f"  [DEBUG] CALLING PLANNER with duration_days={duration_days}, destination='{destination}', budget=${budget_limit}, trip_type='{trip_type}'")
-    result = chain.invoke({
+    result = safe_llm_invoke(chain, {
         "instruction": instruction,
         "feedback": state.get("critique_feedback", "None"),
         "research_info": research_info if research_info else "None",
@@ -290,7 +344,7 @@ def critique_node(state: AgentState) -> Dict[str, Any]:
     
     chain = prompt | llm.with_structured_output(CritiqueOutput)
     
-    result = chain.invoke({
+    result = safe_llm_invoke(chain, {
         "instruction": instruction,
         "user_profile": str(state.get("user_profile", "None")),
         "trip_plan": str(trip_plan),
