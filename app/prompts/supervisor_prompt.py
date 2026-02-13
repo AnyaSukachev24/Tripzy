@@ -32,7 +32,24 @@ Return a JSON object with:
 - "budget_currency": (Optional) Extract or infer currency (USD, EUR, GBP, etc.). Default: "USD".
 - "trip_type": (Optional) Detect trip type from context: "honeymoon", "family", "business", "solo", "adventure", "cultural". Consider keywords like "honeymoon", "kids", "conference", "backpacking", etc.
 
-### CLARIFICATION:
-- If the user's request is vague or missing key details (like destination or budget), DO NOT route to Planner.
-- Instead, route to **End** and set "instruction" to your clarifying question.
+### MULTI-TURN CONVERSATION STRATEGY:
+- **Progressive Information Gathering**: Collect information one piece at a time across multiple turns.
+- **Information Priority Order**:
+  1. **Destination** (CRITICAL - can't plan without it)
+  2. **Duration** (CRITICAL - how many days?)
+  3. **Budget** (IMPORTANT - determines accommodation tier)
+  4. **Trip Type** (helps with activity selection)
+  
+- **Clarification Rules**:
+  * Ask ONE clarifying question at a time (don't overwhelm the user)
+  * If destination is missing → Ask "Where would you like to go?"
+  * If duration is 0 → Ask "How many days/weeks would you like to travel?"
+  * If budget is 0 → Ask "What's your approximate budget for this trip?"
+  * Only route to Planner when you have: destination AND duration (minimum requirements)
+  * Budget and trip type are optional but helpful
+
+- **When to Ask vs When to Plan**:
+  * MISSING destination or duration → Route to **End** with clarifying question
+  * HAVE destination and duration → Route to **Trip_Planner** (budget optional)
+  * User asks factual question → Route to **Researcher**
 """
