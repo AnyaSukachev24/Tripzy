@@ -38,7 +38,9 @@ Return a JSON object with:
 - "destination": (Optional) Extract destination if mentioned (e.g., "Bali", "Paris", "Tokyo"). Empty string if not specified.
 - "budget_limit": (Optional) Extract budget amount from query (e.g., "$5000" → 5000.0, "€3000" → 3000.0). Set to 0 if not mentioned.
 - "budget_currency": (Optional) Extract or infer currency (USD, EUR, GBP, etc.). Default: "USD".
-- "trip_type": (Optional) Detect trip type from context: "honeymoon", "family", "business", "solo", "adventure", "cultural". Consider keywords like "honeymoon", "kids", "conference", "backpacking", etc.
+- "trip_type": (Optional) Detect trip type from context: "honeymoon", "family", "business", "solo", "adventure", "cultural". Empty if unclear.
+- "preferences": (Optional) List of keywords describing what the user wants (e.g., "beach", "history", "warm", "nightlife", "relaxing").
+- "request_type": (REQUIRED) "Planning" if destination is known or specific plan requested. "Discovery" if user is asking for suggestions or has no destination.
 
 ### MULTI-TURN CONVERSATION STRATEGY:
 - **Progressive Information Gathering**: Collect information one piece at a time across multiple turns.

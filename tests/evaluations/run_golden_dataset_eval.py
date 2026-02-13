@@ -189,7 +189,7 @@ def run_evaluation_suite(
                     "timestamp": datetime.now().isoformat()
                 }
             else:
-                passed_count += 1 # WARNING: Logic error in original code? No, this is failed_count
+                passed_count += 0 # logic fix
                 failed_count += 1
                 status = "✗ FAILED"
                 # Remove from cache if failed (force re-run next time)
@@ -199,7 +199,34 @@ def run_evaluation_suite(
             if verbose:
                 print(f"  Score: {evaluation['overall_score']:.2f}")
                 print(f"  Status: {status}")
+                print(f"  Progress: {i}/{len(test_cases)} ({i/len(test_cases)*100:.1f}%)")
                 print()
+                
+            # INCREMENTAL SAVE: Save results and cache after every test
+            # This allows monitoring progress even if the script crashes or is long-running
+            try:
+                # Save cache
+                with open(cache_file, 'w') as f:
+                    json.dump(cache, f, indent=2)
+                
+                # Save intermediate results if output_file is set
+                if output_file:
+                    current_stats = {
+                        "timestamp": datetime.now().isoformat(),
+                        "total_tests": len(test_cases),
+                        "completed": i,
+                        "passed": passed_count,
+                        "failed": failed_count,
+                        "pass_rate": passed_count / i if i > 0 else 0.0,
+                        "individual_results": results
+                    }
+                    output_path = Path(output_file)
+                    with open(output_path, 'w') as f:
+                        json.dump(current_stats, f, indent=2)
+                        
+            except Exception as e:
+                if verbose:
+                    print(f"  [Warning] Incremental save failed: {e}")
                 
         except Exception as e:
             if verbose:
@@ -213,14 +240,6 @@ def run_evaluation_suite(
                 "passed": False
             })
             failed_count += 1
-            
-    # Save cache
-    try:
-        with open(cache_file, 'w') as f:
-            json.dump(cache, f, indent=2)
-    except Exception as e:
-        if verbose:
-            print(f"Warning: Could not save cache: {e}")
     
     # Calculate aggregate statistics
     scores = [r["overall_score"] for r in results if "overall_score" in r]

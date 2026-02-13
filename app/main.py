@@ -17,9 +17,61 @@ def format_plan_to_markdown(plan: Dict[str, Any]) -> str:
     if not plan:
         return "No plan available."
         
+    origin_city = plan.get('origin_city', '')
+    dates = plan.get('dates', '')
+    
     md = f"### Trip to {plan.get('destination', 'Unknown')}\n"
+    if origin_city:
+        md += f"**From:** {origin_city}\n"
+    if dates:
+        md += f"**Dates:** {dates}\n"
+        
     md += f"**Budget Estimate:** ${plan.get('budget_estimate', 0)}\n\n"
     
+    # --- FLIGHTS ---
+    flights = plan.get('flights', [])
+    if flights:
+        md += "#### ✈️ Flight Options\n"
+        for flight in flights:
+            airline = flight.get('airline', 'Unknown Airline')
+            price = flight.get('price', 'N/A')
+            flight_num = flight.get('flight_number', '')
+            link = flight.get('link', '#')
+            
+            details = f"**{airline}**"
+            if flight_num:
+                details += f" ({flight_num})"
+            details += f" - {price}"
+            
+            if link and link != '#':
+                md += f"- [{details}]({link})\n"
+            else:
+                md += f"- {details}\n"
+        md += "\n"
+        
+    # --- HOTELS ---
+    hotels = plan.get('hotels', [])
+    if hotels:
+        md += "#### 🏨 Accommodation Options\n"
+        for hotel in hotels:
+            name = hotel.get('name', 'Unknown Hotel')
+            price = hotel.get('price', 'N/A')
+            rating = hotel.get('rating', '')
+            link = hotel.get('booking_link', '#')
+            
+            details = f"**{name}**"
+            if rating:
+                details += f" ({rating}★)"
+            details += f" - {price}"
+            
+            if link and link != '#':
+                md += f"- [{details}]({link})\n"
+            else:
+                md += f"- {details}\n"
+        md += "\n"
+    
+    # --- ITINERARY ---
+    md += "#### 📅 Itinerary\n"
     itinerary = plan.get('itinerary', [])
     if isinstance(itinerary, list):
         for item in itinerary:

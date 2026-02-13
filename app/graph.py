@@ -99,6 +99,8 @@ class SupervisorOutput(BaseModel):
     budget_currency: str = Field(description="Currency code (USD, EUR, etc.). Default USD.", default="USD")
     trip_type: str = Field(description="Type of trip: honeymoon, family, business, solo, adventure, cultural. Empty if unclear.", default="")
     origin_city: str = Field(description="User's starting location/city (e.g., 'London', 'NYC'). Empty if not specified.", default="")
+    preferences: list[str] = Field(description="List of extracted preferences/keywords (e.g., 'beach', 'history', 'warm').", default=[])
+    request_type: Literal["Planning", "Discovery"] = Field(description="Intent: 'Planning' for specific trips, 'Discovery' for vague requests.", default="Planning")
 
 class PlannerOutput(BaseModel):
     thought: str = Field(description="Internal reasoning.")
@@ -205,6 +207,33 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
         # Extract origin if provided
         if result.origin_city:
             updates["origin_city"] = result.origin_city
+            
+        # Extract preferences & request type
+        if result.preferences:
+            updates["preferences"] = result.preferences
+            
+        # HANDLE DISCOVERY (Vague Requests)
+        if result.request_type == "Discovery":
+            print(f"  [DISCOVERY MODE] Preferences: {result.preferences}")
+            
+            # If we have preferences but no destination, route to Researcher for suggestions
+            if result.preferences and not result.destination:
+                search_query = f"Suggest 3-5 travel destinations matching these preferences: {', '.join(result.preferences)}."
+                if result.budget_limit > 0:
+                    search_query += f" Budget: ${result.budget_limit}."
+                if result.duration_days > 0:
+                    search_query += f" Duration: {result.duration_days} days."
+                    
+                print(f"  [DISCOVERY] Routing to Researcher: {search_query}")
+                return {
+                    "next_step": "Researcher",
+                    "supervisor_instruction": search_query,
+                    "steps": [{
+                        "module": "Supervisor",
+                        "prompt": user_query,
+                        "response": "Routing to Researcher for destination suggestions."
+                    }]
+                }
         
         # EDGE CASE VALIDATION - Check for impossible/problematic requests
         from app.edge_case_validator import process_edge_cases

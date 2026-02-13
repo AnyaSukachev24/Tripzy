@@ -60,4 +60,8 @@ if __name__ == "__main__":
     # 3. Missing Duration (Contextual: Family)
     run_test("I want to take my family to Paris.", "Missing Dur (Family)")
     
+    # 4. Vague Request (Discovery Mode)
+    # Should detect preferences "beach", "cheap" and route to Researcher
+    run_test("I want a cheap beach vacation somewhere warm.", "discovery_beach_vacation")
+    
     print("\nTests Complete.")
