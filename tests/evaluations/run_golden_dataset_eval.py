@@ -1,0 +1,251 @@
+"""
+Automated Test Runner for Tripzy Golden Dataset Evaluation
+Runs all test cases from golden_dataset.json and generates evaluation reports.
+"""
+import json
+import os
+from pathlib import Path
+from typing import Dict, Any, List
+from datetime import datetime
+import sys
+
+# Add project root to path
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
+
+from tests.evaluations.eval_framework import evaluate_test_case
+
+
+def load_golden_dataset() -> List[Dict[str, Any]]:
+    """Load test cases from golden_dataset.json"""
+    dataset_path = Path(__file__).parent / "golden_dataset.json"
+    with open(dataset_path, 'r') as f:
+        return json.load(f)
+
+
+def run_agent_on_test_case(test_case: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Run the Tripzy agent on a test case.
+    
+    NOTE: This is a placeholder. In real implementation, this should:
+    1. Invoke the Tripzy graph with the test case query
+    2. For multi-turn cases, simulate the conversation
+    3. Return the agent's output
+    
+    For now, returns a mock structure for testing the evaluation framework.
+    """
+    # TODO: Implement actual agent invocation
+    # from app.graph import graph
+    # result = graph.invoke({"messages": [test_case["user_query"]]})
+    
+    # Mock output for testing
+    return {
+        "trip_plan": {},
+        "conversation": [],
+        "error": None
+    }
+
+
+def run_evaluation_suite(
+    output_file: str = None,
+    verbose: bool = True
+) -> Dict[str, Any]:
+    """
+    Run evaluation on all golden dataset test cases.
+    
+    Args:
+        output_file: Path to save results JSON (optional)
+        verbose: Print progress and results
+        
+    Returns:
+        Dictionary with aggregate results
+    """
+    if verbose:
+        print("=" * 80)
+        print("TRIPZY GOLDEN DATASET EVALUATION")
+        print("=" * 80)
+        print()
+    
+    # Load test cases
+    test_cases = load_golden_dataset()
+    if verbose:
+        print(f"Loaded {len(test_cases)} test cases")
+        print()
+    
+    # Run evaluations
+    results = []
+    passed_count = 0
+    failed_count = 0
+    
+    for i, test_case in enumerate(test_cases, 1):
+        test_id = test_case.get("id", f"test_{i}")
+        description = test_case.get("description", "No description")
+        
+        if verbose:
+            print(f"[{i}/{len(test_cases)}] Running: {test_id}")
+            print(f"  Description: {description}")
+        
+        try:
+            # Run agent
+            agent_output = run_agent_on_test_case(test_case)
+            
+            # Evaluate
+            evaluation = evaluate_test_case(agent_output, test_case)
+            
+            # Track results
+            results.append(evaluation)
+            if evaluation["passed"]:
+                passed_count += 1
+                status = "✓ PASSED"
+            else:
+                failed_count += 1
+                status = "✗ FAILED"
+            
+            if verbose:
+                print(f"  Score: {evaluation['overall_score']:.2f}")
+                print(f"  Status: {status}")
+                print()
+                
+        except Exception as e:
+            if verbose:
+                print(f"  ERROR: {str(e)}")
+                print()
+            results.append({
+                "test_id": test_id,
+                "test_description": description,
+                "error": str(e),
+                "overall_score": 0.0,
+                "passed": False
+            })
+            failed_count += 1
+    
+    # Calculate aggregate statistics
+    scores = [r["overall_score"] for r in results if "overall_score" in r]
+    avg_score = sum(scores) / len(scores) if scores else 0.0
+    pass_rate = passed_count / len(test_cases) if test_cases else 0.0
+    
+    aggregate_results = {
+        "timestamp": datetime.now().isoformat(),
+        "total_tests": len(test_cases),
+        "passed": passed_count,
+        "failed": failed_count,
+        "pass_rate": pass_rate,
+        "average_score": avg_score,
+        "individual_results": results
+    }
+    
+    # Print summary
+    if verbose:
+        print("=" * 80)
+        print("EVALUATION SUMMARY")
+        print("=" * 80)
+        print(f"Total Tests: {len(test_cases)}")
+        print(f"Passed: {passed_count} ({pass_rate*100:.1f}%)")
+        print(f"Failed: {failed_count}")
+        print(f"Average Score: {avg_score:.2f}")
+        print()
+        
+        # Breakdown by category
+        print("RESULTS BY CATEGORY:")
+        print()
+        
+        categories = {
+            "vague_": "Vague Request Handling",
+            "edge_case_": "Edge Case Detection",
+            "extreme_budget_": "Extreme Budget Handling",
+            "special_": "Special Requirements",
+            "multi_": "Multi-City Planning",
+            "attractions_only": "Partial Plan (Attractions)",
+            "full_plan": "Full Plan",
+            "flights_only": "Partial Plan (Flights)"
+        }
+        
+        for prefix, category_name in categories.items():
+            category_results = [r for r in results if r["test_id"].startswith(prefix)]
+            if category_results:
+                cat_passed = sum(1 for r in category_results if r.get("passed", False))
+                cat_scores = [r["overall_score"] for r in category_results if "overall_score" in r]
+                cat_avg = sum(cat_scores) / len(cat_scores) if cat_scores else 0.0
+                print(f"  {category_name}:")
+                print(f"    Tests: {len(category_results)}")
+                print(f"    Passed: {cat_passed}/{len(category_results)}")
+                print(f"    Avg Score: {cat_avg:.2f}")
+                print()
+    
+    # Save results
+    if output_file:
+        output_path = Path(output_file)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, 'w') as f:
+            json.dump(aggregate_results, f, indent=2)
+        if verbose:
+            print(f"Results saved to: {output_path}")
+            print()
+    
+    return aggregate_results
+
+
+def print_detailed_analysis(results_file: str):
+    """Print detailed analysis from a results file"""
+    with open(results_file, 'r') as f:
+        results = json.load(f)
+    
+    print("=" * 80)
+    print("DETAILED EVALUATION ANALYSIS")
+    print("=" * 80)
+    print()
+    
+    for result in results["individual_results"]:
+        test_id = result["test_id"]
+        score = result.get("overall_score", 0.0)
+        passed = result.get("passed", False)
+        
+        status = "✓ PASSED" if passed else "✗ FAILED"
+        print(f"{test_id}: {score:.2f} - {status}")
+        
+        if "evaluations" in result:
+            for eval_name, eval_data in result["evaluations"].items():
+                eval_score = eval_data.get("score", 0.0)
+                reasoning = eval_data.get("reasoning", "No reasoning")
+                print(f"  - {eval_name}: {eval_score:.2f}")
+                print(f"    Reasoning: {reasoning}")
+        
+        if "error" in result:
+            print(f"  ERROR: {result['error']}")
+        
+        print()
+
+
+if __name__ == "__main__":
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Run Tripzy Golden Dataset Evaluation")
+    parser.add_argument(
+        "--output",
+        "-o",
+        type=str,
+        default="tests/evaluations/results.json",
+        help="Output file for results (default: tests/evaluations/results.json)"
+    )
+    parser.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Suppress verbose output"
+    )
+    parser.add_argument(
+        "--analyze",
+        "-a",
+        type=str,
+        help="Analyze existing results file instead of running tests"
+    )
+    
+    args = parser.parse_args()
+    
+    if args.analyze:
+        print_detailed_analysis(args.analyze)
+    else:
+        run_evaluation_suite(
+            output_file=args.output,
+            verbose=not args.quiet
+        )

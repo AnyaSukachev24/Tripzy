@@ -12,7 +12,12 @@
       "min_budget_utilization": 0.8,
       "max_budget_utilization": 1.0,
       "validation_rules": {
-        "activities_should_include": ["romantic", "spa", "private", "dinner"],
+        "activities_should_include": [
+          "romantic",
+          "spa",
+          "private",
+          "dinner"
+        ],
         "accommodation_tier": "luxury"
       }
     }
@@ -30,8 +35,655 @@
       "min_budget_utilization": 0.75,
       "max_budget_utilization": 1.0,
       "validation_rules": {
-        "activities_should_include": ["kid-friendly", "museum", "park"],
+        "activities_should_include": [
+          "kid-friendly",
+          "museum",
+          "park"
+        ],
         "accommodation_tier": "mid-range"
+      }
+    }
+  },
+  {
+    "id": "vague_romantic_honeymoon_beaches",
+    "description": "Vague request - romantic honeymoon with beaches, no location specified",
+    "conversation_turns": [
+      {
+        "turn": 1,
+        "user_query": "I want to go to a romantic honeymoon with beaches",
+        "agent_should_ask": [
+          "destination_preferences",
+          "budget",
+          "duration",
+          "travel_dates"
+        ],
+        "expected_behavior": "Agent should ask clarifying questions about location preferences, budget, duration, and dates"
+      },
+      {
+        "turn": 2,
+        "user_response": "We have $4000 and can go for 10 days",
+        "agent_should_ask": [
+          "destination_region",
+          "specific_dates",
+          "accommodation_preferences"
+        ],
+        "expected_behavior": "Agent should suggest beach destinations and ask for region preferences or specific dates"
+      },
+      {
+        "turn": 3,
+        "user_response": "Maybe somewhere in Asia, we love tropical weather",
+        "agent_should_ask": [
+          "specific_country_preference",
+          "activity_preferences"
+        ],
+        "expected_behavior": "Agent should suggest specific Asian beach destinations like Maldives, Bali, Phuket, etc."
+      }
+    ],
+    "final_expected": {
+      "destination": [
+        "Maldives",
+        "Bali",
+        "Phuket",
+        "Koh Samui",
+        "Boracay"
+      ],
+      "duration_days": 10,
+      "budget_limit": 4000,
+      "budget_currency": "USD",
+      "trip_type": "honeymoon",
+      "validation_rules": {
+        "activities_should_include": [
+          "beach",
+          "romantic",
+          "water activities"
+        ],
+        "accommodation_tier": "luxury"
+      }
+    }
+  },
+  {
+    "id": "vague_family_europe",
+    "description": "Vague request - family trip in Europe, no specific destination",
+    "conversation_turns": [
+      {
+        "turn": 1,
+        "user_query": "I want to go to a family trip in Europe",
+        "agent_should_ask": [
+          "number_of_people",
+          "kids_ages",
+          "budget",
+          "duration",
+          "interests"
+        ],
+        "expected_behavior": "Agent should ask about family composition, budget, duration, and interests"
+      },
+      {
+        "turn": 2,
+        "user_response": "We're 4 people - 2 adults and 2 kids aged 8 and 10. Budget is $6000",
+        "agent_should_ask": [
+          "duration",
+          "interests",
+          "country_preferences"
+        ],
+        "expected_behavior": "Agent should ask about trip duration and suggest family-friendly European destinations"
+      },
+      {
+        "turn": 3,
+        "user_response": "About 2 weeks. Kids love history and museums",
+        "agent_should_ask": [
+          "specific_cities",
+          "activity_pace"
+        ],
+        "expected_behavior": "Agent should suggest destinations like Rome, Paris, London, Amsterdam with historical significance"
+      }
+    ],
+    "final_expected": {
+      "destination": [
+        "Rome",
+        "Paris",
+        "London",
+        "Amsterdam",
+        "Barcelona"
+      ],
+      "duration_days": 14,
+      "budget_limit": 6000,
+      "budget_currency": "USD",
+      "trip_type": "family",
+      "validation_rules": {
+        "activities_should_include": [
+          "museum",
+          "historical",
+          "kid-friendly"
+        ],
+        "accommodation_tier": "mid-range"
+      }
+    }
+  },
+  {
+    "id": "vague_caravan_trip",
+    "description": "Vague request - caravan trip, where to travel",
+    "conversation_turns": [
+      {
+        "turn": 1,
+        "user_query": "I want to go to a caravan trip, where should I travel?",
+        "agent_should_ask": [
+          "travel_style",
+          "budget",
+          "duration",
+          "region_preference",
+          "season"
+        ],
+        "expected_behavior": "Agent should ask about budget, duration, region preferences, and scenic route preferences"
+      },
+      {
+        "turn": 2,
+        "user_response": "We have a budget of $3000 and can travel for 3 weeks",
+        "agent_should_ask": [
+          "region",
+          "climate_preference",
+          "route_type"
+        ],
+        "expected_behavior": "Agent should ask about geographic preferences and suggest scenic caravan routes"
+      },
+      {
+        "turn": 3,
+        "user_response": "We prefer coastal routes with good weather",
+        "agent_should_ask": [
+          "specific_country",
+          "campsites_vs_wild_camping"
+        ],
+        "expected_behavior": "Agent should suggest coastal caravan routes in places like California coast, Australian coast, Mediterranean"
+      }
+    ],
+    "final_expected": {
+      "destination": [
+        "California Coast",
+        "Great Ocean Road Australia",
+        "Mediterranean Coast",
+        "Norway Coastal Route"
+      ],
+      "duration_days": 21,
+      "budget_limit": 3000,
+      "budget_currency": "USD",
+      "trip_type": "road_trip",
+      "validation_rules": {
+        "activities_should_include": [
+          "scenic_drive",
+          "coastal",
+          "camping"
+        ],
+        "accommodation_tier": "caravan/camping"
+      }
+    }
+  },
+  {
+    "id": "extreme_budget_impossible",
+    "description": "Extreme budget - $20 for a week trip",
+    "user_query": "I want to travel for a week with only $20",
+    "expected": {
+      "should_inform_impossible": true,
+      "agent_should_explain": "Budget is insufficient for any realistic travel plan",
+      "agent_should_suggest": [
+        "increase_budget",
+        "local_staycation",
+        "camping_nearby"
+      ],
+      "validation_rules": {
+        "response_should_include": [
+          "budget_insufficient",
+          "suggestions_for_alternatives"
+        ],
+        "should_not_create_plan": true
+      }
+    }
+  },
+  {
+    "id": "extreme_budget_very_tight",
+    "description": "Extreme budget - $300 for a week",
+    "conversation_turns": [
+      {
+        "turn": 1,
+        "user_query": "Plan a 7 day trip with $300 total budget",
+        "agent_should_ask": [
+          "destination_flexibility",
+          "home_location",
+          "travel_expectations"
+        ],
+        "expected_behavior": "Agent should clarify this is very tight budget and ask about nearby destinations or camping options"
+      },
+      {
+        "turn": 2,
+        "user_response": "I'm in the US, willing to camp and hitchhike",
+        "agent_should_ask": [
+          "specific_region",
+          "camping_gear_availability"
+        ],
+        "expected_behavior": "Agent should suggest ultra-budget options like national parks camping, nearby state parks"
+      }
+    ],
+    "final_expected": {
+      "destination": [
+        "Nearby National Parks",
+        "State Parks",
+        "Budget Camping Areas"
+      ],
+      "duration_days": 7,
+      "budget_limit": 300,
+      "budget_currency": "USD",
+      "trip_type": "ultra_budget",
+      "validation_rules": {
+        "activities_should_include": [
+          "camping",
+          "hiking",
+          "free_activities"
+        ],
+        "accommodation_tier": "camping_only",
+        "no_flights": true,
+        "transportation": "hitchhiking_or_bus"
+      }
+    }
+  },
+  {
+    "id": "attractions_only_request",
+    "description": "Request for attractions plan only, no flights or hotels",
+    "user_query": "I'll be in Barcelona for 5 days. I already have my hotel and flights. Can you plan what attractions I should visit and make reservations?",
+    "expected": {
+      "destination": "Barcelona",
+      "duration_days": 5,
+      "plan_type": "attractions_and_reservations_only",
+      "should_not_include": [
+        "flights",
+        "accommodation"
+      ],
+      "should_include": [
+        "daily_itinerary",
+        "attraction_bookings",
+        "restaurant_reservations"
+      ],
+      "validation_rules": {
+        "activities_should_include": [
+          "Sagrada Familia",
+          "Park Guell",
+          "Gothic Quarter",
+          "restaurants"
+        ],
+        "must_include_reservations": true,
+        "no_transportation_booking": true,
+        "no_accommodation_booking": true
+      }
+    }
+  },
+  {
+    "id": "full_plan_request",
+    "description": "Request for complete plan with flights, hotels, and activities",
+    "user_query": "Plan everything for my 10 day trip to Japan - flights from NYC, hotels, attractions, the works. Budget $5000",
+    "expected": {
+      "destination": "Japan",
+      "duration_days": 10,
+      "budget_limit": 5000,
+      "budget_currency": "USD",
+      "plan_type": "full_comprehensive",
+      "departure_city": "NYC",
+      "should_include": [
+        "flights",
+        "accommodation",
+        "daily_itinerary",
+        "restaurants",
+        "transportation"
+      ],
+      "validation_rules": {
+        "must_include_flights": true,
+        "must_include_hotels": true,
+        "must_include_activities": true,
+        "must_include_local_transport": true
+      }
+    }
+  },
+  {
+    "id": "flights_only_request",
+    "description": "Request for just flight options",
+    "user_query": "Find me the best flights from London to Dubai for 5 days trip in March, budget $800 for flights only",
+    "expected": {
+      "destination": "Dubai",
+      "departure_city": "London",
+      "duration_days": 5,
+      "budget_limit": 800,
+      "budget_currency": "USD",
+      "plan_type": "flights_only",
+      "should_include": [
+        "flight_options"
+      ],
+      "should_not_include": [
+        "accommodation",
+        "activities"
+      ],
+      "validation_rules": {
+        "must_provide_multiple_flight_options": true,
+        "must_include_price_comparison": true
+      }
+    }
+  },
+  {
+    "id": "edge_case_conflicting_requirements",
+    "description": "Edge case - conflicting requirements (luxury on tiny budget)",
+    "user_query": "I want a luxury 5-star vacation in Dubai for 2 weeks with private yacht, but my budget is $1000",
+    "expected": {
+      "should_flag_conflict": true,
+      "agent_should_explain": "Luxury 5-star Dubai vacation requires significantly higher budget",
+      "agent_should_suggest": [
+        "budget_increase",
+        "shorter_duration",
+        "lower_tier_accommodation"
+      ],
+      "validation_rules": {
+        "response_should_include": [
+          "conflicting_requirements",
+          "realistic_alternatives"
+        ],
+        "should_provide_minimum_budget_estimate": true
+      }
+    }
+  },
+  {
+    "id": "edge_case_impossible_dates",
+    "description": "Edge case - impossible timeline (leaving yesterday)",
+    "user_query": "Plan a trip to Australia leaving yesterday for 2 weeks",
+    "expected": {
+      "should_flag_impossible": true,
+      "agent_should_explain": "Cannot book travel for past dates",
+      "agent_should_suggest": [
+        "correct_dates",
+        "future_travel_dates"
+      ],
+      "validation_rules": {
+        "response_should_include": [
+          "date_error",
+          "request_valid_dates"
+        ]
+      }
+    }
+  },
+  {
+    "id": "edge_case_extremely_long_trip",
+    "description": "Edge case - extremely long duration (365 days)",
+    "conversation_turns": [
+      {
+        "turn": 1,
+        "user_query": "Plan a year-long trip around the world",
+        "agent_should_ask": [
+          "budget",
+          "destinations",
+          "travel_style"
+        ],
+        "expected_behavior": "Agent should handle long-duration trip and ask for budget and preferences"
+      },
+      {
+        "turn": 2,
+        "user_response": "Budget is $30,000. Want to visit 15 countries across all continents",
+        "agent_should_ask": [
+          "priority_countries",
+          "seasonal_preferences",
+          "accommodation_style"
+        ],
+        "expected_behavior": "Agent should create phased itinerary and ask about seasonal preferences"
+      }
+    ],
+    "final_expected": {
+      "destination": "multi_country",
+      "duration_days": 365,
+      "budget_limit": 30000,
+      "budget_currency": "USD",
+      "trip_type": "world_tour",
+      "validation_rules": {
+        "should_create_phased_itinerary": true,
+        "should_consider_seasons": true,
+        "should_suggest_visa_requirements": true
+      }
+    }
+  },
+  {
+    "id": "edge_case_zero_budget",
+    "description": "Edge case - no budget specified initially",
+    "conversation_turns": [
+      {
+        "turn": 1,
+        "user_query": "I want to visit New Zealand for 2 weeks",
+        "agent_should_ask": [
+          "budget",
+          "interests",
+          "accommodation_preference"
+        ],
+        "expected_behavior": "Agent must ask for budget before creating plan"
+      },
+      {
+        "turn": 2,
+        "user_response": "I don't have a fixed budget, what do you recommend?",
+        "agent_should_ask": [
+          "budget_range",
+          "comfort_level"
+        ],
+        "expected_behavior": "Agent should provide budget estimates for different comfort levels"
+      }
+    ],
+    "final_expected": {
+      "destination": "New Zealand",
+      "duration_days": 14,
+      "should_provide_budget_options": true,
+      "validation_rules": {
+        "must_provide_budget_tiers": [
+          "budget",
+          "mid-range",
+          "luxury"
+        ],
+        "must_estimate_costs": true
+      }
+    }
+  },
+  {
+    "id": "edge_case_group_size_100",
+    "description": "Edge case - very large group (100 people)",
+    "user_query": "Plan a corporate retreat for 100 people to Costa Rica for 5 days",
+    "expected": {
+      "destination": "Costa Rica",
+      "duration_days": 5,
+      "group_size": 100,
+      "trip_type": "corporate_event",
+      "should_flag_special_handling": true,
+      "validation_rules": {
+        "response_should_include": [
+          "group_booking_requirements",
+          "venue_capacity_needs"
+        ],
+        "should_suggest_group_coordinators": true,
+        "should_mention_advance_booking": true
+      }
+    }
+  },
+  {
+    "id": "special_accessibility_needs",
+    "description": "Special requirements - wheelchair accessibility",
+    "conversation_turns": [
+      {
+        "turn": 1,
+        "user_query": "Plan a trip to Paris for 7 days, I use a wheelchair",
+        "agent_should_ask": [
+          "budget",
+          "specific_accessibility_needs",
+          "travel_companions"
+        ],
+        "expected_behavior": "Agent should prioritize accessible accommodations and attractions"
+      },
+      {
+        "turn": 2,
+        "user_response": "Budget is $4000, traveling alone",
+        "agent_should_ask": [
+          "assistance_requirements",
+          "mobility_level"
+        ],
+        "expected_behavior": "Agent should suggest accessible hotels and wheelchair-friendly attractions"
+      }
+    ],
+    "final_expected": {
+      "destination": "Paris",
+      "duration_days": 7,
+      "budget_limit": 4000,
+      "budget_currency": "USD",
+      "special_requirements": "wheelchair_accessible",
+      "validation_rules": {
+        "must_include_accessible_hotels": true,
+        "must_verify_attraction_accessibility": true,
+        "activities_should_include": [
+          "wheelchair-accessible museums",
+          "accessible transport"
+        ],
+        "should_avoid": [
+          "stairs",
+          "non-accessible_venues"
+        ]
+      }
+    }
+  },
+  {
+    "id": "special_dietary_restrictions",
+    "description": "Special requirements - strict vegan with allergies",
+    "user_query": "Plan a 10 day food tour in Italy, I'm vegan with gluten allergy",
+    "expected": {
+      "destination": "Italy",
+      "duration_days": 10,
+      "trip_type": "food_tour",
+      "special_requirements": [
+        "vegan",
+        "gluten_free"
+      ],
+      "validation_rules": {
+        "must_include_vegan_restaurants": true,
+        "must_verify_dietary_accommodations": true,
+        "activities_should_include": [
+          "vegan_cooking_class",
+          "plant_based_food_tours"
+        ],
+        "should_provide_emergency_phrases": true
+      }
+    }
+  },
+  {
+    "id": "multi_city_complex",
+    "description": "Multi-city trip with specific route",
+    "user_query": "Plan a 3-week European trip: London (4 days) -> Paris (5 days) -> Rome (5 days) -> Barcelona (6 days). Budget $7000",
+    "expected": {
+      "destination": "multi_city",
+      "cities": [
+        "London",
+        "Paris",
+        "Rome",
+        "Barcelona"
+      ],
+      "city_durations": {
+        "London": 4,
+        "Paris": 5,
+        "Rome": 5,
+        "Barcelona": 6
+      },
+      "duration_days": 20,
+      "budget_limit": 7000,
+      "budget_currency": "USD",
+      "validation_rules": {
+        "must_include_inter_city_transport": true,
+        "must_respect_city_durations": true,
+        "should_optimize_route": true
+      }
+    }
+  },
+  {
+    "id": "seasonal_specific_request",
+    "description": "Seasonal requirement - Northern Lights viewing",
+    "conversation_turns": [
+      {
+        "turn": 1,
+        "user_query": "I want to see the Northern Lights",
+        "agent_should_ask": [
+          "travel_dates",
+          "budget",
+          "duration",
+          "preferred_countries"
+        ],
+        "expected_behavior": "Agent should suggest optimal months and locations for Northern Lights"
+      },
+      {
+        "turn": 2,
+        "user_response": "Anytime this winter, budget $5000",
+        "agent_should_ask": [
+          "duration",
+          "activity_preferences"
+        ],
+        "expected_behavior": "Agent should recommend Iceland, Norway, or Finland with specific months"
+      }
+    ],
+    "final_expected": {
+      "destination": [
+        "Iceland",
+        "Norway",
+        "Finland",
+        "Tromsø"
+      ],
+      "budget_limit": 5000,
+      "budget_currency": "USD",
+      "trip_type": "nature_experience",
+      "seasonal_requirement": "northern_lights",
+      "validation_rules": {
+        "must_suggest_optimal_months": [
+          "November",
+          "December",
+          "January",
+          "February",
+          "March"
+        ],
+        "activities_should_include": [
+          "northern_lights_tour",
+          "winter_activities"
+        ]
+      }
+    }
+  },
+  {
+    "id": "last_minute_booking",
+    "description": "Last minute trip - leaving in 3 days",
+    "user_query": "I need a trip planned ASAP, leaving in 3 days for a week. Budget $3000. Somewhere warm",
+    "expected": {
+      "destination": "flexible_warm_destinations",
+      "duration_days": 7,
+      "budget_limit": 3000,
+      "budget_currency": "USD",
+      "urgency": "last_minute",
+      "validation_rules": {
+        "should_prioritize_availability": true,
+        "should_warn_about_premium_prices": true,
+        "should_suggest_nearby_destinations": true,
+        "activities_should_include": [
+          "available_last_minute"
+        ]
+      }
+    }
+  },
+  {
+    "id": "festival_event_specific",
+    "description": "Event-specific travel - Oktoberfest Munich",
+    "user_query": "Plan a trip to Munich for Oktoberfest, 5 days, budget $2500",
+    "expected": {
+      "destination": "Munich",
+      "duration_days": 5,
+      "budget_limit": 2500,
+      "budget_currency": "USD",
+      "trip_type": "festival",
+      "event": "Oktoberfest",
+      "validation_rules": {
+        "must_check_festival_dates": true,
+        "should_warn_about_advance_booking": true,
+        "activities_should_include": [
+          "Oktoberfest_tents",
+          "beer_garden"
+        ],
+        "should_suggest_tent_reservations": true
       }
     }
   },
@@ -48,7 +700,11 @@
       "min_budget_utilization": 0.8,
       "max_budget_utilization": 1.0,
       "validation_rules": {
-        "activities_should_include": ["trek", "hiking", "mountain"],
+        "activities_should_include": [
+          "trek",
+          "hiking",
+          "mountain"
+        ],
         "accommodation_tier": "budget"
       }
     }
@@ -66,7 +722,11 @@
       "min_budget_utilization": 0.7,
       "max_budget_utilization": 1.0,
       "validation_rules": {
-        "activities_should_include": ["business district", "meeting", "conference"],
+        "activities_should_include": [
+          "business district",
+          "meeting",
+          "conference"
+        ],
         "accommodation_tier": "business"
       }
     }
@@ -84,7 +744,11 @@
       "min_budget_utilization": 0.75,
       "max_budget_utilization": 1.0,
       "validation_rules": {
-        "activities_should_include": ["temple", "museum", "cultural"],
+        "activities_should_include": [
+          "temple",
+          "museum",
+          "cultural"
+        ],
         "accommodation_tier": "mid-range"
       }
     }
@@ -102,7 +766,11 @@
       "min_budget_utilization": 0.7,
       "max_budget_utilization": 1.0,
       "validation_rules": {
-        "activities_should_include": ["free", "walking", "budget"],
+        "activities_should_include": [
+          "free",
+          "walking",
+          "budget"
+        ],
         "accommodation_tier": "hostel"
       }
     }
@@ -120,7 +788,12 @@
       "min_budget_utilization": 0.8,
       "max_budget_utilization": 1.0,
       "validation_rules": {
-        "activities_should_include": ["spa", "diving", "private", "resort"],
+        "activities_should_include": [
+          "spa",
+          "diving",
+          "private",
+          "resort"
+        ],
         "accommodation_tier": "ultra-luxury"
       }
     }
@@ -138,7 +811,12 @@
       "min_budget_utilization": 0.75,
       "max_budget_utilization": 1.0,
       "validation_rules": {
-        "activities_should_include": ["local", "street food", "bus", "hostel"],
+        "activities_should_include": [
+          "local",
+          "street food",
+          "bus",
+          "hostel"
+        ],
         "accommodation_tier": "budget"
       }
     }
@@ -156,7 +834,11 @@
       "min_budget_utilization": 0.7,
       "max_budget_utilization": 1.0,
       "validation_rules": {
-        "activities_should_include": ["Colosseum", "Vatican", "historic"],
+        "activities_should_include": [
+          "Colosseum",
+          "Vatican",
+          "historic"
+        ],
         "accommodation_tier": "mid-range"
       }
     }
@@ -174,8 +856,154 @@
       "min_budget_utilization": 0.8,
       "max_budget_utilization": 1.0,
       "validation_rules": {
-        "activities_should_include": ["temple", "shrine", "tea ceremony", "traditional"],
+        "activities_should_include": [
+          "temple",
+          "shrine",
+          "tea ceremony",
+          "traditional"
+        ],
         "accommodation_tier": "mid-range"
+      }
+    }
+  },
+  {
+    "id": "pet_friendly_trip",
+    "description": "Pet-friendly trip with a dog",
+    "conversation_turns": [
+      {
+        "turn": 1,
+        "user_query": "I want to take a vacation with my dog",
+        "agent_should_ask": [
+          "destination",
+          "budget",
+          "duration",
+          "dog_size",
+          "travel_mode"
+        ],
+        "expected_behavior": "Agent should ask about pet requirements and suggest pet-friendly destinations"
+      },
+      {
+        "turn": 2,
+        "user_response": "Somewhere in California, budget $2000, 5 days, medium-sized dog",
+        "agent_should_ask": [
+          "activity_preferences",
+          "accommodation_type"
+        ],
+        "expected_behavior": "Agent should suggest pet-friendly hotels and dog-friendly activities"
+      }
+    ],
+    "final_expected": {
+      "destination": "California",
+      "duration_days": 5,
+      "budget_limit": 2000,
+      "budget_currency": "USD",
+      "special_requirements": "pet_friendly",
+      "validation_rules": {
+        "must_include_pet_friendly_hotels": true,
+        "activities_should_include": [
+          "dog_parks",
+          "pet_friendly_beaches",
+          "hiking_trails"
+        ],
+        "should_mention_pet_policies": true
+      }
+    }
+  },
+  {
+    "id": "sustainable_eco_tourism",
+    "description": "Eco-conscious sustainable tourism",
+    "user_query": "Plan an eco-friendly sustainable trip to Costa Rica for 2 weeks, budget $4500. I want to minimize my carbon footprint",
+    "expected": {
+      "destination": "Costa Rica",
+      "duration_days": 14,
+      "budget_limit": 4500,
+      "budget_currency": "USD",
+      "trip_type": "eco_tourism",
+      "special_requirements": "sustainable",
+      "validation_rules": {
+        "must_prioritize_eco_lodges": true,
+        "activities_should_include": [
+          "wildlife_conservation",
+          "sustainable_tours",
+          "eco_activities"
+        ],
+        "should_minimize_flights": true,
+        "should_suggest_carbon_offset": true
+      }
+    }
+  },
+  {
+    "id": "digital_nomad_month",
+    "description": "Digital nomad - work and travel for a month",
+    "user_query": "I'm a digital nomad. Find me a place to stay for 1 month with good WiFi, coworking spaces, budget $3000",
+    "expected": {
+      "destination": "flexible",
+      "duration_days": 30,
+      "budget_limit": 3000,
+      "budget_currency": "USD",
+      "trip_type": "digital_nomad",
+      "validation_rules": {
+        "must_verify_reliable_internet": true,
+        "must_include_coworking_spaces": true,
+        "should_suggest_nomad_friendly_cities": [
+          "Lisbon",
+          "Bali",
+          "Chiang Mai",
+          "Medellin"
+        ],
+        "accommodation_should_have": [
+          "desk",
+          "high_speed_wifi",
+          "quiet_workspace"
+        ]
+      }
+    }
+  },
+  {
+    "id": "volunteer_tourism",
+    "description": "Volunteer tourism - combining travel with volunteering",
+    "conversation_turns": [
+      {
+        "turn": 1,
+        "user_query": "I want to volunteer while traveling",
+        "agent_should_ask": [
+          "cause_preference",
+          "skills",
+          "destination",
+          "duration",
+          "budget"
+        ],
+        "expected_behavior": "Agent should ask about volunteer interests and suggest volunteer programs"
+      },
+      {
+        "turn": 2,
+        "user_response": "I'd like to help with wildlife conservation, 3 weeks, budget $2500",
+        "agent_should_ask": [
+          "specific_animals",
+          "region_preference",
+          "physical_fitness_level"
+        ],
+        "expected_behavior": "Agent should suggest wildlife conservation programs in Africa, Asia, or South America"
+      }
+    ],
+    "final_expected": {
+      "destination": [
+        "Kenya",
+        "Tanzania",
+        "Thailand",
+        "Costa Rica"
+      ],
+      "duration_days": 21,
+      "budget_limit": 2500,
+      "budget_currency": "USD",
+      "trip_type": "volunteer_tourism",
+      "validation_rules": {
+        "must_include_volunteer_programs": true,
+        "activities_should_include": [
+          "wildlife_conservation",
+          "hands_on_work"
+        ],
+        "should_verify_program_legitimacy": true
       }
     }
   }
