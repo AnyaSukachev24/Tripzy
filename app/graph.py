@@ -331,6 +331,7 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
     duration_days = state.get("duration_days", 7)
     destination = state.get("destination", "")
     budget_limit = state.get("budget_limit", 0.0)
+    budget_currency = state.get("budget_currency", "USD")
     trip_type = state.get("trip_type", "")
     origin_city = state.get("origin_city", "")
     

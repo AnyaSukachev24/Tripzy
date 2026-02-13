@@ -11,6 +11,8 @@ import asyncio
 
 # Import the Graph
 from app.graph import graph
+from app.callbacks import CostCallbackHandler
+from app.conversation_logger import conversation_logger
 
 def format_plan_to_markdown(plan: Dict[str, Any]) -> str:
     """Converts the JSON trip plan into a readable Markdown string."""
@@ -220,8 +222,12 @@ async def stream_agent(request: ExecuteRequest):
     thread_id = request.thread_id or str(uuid.uuid4())
     config = {"configurable": {"thread_id": thread_id}}
     input_payload = {"user_query": request.prompt}
+    
+    #  Log the user message
+    conversation_logger.log_message(thread_id, "user", request.prompt)
 
     async def event_generator():
+        final_response_content = None
         try:
             async for event in graph.astream_events(input_payload, config, version="v2"):
                 kind = event["event"]
@@ -243,6 +249,10 @@ async def stream_agent(request: ExecuteRequest):
 
             # CHECK FOR INTERRUPTS
             snapshot = graph.get_state(config)
+            
+            # Log state snapshot
+            conversation_logger.log_state_snapshot(thread_id, dict(snapshot.values))
+            
             if snapshot.next: # If there are nodes pending (like Human_Approval)
                 # Send the draft plan for preview
                 draft_plan = snapshot.values.get("trip_plan")
@@ -267,12 +277,24 @@ async def stream_agent(request: ExecuteRequest):
                         if last_step.get("response"):
                             final_text = last_step["response"]
 
+                # Log the agent response
+                conversation_logger.log_message(thread_id, "agent", final_text)
+                final_response_content = final_text
+                
                 msg = {"type": "final_response", "content": final_text}
                 yield f"data: {json.dumps(msg)}\n\n"
                 yield f"data: {json.dumps({'type': 'done'})}\n\n"
             
+            # Save conversation to file
+            saved_path = conversation_logger.save_conversation(thread_id, final_response_content)
+            if saved_path:
+                print(f"[UI RUN SAVED] {saved_path}")
+            
         except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+            error_msg = str(e)
+            conversation_logger.log_message(thread_id, "error", error_msg)
+            conversation_logger.save_conversation(thread_id, {"error": error_msg})
+            yield f"data: {json.dumps({'type': 'error', 'content': error_msg})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

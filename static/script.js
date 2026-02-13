@@ -7,6 +7,16 @@ const statStatus = document.getElementById('stat-status');
 const profileSummary = document.getElementById('profile-summary');
 const agentThought = document.getElementById('agent-thought');
 
+// PERSISTENT SESSION ID - Maintains state across multiple messages
+let sessionId = sessionStorage.getItem('tripzy_session_id');
+if (!sessionId) {
+    sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    sessionStorage.setItem('tripzy_session_id', sessionId);
+    console.log('New session created:', sessionId);
+} else {
+    console.log('Resuming session:', sessionId);
+}
+
 function formatPreview(plan) {
     if (!plan) return "No plan details.";
     let md = `**Draft Itinerary for ${plan.destination || 'Unknown'}**\n`;
@@ -51,7 +61,10 @@ runBtn.addEventListener('click', async () => {
         const response = await fetch('/api/stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt: prompt })
+            body: JSON.stringify({
+                prompt: prompt,
+                thread_id: sessionId  // Pass persistent session ID
+            })
         });
 
         const reader = response.body.getReader();
