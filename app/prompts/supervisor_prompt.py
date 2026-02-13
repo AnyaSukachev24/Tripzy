@@ -19,7 +19,14 @@ Return a JSON object with:
 - "next_step": One of ["Trip_Planner", "Researcher", "End"]
 - "reasoning": Why you chose this step.
 - "instruction": The specific prompt to pass to the sub-agent.
-- "duration_days": (Optional) Extract trip duration from user request (e.g., "2 weeks" → 14, "10 days" → 10). If not mentioned, set to 0.
+- \"duration_days\": (REQUIRED) Extract trip duration from user request and convert to days:
+  * "X days" → X (e.g., "5 days" → 5, "10 days" → 10)
+  * "X day" → X (e.g., "1 day" → 1)
+  * "X weeks" or "X week" → X * 7 (e.g., "2 weeks" → 14, "1 week" → 7, "3 weeks" → 21)
+  * "X months" or "X month" → X * 30 (e.g., "1 month" → 30, "2 months" → 60)
+  * "weekend" → 2
+  * "long weekend" → 3
+  * If duration not mentioned, set to 0 (you'll need to ask user)
 - "destination": (Optional) Extract destination if mentioned (e.g., "Bali", "Paris", "Tokyo"). Empty string if not specified.
 - "budget_limit": (Optional) Extract budget amount from query (e.g., "$5000" → 5000.0, "€3000" → 3000.0). Set to 0 if not mentioned.
 - "budget_currency": (Optional) Extract or infer currency (USD, EUR, GBP, etc.). Default: "USD".
