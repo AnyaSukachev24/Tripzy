@@ -222,6 +222,40 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                     "response": f"Edge Case Detected: {edge_case_result['error_message']}"
                 }]
             }
+        
+        # MULTI-TURN: Check if we have minimum required information  
+        # If supervisor wants to route to Trip_Planner, validate we have destination + duration
+        if result.next_step == "Trip_Planner":
+            missing_required = []
+            
+            # Check what we already have in state (from previous turns)
+            current_destination = state.get("destination") or result.destination
+            current_duration = state.get("duration_days") or result.duration_days
+            
+            if not current_destination:
+                missing_required.append("destination")
+            if not current_duration or current_duration == 0:
+                missing_required.append("duration")
+            
+            # If missing required info, ask for the FIRST missing piece
+            if missing_required:
+                if "destination" in missing_required:
+                    clarifying_question = "Where would you like to go? (e.g., Paris, Bali, Tokyo)"
+                elif "duration" in missing_required:
+                    clarifying_question = "How many days or weeks would you like to travel?"
+                else:
+                    clarifying_question = result.instruction
+                
+                print(f"  [MULTI-TURN] Missing required info: {missing_required}. Asking for clarification.")
+                return {
+                    "next_step": "End",
+                    "supervisor_instruction": clarifying_question,
+                    "steps": [{
+                        "module": "Supervisor",
+                        "prompt": user_query,
+                        "response": f"Need more information: {clarifying_question}"
+                    }]
+                }
             
         return updates
     except Exception as e:
