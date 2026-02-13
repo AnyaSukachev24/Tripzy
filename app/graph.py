@@ -197,6 +197,31 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
         # Extract trip type if detected
         if result.trip_type:
             updates["trip_type"] = result.trip_type
+        
+        # EDGE CASE VALIDATION - Check for impossible/problematic requests
+        from app.edge_case_validator import process_edge_cases
+        
+        edge_case_result = process_edge_cases(
+            user_query=user_query,
+            duration_days=result.duration_days,
+            budget_limit=result.budget_limit,
+            budget_currency=result.budget_currency,
+            trip_type=result.trip_type,
+            destination=result.destination
+        )
+        
+        if edge_case_result["has_edge_case"] and edge_case_result["should_block"]:
+            # Don't proceed to planning, inform user of the issue
+            print(f"  [EDGE CASE DETECTED] {edge_case_result['error_message'][:100]}...")
+            return {
+                "next_step": "End",
+                "supervisor_instruction": edge_case_result["error_message"],
+                "steps": [{
+                    "module": "Supervisor",
+                    "prompt": user_query,
+                    "response": f"Edge Case Detected: {edge_case_result['error_message']}"
+                }]
+            }
             
         return updates
     except Exception as e:
