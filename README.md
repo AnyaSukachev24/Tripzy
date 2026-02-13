@@ -28,6 +28,13 @@ python -m app.main
 ```
 Then visit `http://localhost:8000` to start planning.
 
+## 📚 Documentation
+For detailed project documentation, architecture details, implementation roadmap, and data strategy, see the **[`docs/`](./docs/)** folder:
+- **[Project Plan](./docs/plan.md)** - High-level objectives
+- **[Architecture & Graph](./docs/architecture_and_graph.md)** - System design details
+- **[Data & Strategy](./docs/data_and_strategy.md)** - Data sources and approach
+- **[Implementation Roadmap](./docs/implementation_roadmap.md)** - Development plan and milestones
+
 ## 🛠️ Architecture
 The agent uses a cyclic graph:
 1. **ProfileLoader**: Fetches your preferences.
