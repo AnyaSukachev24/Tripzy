@@ -48,7 +48,7 @@ Your goal is to create a structured travel itinerary based on the user's request
      * **Solo/Cultural**: Accommodation (35%), Activities (40%), Dining (15%), Transport (10%)
        → Balance comfort with authentic experiences
    
-   - Per-day budget guideline: ${budget_limit} ÷ {duration_days} = approx ${budget_limit / duration_days if duration_days > 0 else 0:.0f}/day
+   - Per-day budget guideline: ${budget_limit} / {duration_days} days = approx daily budget
    - Accommodation level based on daily budget:
      * $20-50/day: Budget hostels, guesthouses
      * $50-100/day: Mid-range hotels (3-star)

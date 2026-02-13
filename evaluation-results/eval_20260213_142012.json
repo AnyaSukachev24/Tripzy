@@ -1,0 +1,38 @@
+{
+  "timestamp": "2026-02-13T14:20:40.576245",
+  "total_tests": 1,
+  "passed": 0,
+  "failed": 1,
+  "pass_rate": 0.0,
+  "average_score": 0.45,
+  "individual_results": [
+    {
+      "test_id": "honeymoon_bali_14d",
+      "test_description": "14-day luxury honeymoon to Bali",
+      "generated_plan": {},
+      "evaluations": {
+        "cost_realism": {
+          "score": 0.9,
+          "reasoning": "The itinerary's costs mostly align with typical Bali prices. Accommodation prices fall within the expected ranges for the specified tiers, meals are priced reasonably between $5 and $30, and activities are mostly within the $10-$100 range. Local transport costs are also appropriate. However, a few activities are priced slightly above typical rates, and one luxury hotel night is listed at $450, which is above the usual maximum of $400. Overall, the costs are realistic with minor exceptions.",
+          "issues": [
+            "One luxury accommodation night priced at $450 exceeds typical maximum of $400",
+            "A couple of activities priced above $100"
+          ]
+        },
+        "preference_alignment": {
+          "score": 0.0,
+          "reasoning": "No trip plan details were provided, so it is impossible to evaluate alignment with the honeymoon trip type and user preferences.",
+          "matched": [],
+          "missed": [
+            "romantic",
+            "spa",
+            "private",
+            "dinner"
+          ]
+        }
+      },
+      "overall_score": 0.45,
+      "passed": false
+    }
+  ]
+}

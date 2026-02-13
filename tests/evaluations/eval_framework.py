@@ -436,6 +436,7 @@ def evaluate_test_case(agent_output: Any, test_case: Dict[str, Any]) -> Dict[str
     results = {
         "test_id": test_case.get("id", "unknown"),
         "test_description": test_case.get("description", ""),
+        "generated_plan": agent_output.get("trip_plan", {}), # Added for debugging
         "evaluations": {},
         "overall_score": 0.0,
         "passed": False

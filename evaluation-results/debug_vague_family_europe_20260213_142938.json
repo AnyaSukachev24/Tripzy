@@ -1,0 +1,110 @@
+{
+  "trip_plan": {},
+  "conversation": [
+    {
+      "messages": [],
+      "user_profile": {
+        "summary": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+      },
+      "destination": "Europe",
+      "trip_type": "family",
+      "next_step": "End",
+      "supervisor_instruction": "How many days or weeks are you planning for your family trip to Europe?",
+      "user_query": "I want to go to a family trip in Europe",
+      "steps": [
+        {
+          "module": "ProfileLoader",
+          "prompt": "Loading Profile...",
+          "response": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+        },
+        {
+          "module": "Supervisor",
+          "prompt": "I want to go to a family trip in Europe",
+          "response": "Routing to End: The user specified a destination region (Europe) and trip type (family) but did not mention the trip duration, which is critical for planning. We need to ask for the duration before proceeding."
+        }
+      ]
+    },
+    {
+      "messages": [],
+      "user_profile": {
+        "summary": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+      },
+      "destination": "Europe",
+      "budget_limit": 6000.0,
+      "budget_currency": "USD",
+      "trip_type": "family",
+      "next_step": "End",
+      "supervisor_instruction": "Thanks for sharing your group details and budget! To get started, where would you like to travel?",
+      "user_query": "We're 4 people - 2 adults and 2 kids aged 8 and 10. Budget is $6000",
+      "steps": [
+        {
+          "module": "ProfileLoader",
+          "prompt": "Loading Profile...",
+          "response": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+        },
+        {
+          "module": "Supervisor",
+          "prompt": "I want to go to a family trip in Europe",
+          "response": "Routing to End: The user specified a destination region (Europe) and trip type (family) but did not mention the trip duration, which is critical for planning. We need to ask for the duration before proceeding."
+        },
+        {
+          "module": "ProfileLoader",
+          "prompt": "Loading Profile...",
+          "response": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+        },
+        {
+          "module": "Supervisor",
+          "prompt": "We're 4 people - 2 adults and 2 kids aged 8 and 10. Budget is $6000",
+          "response": "Routing to End: The user provided group size and budget but did not specify a destination or trip duration, which are critical for planning. Need to ask for the destination first."
+        }
+      ]
+    },
+    {
+      "messages": [],
+      "user_profile": {
+        "summary": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+      },
+      "duration_days": 14,
+      "destination": "Europe",
+      "budget_limit": 6000.0,
+      "budget_currency": "USD",
+      "trip_type": "family",
+      "next_step": "End",
+      "supervisor_instruction": "Where would you like to go for your trip?",
+      "user_query": "About 2 weeks. Kids love history and museums",
+      "steps": [
+        {
+          "module": "ProfileLoader",
+          "prompt": "Loading Profile...",
+          "response": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+        },
+        {
+          "module": "Supervisor",
+          "prompt": "I want to go to a family trip in Europe",
+          "response": "Routing to End: The user specified a destination region (Europe) and trip type (family) but did not mention the trip duration, which is critical for planning. We need to ask for the duration before proceeding."
+        },
+        {
+          "module": "ProfileLoader",
+          "prompt": "Loading Profile...",
+          "response": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+        },
+        {
+          "module": "Supervisor",
+          "prompt": "We're 4 people - 2 adults and 2 kids aged 8 and 10. Budget is $6000",
+          "response": "Routing to End: The user provided group size and budget but did not specify a destination or trip duration, which are critical for planning. Need to ask for the destination first."
+        },
+        {
+          "module": "ProfileLoader",
+          "prompt": "Loading Profile...",
+          "response": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+        },
+        {
+          "module": "Supervisor",
+          "prompt": "About 2 weeks. Kids love history and museums",
+          "response": "Routing to End: The user provided duration and preferences but no destination. Destination is critical to proceed with planning, so we need to ask for it first."
+        }
+      ]
+    }
+  ],
+  "error": null
+}

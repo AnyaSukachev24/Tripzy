@@ -40,6 +40,7 @@ Return a JSON object with:
 - "budget_currency": (Optional) Extract or infer currency (USD, EUR, GBP, etc.). Default: "USD".
 - "trip_type": (Optional) Detect trip type from context: "honeymoon", "family", "business", "solo", "adventure", "cultural". Empty if unclear.
 - "preferences": (Optional) List of keywords describing what the user wants (e.g., "beach", "history", "warm", "nightlife", "relaxing").
+- "origin_city": (Optional) User's starting location/city (e.g., "London", "NYC"). Empty if not specified.
 - "request_type": (REQUIRED) "Planning" if destination is known or specific plan requested. "Discovery" if user is asking for suggestions or has no destination.
 
 ### MULTI-TURN CONVERSATION STRATEGY:

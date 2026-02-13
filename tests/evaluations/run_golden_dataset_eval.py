@@ -43,7 +43,8 @@ def run_agent_on_test_case(test_case: Dict[str, Any]) -> Dict[str, Any]:
         # Multi-turn scenario: simulate conversation
         all_states = []
         for turn_num, turn in enumerate(conversation_turns, 1):
-            user_message = turn.get("user", "")
+            # Support different keys for user input
+            user_message = turn.get("user_query") or turn.get("user_response") or turn.get("user", "")
             
             # Invoke graph with this turn's message
             try:
@@ -98,8 +99,9 @@ def run_agent_on_test_case(test_case: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def run_evaluation_suite(
-    output_file: str = None,
-    verbose: bool = True
+    output_file: str | None = None,
+    verbose: bool = True,
+    limit: int | None = None
 ) -> Dict[str, Any]:
     """
     Run evaluation on all golden dataset test cases.
@@ -126,8 +128,13 @@ def run_evaluation_suite(
     
     # Load test cases
     test_cases = load_golden_dataset()
+    
+    # Apply limit if specified
+    if limit > 0:
+        test_cases = test_cases[:limit]
+        
     if verbose:
-        print(f"Loaded {len(test_cases)} test cases")
+        print(f"Loaded {len(test_cases)} test cases (Limit: {limit if limit > 0 else 'None'})")
         print()
     
     # --- CACHING LOGIC ---
@@ -173,6 +180,15 @@ def run_evaluation_suite(
             # Run agent
             agent_output = run_agent_on_test_case(test_case)
             
+            # DEBUG: Save full output if trip_plan is empty
+            if not agent_output.get("trip_plan"):
+                debug_file = os.path.join(results_dir, f"debug_{test_id}_{timestamp}.json")
+                with open(debug_file, "w") as f:
+                    # Convert any non-serializable objects to str
+                    json.dump(agent_output, f, default=str, indent=2)
+                if verbose:
+                    print(f"  [DEBUG] Saved full agent output to {debug_file}")
+
             # Evaluate
             evaluation = evaluate_test_case(agent_output, test_case)
             
@@ -361,6 +377,13 @@ if __name__ == "__main__":
         type=str,
         help="Analyze existing results file instead of running tests"
     )
+    parser.add_argument(
+        "--limit",
+        "-l",
+        type=int,
+        default=0,
+        help="Limit number of tests to run (0 for all)"
+    )
     
     args = parser.parse_args()
     
@@ -369,5 +392,6 @@ if __name__ == "__main__":
     else:
         run_evaluation_suite(
             output_file=args.output,
-            verbose=not args.quiet
+            verbose=not args.quiet,
+            limit=args.limit
         )

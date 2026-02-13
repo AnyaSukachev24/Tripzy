@@ -2,7 +2,7 @@
   {
     "id": "honeymoon_bali_14d",
     "description": "14-day luxury honeymoon to Bali",
-    "user_query": "Plan a 14 day honeymoon trip to Bali for 2 people with a budget of $5000",
+    "user_query": "Plan a 14 day honeymoon trip to Bali from NYC for 2 people with a budget of $5000",
     "expected": {
       "destination": "Bali",
       "duration_days": 14,
@@ -25,7 +25,7 @@
   {
     "id": "family_paris_7d",
     "description": "7-day family trip to Paris with kids",
-    "user_query": "Plan a 7 day family trip to Paris with 2 kids, budget $3000",
+    "user_query": "Plan a 7 day family trip to Paris from London with 2 kids, budget $3000",
     "expected": {
       "destination": "Paris",
       "duration_days": 7,
@@ -690,7 +690,7 @@
   {
     "id": "adventure_nepal_10d",
     "description": "10-day adventure trek in Nepal",
-    "user_query": "Plan a 10 day adventure trek to Nepal with $2500 budget",
+    "user_query": "Plan a 10 day adventure trek to Nepal from Kathmandu with $2500 budget",
     "expected": {
       "destination": "Nepal",
       "duration_days": 10,
@@ -712,7 +712,7 @@
   {
     "id": "business_singapore_3d",
     "description": "3-day business trip to Singapore",
-    "user_query": "Plan a 3 day business trip to Singapore, budget $2000",
+    "user_query": "Plan a 3 day business trip to Singapore from Sydney, budget $2000",
     "expected": {
       "destination": "Singapore",
       "duration_days": 3,
@@ -734,7 +734,7 @@
   {
     "id": "solo_tokyo_5d",
     "description": "5-day solo cultural trip to Tokyo",
-    "user_query": "Plan a 5 day solo trip to Tokyo for cultural exploration, budget $1800",
+    "user_query": "Plan a 5 day solo trip to Tokyo from LA for cultural exploration, budget $1800",
     "expected": {
       "destination": "Tokyo",
       "duration_days": 5,
@@ -756,7 +756,7 @@
   {
     "id": "budget_barcelona_4d",
     "description": "4-day budget trip to Barcelona",
-    "user_query": "Plan a cheap 4 day trip to Barcelona with only $800",
+    "user_query": "Plan a cheap 4 day trip to Barcelona from Madrid with only $800",
     "expected": {
       "destination": "Barcelona",
       "duration_days": 4,
@@ -778,7 +778,7 @@
   {
     "id": "luxury_maldives_7d",
     "description": "7-day luxury resort stay in Maldives",
-    "user_query": "Plan a 7 day luxury vacation to Maldives, money is no object, budget $10000",
+    "user_query": "Plan a 7 day luxury vacation to Maldives from Dubai, money is no object, budget $10000",
     "expected": {
       "destination": "Maldives",
       "duration_days": 7,
