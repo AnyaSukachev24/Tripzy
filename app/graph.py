@@ -93,11 +93,11 @@ class SupervisorOutput(BaseModel):
     next_step: Literal["Trip_Planner", "Researcher", "End"] = Field(description="Next worker to call.")
     reasoning: str = Field(description="Reason for selecting this node.")
     instruction: str = Field(description="Specific instructions for the next worker.")
-    duration_days: int = Field(description="Trip duration in days extracted from user query.", default=0)
-    destination: str = Field(description="Destination extracted from user query (e.g., 'Bali', 'Paris'). Empty if not specified.", default="")
-    budget_limit: float = Field(description="Budget limit extracted from user query (e.g., '$5000' → 5000.0). 0 if not specified.", default=0.0)
-    budget_currency: str = Field(description="Currency code (USD, EUR, etc.). Default USD.", default="USD")
-    trip_type: str = Field(description="Type of trip: honeymoon, family, business, solo, adventure, cultural. Empty if unclear.", default="")
+    duration_days: int = Field(description="Trip duration in days. If not mentioned in User Input, USE VALUE FROM CURRENT STATE. Set to 0 only if unknown.", default=0)
+    destination: str = Field(description="Destination (e.g., 'Bali'). If not mentioned in User Input, USE VALUE FROM CURRENT STATE. Empty if unknown.", default="")
+    budget_limit: float = Field(description="Budget limit. If not mentioned in User Input, USE VALUE FROM CURRENT STATE. 0 if unknown.", default=0.0)
+    budget_currency: str = Field(description="Currency code. If not mentioned, USE VALUE FROM CURRENT STATE. Default USD.", default="USD")
+    trip_type: str = Field(description="Type of trip. If not mentioned, USE VALUE FROM CURRENT STATE. Empty if unknown.", default="")
     origin_city: str = Field(description="User's starting location/city (e.g., 'London', 'NYC'). Empty if not specified.", default="")
     preferences: list[str] = Field(description="List of extracted preferences/keywords (e.g., 'beach', 'history', 'warm').", default=[])
     request_type: Literal["Planning", "Discovery"] = Field(description="Intent: 'Planning' for specific trips, 'Discovery' for vague requests.", default="Planning")
@@ -158,22 +158,41 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             "steps": [{"module": "Supervisor", "prompt": user_query, "response": "Hello! I am Tripzy."}]
         }
 
-    prompt = ChatPromptTemplate.from_messages([
+    # Format context for the LLM so it knows what has already been provided
+    # INJECT RESEARCH HISTORY: Get recent steps from Researcher to prevent loops
+    steps = state.get("steps", [])
+    research_steps = [s for s in steps if s.get("module") == "Researcher"]
+    research_history = ""
+    if research_steps:
+        research_history = "\nRECENT RESEARCH RESULTS:\n" + "\n".join([f"- {s.get('response')[:500]}..." for s in research_steps[-3:]])
+    
+    
+    current_context = f"CURRENT STATE:\n- Destination: {state.get('destination') or 'Not Set'}\n- Duration: {state.get('duration_days') or 0} days\n- Budget: {state.get('budget_limit') or 0} {state.get('budget_currency') or 'USD'}\n- Trip Type: {state.get('trip_type') or 'Not Set'}\n- Origin: {state.get('origin_city') or 'Not Set'}\n{research_history}"
+    
+    # Construct Messages for ChatPromptTemplate
+    messages = [
         ("system", SUPERVISOR_SYSTEM_PROMPT),
-        ("human", "User Input: {query}")
-    ])
+        ("human", "Context:\n{context}\n\nUser Input: {query}")
+    ]
+    
+    # DYNAMIC SYSTEM MESSAGE: Prevent loops if research exists
+    if research_steps:
+        loop_prevention_msg = (
+            "CRITICAL SYSTEM INSTRUCTION:\n"
+            "You have access to RECENT RESEARCH RESULTS in the context above.\n"
+            "Do NOT route to 'Researcher' again for the same query.\n"
+            "If the research results are sufficient to answer the user, route to 'End' and summarize the findings in the 'instruction' field."
+        )
+        # Insert before the last human message or append as strict system instruction
+        messages.insert(1, ("system", loop_prevention_msg))
+        
+    prompt = ChatPromptTemplate.from_messages(messages)
     
     chain = prompt | llm.with_structured_output(SupervisorOutput)
     
-    print(f"  Supervisor Query: {user_query}")
-    try:
-        result = safe_llm_invoke(chain, {"query": user_query})
-        print(f"  Supervisor Result: {result}")
-        print(f"  [DEBUG] DURATION EXTRACTED: {result.duration_days} days")
-        print(f"  [DEBUG] DESTINATION EXTRACTED: '{result.destination}'")
-        print(f"  [DEBUG] BUDGET EXTRACTED: ${result.budget_limit} {result.budget_currency}")
-        print(f"  [DEBUG] TRIP TYPE DETECTED: '{result.trip_type}'")
-        print(f"  [DEBUG] INSTRUCTION: {result.instruction}")
+    try:    # Pass the formatted context to the prompt
+        # We use the original user_query, not a modified one
+        result = safe_llm_invoke(chain, {"query": user_query, "context": current_context})
         
         step_log = {
             "module": "Supervisor",
@@ -181,43 +200,13 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             "response": f"Routing to {result.next_step}: {result.reasoning}"
         }
         
-        updates = {
-            "next_step": result.next_step,
-            "supervisor_instruction": result.instruction,
-            "steps": [step_log]
-        }
-        
-        # Extract duration if provided
-        if result.duration_days and result.duration_days > 0:
-            updates["duration_days"] = result.duration_days
-            
-        # Extract destination if provided  
-        if result.destination:
-            updates["destination"] = result.destination
-            
-        # Extract budget if provided
-        if result.budget_limit and result.budget_limit > 0:
-            updates["budget_limit"] = result.budget_limit
-            updates["budget_currency"] = result.budget_currency or "USD"
-            
-        # Extract trip type if detected
-        if result.trip_type:
-            updates["trip_type"] = result.trip_type
-
-        # Extract origin if provided
-        if result.origin_city:
-            updates["origin_city"] = result.origin_city
-            
-        # Extract preferences & request type
-        if result.preferences:
-            updates["preferences"] = result.preferences
-            
         # HANDLE DISCOVERY (Vague Requests)
         if result.request_type == "Discovery":
             print(f"  [DISCOVERY MODE] Preferences: {result.preferences}")
             
             # If we have preferences but no destination, route to Researcher for suggestions
-            if result.preferences and not result.destination:
+            # ONLY if we haven't already done research (to avoid loops)
+            if result.preferences and not result.destination and not research_steps:
                 search_query = f"Suggest 3-5 travel destinations matching these preferences: {', '.join(result.preferences)}."
                 if result.budget_limit > 0:
                     search_query += f" Budget: ${result.budget_limit}."
@@ -228,6 +217,14 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                 return {
                     "next_step": "Researcher",
                     "supervisor_instruction": search_query,
+                    "destination": result.destination,
+                    "duration_days": result.duration_days,
+                    "budget_limit": result.budget_limit,
+                    "budget_currency": result.budget_currency,
+                    "trip_type": result.trip_type,
+                    "origin_city": result.origin_city,
+                    "preferences": result.preferences,
+                    "request_type": result.request_type,
                     "steps": [{
                         "module": "Supervisor",
                         "prompt": user_query,
@@ -310,6 +307,18 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                     }]
                 }
             
+        updates = {
+            "next_step": result.next_step,
+            "supervisor_instruction": result.instruction,
+            "duration_days": result.duration_days,
+            "destination": result.destination,
+            "budget_limit": result.budget_limit,
+            "budget_currency": result.budget_currency,
+            "trip_type": result.trip_type,
+            "origin_city": result.origin_city,
+            "preferences": result.preferences, 
+            "steps": [step_log]
+        }
         return updates
     except Exception as e:
         print(f"  Supervisor Error: {str(e)}")

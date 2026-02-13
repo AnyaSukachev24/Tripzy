@@ -27,20 +27,16 @@ Return a JSON object with:
 - "next_step": One of ["Trip_Planner", "Researcher", "End"]
 - "reasoning": Why you chose this step.
 - "instruction": The specific prompt to pass to the sub-agent.
-- \"duration_days\": (REQUIRED) Extract trip duration from user request and convert to days:
-  * "X days" → X (e.g., "5 days" → 5, "10 days" → 10)
-  * "X day" → X (e.g., "1 day" → 1)
-  * "X weeks" or "X week" → X * 7 (e.g., "2 weeks" → 14, "1 week" → 7, "3 weeks" → 21)
-  * "X months" or "X month" → X * 30 (e.g., "1 month" → 30, "2 months" → 60)
-  * "weekend" → 2
-  * "long weekend" → 3
-  * If duration not mentioned, set to 0 (you'll need to ask user)
-- "destination": (Optional) Extract destination if mentioned (e.g., "Bali", "Paris", "Tokyo"). Empty string if not specified.
-- "budget_limit": (Optional) Extract budget amount from query (e.g., "$5000" → 5000.0, "€3000" → 3000.0). Set to 0 if not mentioned.
-- "budget_currency": (Optional) Extract or infer currency (USD, EUR, GBP, etc.). Default: "USD".
-- "trip_type": (Optional) Detect trip type from context: "honeymoon", "family", "business", "solo", "adventure", "cultural". Empty if unclear.
-- "preferences": (Optional) List of keywords describing what the user wants (e.g., "beach", "history", "warm", "nightlife", "relaxing").
-- "origin_city": (Optional) User's starting location/city (e.g., "London", "NYC"). Empty if not specified.
+- \"duration_days\": (REQUIRED) Extract trip duration. 
+  * If duration not mentioned in User Input, USE THE VALUE FROM "CURRENT STATE".
+  * If not in Current State, set to 0.
+  * Logic: "X days" → X, "X weeks" → X*7.
+- "destination": (Optional) Extract destination. If not mentioned in input, USE VALUE FROM "CURRENT STATE" (unless user explicitly changes it).
+- "budget_limit": (Optional) Extract budget. If not mentioned, USE VALUE FROM "CURRENT STATE".
+- "budget_currency": (Optional) Extract currency. Default: "USD".
+- "trip_type": (Optional) Detect trip type. If not mentioned, USE VALUE FROM "CURRENT STATE".
+- "preferences": (Optional) Merge new preferences with listing in "CURRENT STATE".
+- "origin_city": (Optional) User's starting city. If not mentioned, USE VALUE FROM "CURRENT STATE".
 - "request_type": (REQUIRED) "Planning" if destination is known or specific plan requested. "Discovery" if user is asking for suggestions or has no destination.
 
 ### MULTI-TURN CONVERSATION STRATEGY:
@@ -60,11 +56,18 @@ Return a JSON object with:
   * Budget and trip type are optional but helpful
 
 - **When to Ask vs When to Plan**:
-  * MISSING destination or duration → Route to **End** with clarifying question
+  * **CHECK CURRENT STATE FIRST**: If destination/duration are already set in the "CURRENT STATE" provided in the prompt, DO NOT ask for them again.
+  * MISSING destination or duration (and not in Current State) → Route to **End** with clarifying question
   * User asks for suggestions (e.g., "Where should I go?") → Route to **Researcher** to find options
   * HAVE research results answering user question → Route to **End** with the answer
   * HAVE destination and duration → Route to **Trip_Planner** (budget optional)
   * User asks factual question → Route to **Researcher**
+
+### RESEARCH HISTORY HANDLING:
+- The "CURRENT STATE" may include "RECENT RESEARCH RESULTS". 
+- **CRITICAL**: If you see research results that answer the user's question, DO NOT route to Researcher again.
+- Instead, route to **End** and summarize the findings for the user.
+- If the research results are "Search failed", apologize to the user and asking for manual input or a different request, do not retry endlessly.
 
 ### EXAMPLE SCENARIOS:
 

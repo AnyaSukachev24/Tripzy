@@ -1,0 +1,22 @@
+{
+  "thread_id": "session_1770998829476_horlncxs5",
+  "started_at": "2026-02-13T18:34:44.978742",
+  "ended_at": "2026-02-13T18:35:15.452447",
+  "messages": [
+    {
+      "timestamp": "2026-02-13T18:34:44.978742",
+      "role": "user",
+      "content": "i want to take my husbend to a romantic honymoon - give me ideas",
+      "metadata": {}
+    },
+    {
+      "timestamp": "2026-02-13T18:35:15.452447",
+      "role": "error",
+      "content": "Recursion limit of 25 reached without hitting a stop condition. You can increase the limit by setting the `recursion_limit` config key.\nFor troubleshooting, visit: https://docs.langchain.com/oss/python/langgraph/errors/GRAPH_RECURSION_LIMIT",
+      "metadata": {}
+    }
+  ],
+  "final_result": {
+    "error": "Recursion limit of 25 reached without hitting a stop condition. You can increase the limit by setting the `recursion_limit` config key.\nFor troubleshooting, visit: https://docs.langchain.com/oss/python/langgraph/errors/GRAPH_RECURSION_LIMIT"
+  }
+}
