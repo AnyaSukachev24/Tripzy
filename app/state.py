@@ -21,6 +21,7 @@ class AgentState(TypedDict):
     
     # --- 4. COORDINATION ---
     next_step: str                          # Router decision
+    supervisor_instruction: Optional[str]   # Instruction or feedback from Supervisor
     critique_feedback: Optional[str]        # Feedback from the Critic node
     revision_count: int                     # Safety counter for loops
     user_query: str                         # The original prompt
