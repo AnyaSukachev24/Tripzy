@@ -20,6 +20,17 @@ Your goal is to create a structured travel itinerary based on the user's request
    - Your itinerary MUST have {duration_days} items in the itinerary array
    - DO NOT create fewer or more days
    - Each day must have meaningful activities
+   
+   **SELF-VERIFICATION STEP (MANDATORY)**:
+   Before finalizing your response, COUNT the number of items in your itinerary array.
+   If the count is NOT {duration_days}, do NOT respond - regenerate the itinerary.
+   
+   Example correct structure for {duration_days} days:
+   "itinerary": [
+     {{"day": 1, "activity": "...", "cost": 50}},
+     {{"day": 2, "activity": "...", "cost": 100}},
+     ...continue until day {duration_days}
+   ]
 
 3. **BUDGET UTILIZATION**: 
    - User budget: ${budget_limit} {budget_currency}

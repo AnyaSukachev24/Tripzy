@@ -249,7 +249,40 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
 def critique_node(state: AgentState) -> Dict[str, Any]:
     print("--- NODE: CRITIQUE ---")
     instruction = state.get("supervisor_instruction", "")
+    trip_plan = state.get("trip_plan")
+    duration_days = state.get("duration_days", 7)
     
+    # HARD VALIDATION: Check duration before calling LLM
+    if trip_plan and "itinerary" in trip_plan:
+        actual_days = len(trip_plan.get("itinerary", []))
+        print(f"  [VALIDATION] Expected {duration_days} days, got {actual_days} days")
+        
+        if actual_days != duration_days:
+            print(f"  [VALIDATION FAILED] Duration mismatch!")
+            step_log = {
+                "module": "Critique",
+                "prompt": "Validating duration...",
+                "response": f"REJECT: Plan has {actual_days} days but {duration_days} required"
+            }
+            
+            current_revisions = state.get("revision_count", 0)
+            
+            if current_revisions < 3:
+                return {
+                    "steps": [step_log],
+                    "critique_feedback": f"CRITICAL: You created {actual_days} days but the user requested EXACTLY {duration_days} days. Count your itinerary items before responding. You must have {duration_days} items in the itinerary array.",
+                    "revision_count": current_revisions + 1,
+                    "next_step": "Trip_Planner"
+                }
+            else:
+                # Max revisions reached, force approval with warning
+                return {
+                    "steps": [step_log],
+                    "supervisor_instruction": "Maximum revisions reached. Proceeding with current plan despite duration mismatch.",
+                    "next_step": "Human_Approval"
+                }
+    
+    # Proceed with LLM-based critique
     prompt = ChatPromptTemplate.from_messages([
         ("system", CRITIQUE_SYSTEM_PROMPT),
         ("human", "Plan to Review: {trip_plan}")
@@ -260,9 +293,9 @@ def critique_node(state: AgentState) -> Dict[str, Any]:
     result = chain.invoke({
         "instruction": instruction,
         "user_profile": str(state.get("user_profile", "None")),
-        "trip_plan": str(state.get("trip_plan", "None")),
+        "trip_plan": str(trip_plan),
         "budget": str(state.get("budget", "None")),
-        "duration_days": state.get("duration_days", 7)
+        "duration_days": duration_days
     })
     
     step_log = {
