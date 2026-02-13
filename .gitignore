@@ -205,3 +205,14 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Tripzy Results Folders
+# Keep folders but ignore routine results
+evaluation-results/*.json
+test-results/*.json
+ui-tries-results/*.json
+
+# Allow baseline files to be tracked
+!evaluation-results/baseline_*.json
+!test-results/baseline_*.json
+!ui-tries-results/baseline_*.json
