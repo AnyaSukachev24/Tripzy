@@ -240,9 +240,9 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             # If missing required info, ask for the FIRST missing piece
             if missing_required:
                 if "destination" in missing_required:
-                    clarifying_question = "Where would you like to go? (e.g., Paris, Bali, Tokyo)"
+                    clarifying_question = "That sounds great! 🌍 But could you tell me where you'd like to go? (e.g., Paris, Bali, Tokyo)"
                 elif "duration" in missing_required:
-                    clarifying_question = "How many days or weeks would you like to travel?"
+                    clarifying_question = "I'd love to plan this for you! 🗓️ How many days or weeks are you thinking of traveling?"
                 else:
                     clarifying_question = result.instruction
                 
