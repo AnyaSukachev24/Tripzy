@@ -32,7 +32,7 @@ from app.prompts.planner_prompt import PLANNER_SYSTEM_PROMPT
 from app.prompts.critique_prompt import CRITIQUE_SYSTEM_PROMPT
 
 # Tools
-from app.tools import web_search_tool, search_flights_tool, search_user_profile_tool
+from app.tools import web_search_tool, search_flights_tool, search_hotels_tool, search_user_profile_tool
 
 # --- Retry Configuration ---
 def retry_decorator(func):
@@ -98,10 +98,13 @@ class SupervisorOutput(BaseModel):
     budget_limit: float = Field(description="Budget limit extracted from user query (e.g., '$5000' → 5000.0). 0 if not specified.", default=0.0)
     budget_currency: str = Field(description="Currency code (USD, EUR, etc.). Default USD.", default="USD")
     trip_type: str = Field(description="Type of trip: honeymoon, family, business, solo, adventure, cultural. Empty if unclear.", default="")
+    origin_city: str = Field(description="User's starting location/city (e.g., 'London', 'NYC'). Empty if not specified.", default="")
 
 class PlannerOutput(BaseModel):
     thought: str = Field(description="Internal reasoning.")
     call_researcher: str = Field(description="Query for researcher if needed.", default="")
+    call_flights: Dict[str, str] = Field(description="Flight search params: {origin, dest, date}.", default={})
+    call_hotels: Dict[str, str] = Field(description="Hotel search params: {city, in, out, budget}.", default={})
     final_response: str = Field(description="Response to user if plan is ready.", default="")
     update_plan: Dict[str, Any] = Field(description="Updates to the trip plan state.", default={})
 
@@ -134,7 +137,8 @@ def profile_loader_node(state: AgentState) -> Dict[str, Any]:
     return {
         "user_profile": {"summary": profile_text},
         "steps": [step_log],
-        "user_query": user_query
+        "user_query": user_query,
+        "origin_city": "" # Initialize
     }
 
 # 1. SUPERVISOR NODE
@@ -197,6 +201,10 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
         # Extract trip type if detected
         if result.trip_type:
             updates["trip_type"] = result.trip_type
+
+        # Extract origin if provided
+        if result.origin_city:
+            updates["origin_city"] = result.origin_city
         
         # EDGE CASE VALIDATION - Check for impossible/problematic requests
         from app.edge_case_validator import process_edge_cases
@@ -240,6 +248,13 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                 missing_required.append("destination")
             if not current_duration or current_duration == 0:
                 missing_required.append("duration")
+            # Origin is good to have but maybe not strictly blocking if we want to just browse?
+            # But for "Plan a trip", yes.
+            # Let's make it soft-blocking or ask nicely.
+            # For now, let's treat it as required for "Trip_Planner".
+            current_origin = state.get("origin_city") or result.origin_city
+            if not current_origin:
+                missing_required.append("origin")
             
             # If missing required info, ask for the FIRST missing piece
             if missing_required:
@@ -250,6 +265,8 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                     clarifying_question = f"That sounds great! 🌍 But could you tell me where you'd like to go for your {topic}? (e.g., Paris, Bali, Tokyo)"
                 elif "duration" in missing_required:
                     clarifying_question = f"I'd love to plan this {topic} for you! 🗓️ How many days or weeks are you thinking of traveling?"
+                elif "origin" in missing_required:
+                     clarifying_question = f"To find the best flights ✈️, could you tell me which city you'll be flying from?"
                 else:
                     clarifying_question = result.instruction
                 
@@ -303,6 +320,10 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
     trip_type = state.get("trip_type", "")
     print(f"  [DEBUG] PLANNER RECEIVED trip_type: '{trip_type}'")
     
+    # Get origin
+    origin_city = state.get("origin_city", "") 
+    print(f"  [DEBUG] PLANNER RECEIVED origin: '{origin_city}'")
+    
     # Extract Research Info
     steps = state.get("steps", [])
     research_steps = [s for s in steps if s.get("module") == "Researcher"]
@@ -322,7 +343,8 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
         "destination": destination,
         "budget_limit": budget_limit,
         "budget_currency": budget_currency,
-        "trip_type": trip_type
+        "trip_type": trip_type,
+        "origin_city": origin_city
     })
     
     
@@ -346,10 +368,35 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
     # Update State
     updates = {"steps": [step_log]}
     
-    # Check if research is needed
+    # Check if research/tools needed
     if result.call_researcher:
         updates["supervisor_instruction"] = result.call_researcher
         updates["next_step"] = "Researcher"
+    elif result.call_flights or result.call_hotels:
+        # We need to execute these tools.
+        # Ideally, Planner should have been bound to these tools and executed them directly.
+        # But here we are using structured output to ASK for them.
+        # Let's simple-route to "Researcher" (which we will upgrade to handle these) or a new "ToolExecutor".
+        # For simplicity in this graph, let's treat "Researcher" as the generic tool runner
+        # OR we can add specific handling here if we haven't bound tools to the LLM object itself.
+        
+        # ACTUALLY, let's look at Researcher Node. It only does web_search.
+        # We should upgrade Researcher Node to handle these structured calls,
+        # OR execute them right here and feed back to Planner?
+        # Executing here is easier for flow, but cleaner if a node does it.
+        # Let's route to "Researcher" and update Researcher to handle these specific instructions?
+        # OR better: Add "Tool_Node". 
+        
+        # Let's use the Supervisor instruction to pass the tool call details
+        tool_instr = ""
+        if result.call_flights:
+            tool_instr += f"FLIGHTS: {json.dumps(result.call_flights)} "
+        if result.call_hotels:
+             tool_instr += f"HOTELS: {json.dumps(result.call_hotels)}"
+             
+        updates["supervisor_instruction"] = tool_instr
+        updates["next_step"] = "Researcher" # Researcher will be upgraded to handle this
+        
     elif result.update_plan:
         updates["trip_plan"] = result.update_plan
         # Go to Critique instead of Supervisor
@@ -449,19 +496,65 @@ def human_approval_node(state: AgentState) -> Dict[str, Any]:
     # This node is a placeholder for the interrupt
     return {"next_step": "Trip_Planner"}
 
-# 3. RESEARCHER NODE
+# 3. RESEARCHER NODE (Enhanced for Tools)
 def researcher_node(state: AgentState) -> Dict[str, Any]:
     print("--- NODE: RESEARCHER ---")
-    query = state.get("supervisor_instruction", "")
+    instruction = state.get("supervisor_instruction", "")
     
-    # Execute Tools
-    # For MVP, we just use DuckDuckGo
-    results = web_search_tool.invoke(query)
+    results = ""
+    tool_used = "Web Search"
+    
+    # Check for structured tool calls passed from Planner
+    if "FLIGHTS:" in instruction or "HOTELS:" in instruction:
+        import json
+        
+        # Handle Flights
+        if "FLIGHTS:" in instruction:
+            try:
+                # Extract JSON part
+                start = instruction.find("FLIGHTS:") + len("FLIGHTS:")
+                end = instruction.find("HOTELS:") if "HOTELS:" in instruction else len(instruction)
+                flight_params_str = instruction[start:end].strip()
+                flight_params = json.loads(flight_params_str)
+                
+                tool_used = "Flight Search"
+                flight_res = search_flights_tool.invoke({
+                    "origin": flight_params.get("origin", ""),
+                    "destination": flight_params.get("dest", ""),
+                    "departure_date": flight_params.get("date", "")
+                })
+                results += f"Flight Options:\n{flight_res}\n"
+            except Exception as e:
+                results += f"Flight search error: {str(e)}\n"
+
+        # Handle Hotels
+        if "HOTELS:" in instruction:
+            try:
+                start = instruction.find("HOTELS:") + len("HOTELS:")
+                hotel_params_str = instruction[start:].strip()
+                hotel_params = json.loads(hotel_params_str)
+                
+                tool_used = "Hotel Search"
+                hotel_res = search_hotels_tool.invoke({
+                    "city": hotel_params.get("city", ""),
+                    "check_in": hotel_params.get("in", ""),
+                    "check_out": hotel_params.get("out", ""),
+                    "budget": hotel_params.get("budget", "medium")
+                })
+                results += f"Hotel Options:\n{hotel_res}\n"
+            except Exception as e:
+                results += f"Hotel search error: {str(e)}\n"
+                
+    else:
+        # Default Web Search
+        # Execute Tools
+        # For MVP, we just use DuckDuckGo
+        results = web_search_tool.invoke(instruction)
     
     step_log = {
         "module": "Researcher",
-        "prompt": query,
-        "response": results[:500] # Truncate for log
+        "prompt": f"Executing {tool_used}: {instruction[:50]}...",
+        "response": results[:1000] # Truncate for log
     }
     
     return {
@@ -530,13 +623,10 @@ workflow.add_conditional_edges(
 # Human Approval Logic
 workflow.add_edge("Human_Approval", "Trip_Planner")
 
-# Researcher -> Planner (Direct Loop for efficiency)
-# Or Supervisor? Let's go Supervisor to be safe and update context.
-# Actually, if Researcher just ran, Planner needs to see resume.
-# Let's go Researcher -> Planner?
-# But Planner needs "instruction". Instruction is currently "Research X".
-# We need to reset instruction to "Plan a trip"?
-# Supervisor is safer for now.
+# Researcher -> Supervisor (Default loop)
+# But if it was a specific tool call from Planner, we might want to go back to Planner.
+# However, our Planner Node logic reads from `steps` to get research info.
+# So going to Supervisor -> Planner is fine, as long as Supervisor doesn't get confused.
 workflow.add_edge("Researcher", "Supervisor")
 
 memory = MemorySaver()

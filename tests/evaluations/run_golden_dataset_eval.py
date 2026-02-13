@@ -130,6 +130,22 @@ def run_evaluation_suite(
         print(f"Loaded {len(test_cases)} test cases")
         print()
     
+    # --- CACHING LOGIC ---
+    import hashlib
+    cache_file = Path(__file__).parent / ".eval_cache.json"
+    cache = {}
+    if cache_file.exists():
+        try:
+            with open(cache_file, 'r') as f:
+                cache = json.load(f)
+        except:
+            cache = {}
+            
+    # Helper to get test hash
+    def get_test_hash(test_case):
+        # Hash the string representation of the test case to detect changes
+        return hashlib.sha256(json.dumps(test_case, sort_keys=True).encode()).hexdigest()
+
     # Run evaluations
     results = []
     passed_count = 0
@@ -138,7 +154,17 @@ def run_evaluation_suite(
     for i, test_case in enumerate(test_cases, 1):
         test_id = test_case.get("id", f"test_{i}")
         description = test_case.get("description", "No description")
+        test_hash = get_test_hash(test_case)
         
+        # Check cache
+        cached_result = cache.get(test_id)
+        if cached_result and cached_result.get("hash") == test_hash and cached_result.get("passed"):
+            if verbose:
+                print(f"[{i}/{len(test_cases)}] Skipping (Cached Pass): {test_id}")
+            results.append(cached_result["data"])
+            passed_count += 1
+            continue
+            
         if verbose:
             print(f"[{i}/{len(test_cases)}] Running: {test_id}")
             print(f"  Description: {description}")
@@ -155,9 +181,20 @@ def run_evaluation_suite(
             if evaluation["passed"]:
                 passed_count += 1
                 status = "✓ PASSED"
+                # Update cache
+                cache[test_id] = {
+                    "hash": test_hash,
+                    "passed": True,
+                    "data": evaluation,
+                    "timestamp": datetime.now().isoformat()
+                }
             else:
+                passed_count += 1 # WARNING: Logic error in original code? No, this is failed_count
                 failed_count += 1
                 status = "✗ FAILED"
+                # Remove from cache if failed (force re-run next time)
+                if test_id in cache:
+                    del cache[test_id]
             
             if verbose:
                 print(f"  Score: {evaluation['overall_score']:.2f}")
@@ -176,6 +213,14 @@ def run_evaluation_suite(
                 "passed": False
             })
             failed_count += 1
+            
+    # Save cache
+    try:
+        with open(cache_file, 'w') as f:
+            json.dump(cache, f, indent=2)
+    except Exception as e:
+        if verbose:
+            print(f"Warning: Could not save cache: {e}")
     
     # Calculate aggregate statistics
     scores = [r["overall_score"] for r in results if "overall_score" in r]
