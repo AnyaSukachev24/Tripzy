@@ -27,23 +27,74 @@ def run_agent_on_test_case(test_case: Dict[str, Any]) -> Dict[str, Any]:
     """
     Run the Tripzy agent on a test case.
     
-    NOTE: This is a placeholder. In real implementation, this should:
-    1. Invoke the Tripzy graph with the test case query
-    2. For multi-turn cases, simulate the conversation
-    3. Return the agent's output
-    
-    For now, returns a mock structure for testing the evaluation framework.
+    Handles both single-turn and multi-turn conversation scenarios.
+    Returns the agent's final output including trip plan and conversation history.
     """
-    # TODO: Implement actual agent invocation
-    # from app.graph import graph
-    # result = graph.invoke({"messages": [test_case["user_query"]]})
+    # Import agent graph
+    from app.graph import graph
     
-    # Mock output for testing
-    return {
-        "trip_plan": {},
-        "conversation": [],
-        "error": None
-    }
+    # Initialize configuration for this test run
+    config = {"configurable": {"thread_id": test_case.get("id", "test_thread")}}
+    
+    # Check if this is a multi-turn conversation
+    conversation_turns = test_case.get("conversation_turns", [])
+    
+    if conversation_turns:
+        # Multi-turn scenario: simulate conversation
+        all_states = []
+        for turn_num, turn in enumerate(conversation_turns, 1):
+            user_message = turn.get("user", "")
+            
+            # Invoke graph with this turn's message
+            try:
+                result = graph.invoke(
+                    {"user_query": user_message},
+                    config=config
+                )
+                all_states.append(result)
+                
+                # Check if we have a final plan or if we  need more turns
+                if result.get("trip_plan") and result.get("trip_plan") != {}:
+                    break  # Plan generated, stop conversation
+                    
+            except Exception as e:
+                return {
+                    "trip_plan": {},
+                    "conversation": all_states,
+                    "error": f"Turn {turn_num} failed: {str(e)}"
+                }
+        
+        # Return the final state
+        final_state = all_states[-1] if all_states else {}
+        return {
+            "trip_plan": final_state.get("trip_plan", {}),
+            "conversation": all_states,
+            "error": None
+        }
+    
+    else:
+        # Single-turn scenario
+        user_query = test_case.get("user_query", "")
+        
+        try:
+            result = graph.invoke(
+                {"user_query": user_query},
+                config=config
+            )
+            
+            return {
+                "trip_plan": result.get("trip_plan", {}),
+                "conversation": [result],
+                "error": None
+            }
+            
+        except Exception as e:
+            return {
+                "trip_plan": {},
+                "conversation": [],
+                "error": str(e)
+            }
+
 
 
 def run_evaluation_suite(
@@ -54,7 +105,7 @@ def run_evaluation_suite(
     Run evaluation on all golden dataset test cases.
     
     Args:
-        output_file: Path to save results JSON (optional)
+        output_file: Path to save results JSON (optional, auto-generates timestamped path if None)
         verbose: Print progress and results
         
     Returns:
@@ -65,6 +116,13 @@ def run_evaluation_suite(
         print("TRIPZY GOLDEN DATASET EVALUATION")
         print("=" * 80)
         print()
+    
+    # Auto-generate timestamped output path if not specified
+    if not output_file:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        results_dir = Path(__file__).parent.parent.parent / "evaluation-results"
+        results_dir.mkdir(parents=True, exist_ok=True)
+        output_file = str(results_dir / f"eval_{timestamp}.json")
     
     # Load test cases
     test_cases = load_golden_dataset()
@@ -224,8 +282,8 @@ if __name__ == "__main__":
         "--output",
         "-o",
         type=str,
-        default="tests/evaluations/results.json",
-        help="Output file for results (default: tests/evaluations/results.json)"
+        default=None,
+        help="Output file for results (default: auto-generated in evaluation-results/ with timestamp)"
     )
     parser.add_argument(
         "--quiet",
