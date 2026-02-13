@@ -174,10 +174,15 @@ def process_edge_cases(
     budget_limit: float,
     budget_currency: str,
     trip_type: str,
-    destination: str
+    destination: str,
+    is_planning: bool = True
 ) -> Dict[str, Any]:
     """
     Main edge case processing function.
+    
+    Args:
+        is_planning: If True, enforces strict requirements (must have duration, etc.).
+                     If False (e.g., asking clarifying questions), relaxes checks.
     
     Returns:
         {
@@ -194,14 +199,25 @@ def process_edge_cases(
         "suggestions": []
     }
     
-    # Run all validations
-    validations = [
-        validate_duration(duration_days),
-        validate_budget(budget_limit, duration_days, trip_type),
-        validate_conflicting_requirements(budget_limit, duration_days, trip_type, destination),
-        validate_group_size(user_query),
-        validate_travel_dates(user_query),
-    ]
+    # Run validations
+    validations = []
+    
+    # Only validate duration strictly if we are trying to plan
+    if is_planning:
+        validations.append(validate_duration(duration_days))
+    elif duration_days > 365:
+         # Even if not planning, > 1 year is too long
+         validations.append(validate_duration(duration_days))
+         
+    # Only validate budget strictness if planning
+    # But always check if budget is impossibly low if provided
+    if budget_limit > 0:
+        validations.append(validate_budget(budget_limit, duration_days, trip_type))
+        validations.append(validate_conflicting_requirements(budget_limit, duration_days, trip_type, destination))
+
+    # Always check these
+    validations.append(validate_group_size(user_query))
+    validations.append(validate_travel_dates(user_query))
     
     # Collect all errors
     errors = [msg for is_valid, msg in validations if not is_valid and msg]

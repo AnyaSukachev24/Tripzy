@@ -201,13 +201,17 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
         # EDGE CASE VALIDATION - Check for impossible/problematic requests
         from app.edge_case_validator import process_edge_cases
         
+        # Only enforce strict planning constraints (like non-zero duration) if we are actually planning
+        is_planning = (result.next_step == "Trip_Planner")
+        
         edge_case_result = process_edge_cases(
             user_query=user_query,
             duration_days=result.duration_days,
             budget_limit=result.budget_limit,
             budget_currency=result.budget_currency,
             trip_type=result.trip_type,
-            destination=result.destination
+            destination=result.destination,
+            is_planning=is_planning
         )
         
         if edge_case_result["has_edge_case"] and edge_case_result["should_block"]:
@@ -239,10 +243,13 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             
             # If missing required info, ask for the FIRST missing piece
             if missing_required:
+                # Helper to make questions contextual
+                topic = f"{result.trip_type} trip" if result.trip_type else "trip"
+                
                 if "destination" in missing_required:
-                    clarifying_question = "That sounds great! 🌍 But could you tell me where you'd like to go? (e.g., Paris, Bali, Tokyo)"
+                    clarifying_question = f"That sounds great! 🌍 But could you tell me where you'd like to go for your {topic}? (e.g., Paris, Bali, Tokyo)"
                 elif "duration" in missing_required:
-                    clarifying_question = "I'd love to plan this for you! 🗓️ How many days or weeks are you thinking of traveling?"
+                    clarifying_question = f"I'd love to plan this {topic} for you! 🗓️ How many days or weeks are you thinking of traveling?"
                 else:
                     clarifying_question = result.instruction
                 
