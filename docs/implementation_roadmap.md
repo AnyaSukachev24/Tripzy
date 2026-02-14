@@ -70,9 +70,10 @@ This roadmap is ordered by **logical dependencies** - each phase builds on the p
 - [ x] Digital nomad requirements
 - [ ] **Test Coverage:** `special_accessibility_needs`, `special_dietary_restrictions`, `pet_friendly_trip`
 
-### Phase 25: Tooling & Real API Integration
-**Goal:** Enable real-world data and fix tooling issues.
-- [ ] Fix the `SubmitPlan` tool structure and validation
+### Phase 25: Plan Structure & Tooling
+**Goal:** Formalize the trip plan structure and ensure tool reliability.
+- [ ] Create `BaseModel` structure for `TripPlan` (strict schema)
+- [ ] Fix `SubmitPlan` tool to use the new `TripPlan` model
 - [ ] Implement real Amadeus API integration (Secrets: `AMADEUS_API_KEY`, `AMADEUS_API_SECRET`) via `os.getenv`
 - [ ] Update `search_flights_tool` and `search_hotels_tool` to use real API
 - [ ] Create new tool to discover destinations from Wiki index
