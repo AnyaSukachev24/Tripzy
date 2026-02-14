@@ -7,7 +7,10 @@ langchain-openai
 langchain-google-genai
 langchain-community
 duckduckgo-search
-pinecone-client
+pinecone
 supabase
 pydantic
 langsmith
+amadeus
+streamlit
+langchainhub
