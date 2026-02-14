@@ -473,7 +473,7 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
             ("system", PLANNER_SYSTEM_PROMPT),
             (
                 "human",
-                "Current Check: Duration={duration_days}, Dest={destination}, Budget={budget_limit}. Instruction: {instruction}",
+                "Current Check: Duration={duration_days}, Dest={destination}, Budget={budget_limit}, Number of travelers={traveling_personas_number} Amenities={amenities}. Instruction: {instruction}",
             ),
         ]
     )
@@ -512,6 +512,7 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
 
         print(f"  Planner Content: {content[:100]}...")
         print(f"  Tool Calls: {len(tool_calls)}")
+        print(f"  Tool Calls: {tool_calls}")
 
         step_log = {
             "module": "Planner",
@@ -648,6 +649,7 @@ def researcher_node(state: AgentState) -> Dict[str, Any]:
 
     results = ""
     tool_used = "Web Search"
+    step_logs = []
 
     # Check for NATIVE TOOL CALLS passed from Planner
     if instruction.startswith("TOOL_CALLS:"):
@@ -669,12 +671,27 @@ def researcher_node(state: AgentState) -> Dict[str, Any]:
                 if t_name in tool_map:
                     print(f"  [Executing Tool] {t_name} with {t_args}")
                     tool_res = tool_map[t_name].invoke(t_args)
+                    # Create individual log for this tool
+                    step_log = {
+                        "module": "Researcher",
+                        "prompt": f"Executing {t_name}: {t_args}",
+                        "response": str(tool_res)[:1000],
+                    }
+                    step_logs.append(step_log)  # Append to list
+
                     results += f"Tool Result ({t_name}):\n{tool_res}\n"
-                    tool_used = t_name
+                    tool_used = t_name  # Keep track of last used
                 else:
                     results += f"Error: Unknown tool {t_name}\n"
 
         except Exception as e:
+            error_log = {
+                "module": "Researcher",
+                "prompt": "Tool Execution",
+                "response": f"Error: {str(e)}",
+            }
+            print(f"  [Error] Tool Execution Failed: {e}")
+            step_logs.append(error_log)
             results += f"Tool Execution Error: {str(e)}\n"
 
     # Check for Legacy Structured calls (Backwards compatibility if needed, or if Supervisor uses it)
@@ -702,6 +719,15 @@ def researcher_node(state: AgentState) -> Dict[str, Any]:
                     }
                 )
                 results += f"Flight Options:\n{flight_res}\n"
+
+                step_logs.append(
+                    {
+                        "module": "Researcher",
+                        "prompt": f"Legacy Flight Search: {flight_params}",
+                        "response": str(flight_res)[:1000],
+                    }
+                )
+
             except Exception as e:
                 results += f"Flight search error: {str(e)}\n"
 
@@ -722,6 +748,15 @@ def researcher_node(state: AgentState) -> Dict[str, Any]:
                     }
                 )
                 results += f"Hotel Options:\n{hotel_res}\n"
+
+                step_logs.append(
+                    {
+                        "module": "Researcher",
+                        "prompt": f"Legacy Hotel Search: {hotel_params}",
+                        "response": str(hotel_res)[:1000],
+                    }
+                )
+
             except Exception as e:
                 results += f"Hotel search error: {str(e)}\n"
 
@@ -733,15 +768,28 @@ def researcher_node(state: AgentState) -> Dict[str, Any]:
             instruction and "Suggestion" not in instruction
         ):  # Don't search for "Plan Drafted"
             results = web_search_tool.invoke(instruction)
+            step_logs.append(
+                {
+                    "module": "Researcher",
+                    "prompt": f"Web Search: {instruction}",
+                    "response": str(results)[:1000],
+                }
+            )
 
-    step_log = {
-        "module": "Researcher",
-        "prompt": f"Executing {tool_used}: {instruction[:50]}...",
-        "response": results[:1000],  # Truncate for log
-    }
+    # If steps were not added (fallback), add a generic one
+    if not step_logs:
+        step_logs.append(
+            {
+                "module": "Researcher",
+                "prompt": f"Executing {tool_used}: {instruction[:50]}...",
+                "response": results[:1000],
+            }
+        )
 
     return {
-        "steps": [step_log],
+        "steps": step_logs,
+        "supervisor_instruction": results,  # Return results for Planner to see
+        "next_step": "Trip_Planner",  # IMPORTANT: Loop back to Planner, NOT Supervisor
     }
 
 
