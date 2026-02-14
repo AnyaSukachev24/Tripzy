@@ -37,6 +37,25 @@ Return a JSON object with:
 - "trip_type": (Optional) Detect trip type. If not mentioned, USE VALUE FROM "CURRENT STATE".
 - "preferences": (Optional) Merge new preferences with listing in "CURRENT STATE".
 - "origin_city": (Optional) User's starting city. If not mentioned, USE VALUE FROM "CURRENT STATE".
+- "traveling_personas_number": (Optional) Extract number of travelers. Default: 1. If not mentioned, USE VALUE FROM "CURRENT STATE".
+- "amenities": (Optional) Extract list of amenities. Only use valid values from the list below.
+  - "DISABLED_FACILITIES"
+  - "PETS_ALLOWED"
+  - "WIFI"
+  - "KSML" (Kosher Meal)
+  - "VGML" (Vegan Meal)
+  - "WCHR" (Wheelchair - Ramp)
+  - "PARKING"
+  - "AIR_CONDITIONING"
+  - "FITNESS_CENTER"
+  - "RESTAURANT"
+  - "BUSINESS_CENTER"
+  - "BABYSITTING"
+  - "SPA"
+  - "MOML" (Muslim Meal)
+  - "GFML" (Gluten Intolerant Meal)
+  - "WCHC" (Wheelchair - Completely Immobile)
+  - "PETC" (Pet in Cabin)
 - "request_type": (REQUIRED) "Planning" if destination is known or specific plan requested. "Discovery" if user is asking for suggestions or has no destination.
 
 ### MULTI-TURN CONVERSATION STRATEGY:

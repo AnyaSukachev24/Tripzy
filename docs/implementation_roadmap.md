@@ -63,11 +63,11 @@ This roadmap is ordered by **logical dependencies** - each phase builds on the p
 
 ### Phase 24: Special Requirements Handling (IMPORTANT)
 **Goal:** Accommodate special needs and preferences.
-- [ ] Accessibility features (wheelchair access, mobility needs)
-- [ ] Dietary restrictions (vegan, allergies, kosher, halal)
-- [ ] Pet-friendly accommodations and activities
-- [ ] Sustainable/eco-tourism preferences
-- [ ] Digital nomad requirements
+- [x ] Accessibility features (wheelchair access, mobility needs)
+- [x ] Dietary restrictions (vegan, allergies, kosher, halal)
+- [x ] Pet-friendly accommodations and activities
+- [ x] Sustainable/eco-tourism preferences
+- [ x] Digital nomad requirements
 - [ ] **Test Coverage:** `special_accessibility_needs`, `special_dietary_restrictions`, `pet_friendly_trip`
 
 ### Phase 25: User Personalization & Learning

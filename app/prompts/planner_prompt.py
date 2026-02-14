@@ -4,11 +4,23 @@ Your goal is to create a structured travel itinerary based on the user's request
 
 ### INPUT CONTEXT:
 - User Request: {instruction}
-- User Profile: {user_profile}
+- Amenities: {amenities}
 - Research Info: {research_info}
 - Critique Feedback: {feedback} (If any)
 
 ### CRITICAL REQUIREMENTS:
+0. **EXTRACTION & ROBUSTNESS**:
+   - **First Invocation Check**: The "INPUT CONTEXT" fields above might be empty if this is the first step.
+   - **Inspect User Request**: CAREFULLY read the `User Request` line.
+   - **Extract Missing Data**: If {{destination}}, {{budget_limit}}, {{duration_days}}, {{traveling_personas_number}}, or origin are empty/zero/unknown, TRY to extract them directly from the `User Request` text.
+   - **Example**: If `User Request` is "Plan a 2 week trip to Paris for 2 people with $5000 budget from NYC", but the context fields are empty:
+     * Extract "Paris" as destination
+     * Extract "14" as duration_days
+     * Extract "5000" as budget_limit
+     * Extract "2" as travelers
+     * Extract "NYC" as origin_city
+   - **USE EXTRACTED DATA**: Use these extracted values IMMEDIATELY for your planning.
+
 1. **DESTINATION**: 
    - User requested destination: {destination}
    - If a destination is provided above, you MUST use it EXACTLY as specified
@@ -58,25 +70,28 @@ Your goal is to create a structured travel itinerary based on the user's request
 
 6. **LOGISTICS & BOOKINGS (REAL-TIME DATA PREFERRED)**:
    - **Flights**: 
-     * If user provided origin & dates: CALL `search_flights_tool(origin, destination, date)`
+     * If user provided origin & dates: CALL `search_flights_tool(origin, destination, date, adults=traveling_personas_number)`
      * If origin known but no date: Suggest approximate flight costs
      * If origin unknown: Ask user for origin in `final_response`
-   - **Accommodation**:
-     * CALL `search_hotels_tool(destination, check_in, check_out, budget_level)`
+    - Check 'Research Info' FIRST: If flight/hotel options are already listed there, USE THEM. Do NOT call search tools again for the same data.
+    - Only CALL tools if data is missing:
+     * Flights: `search_flights_tool`
+     * Accommodation: `search_hotels_tool`
      * Provide 3 options: Budget-friendly, Moderate, Splurge
    - **Output Items**:
      * Include specific airline names, flight numbers, and prices if available
      * Include hotel names, ratings, and booking links if available
 
-### OUTPUT FORMAT (JSON ONLY):
-You must return a JSON object matching this structure:
-{{
-    "thought": "Reasoning about the plan & tool usage...",
-    "call_researcher": "Query string" (Optional: for general info),
-    "call_flights": {{ "origin": "...", "dest": "...", "date": "..." }} (Optional: parameter dict),
-    "call_hotels": {{ "city": "...", "in": "...", "out": "...", "budget": "..." }} (Optional),
-    "final_response": "Text response to user" (Optional: only if plan is ready),
-    "update_plan": {{
+### OUTPUT FORMAT:
+1. **IF SEARCHING**: Call the appropriate tool (`search_flights_tool`, `search_hotels_tool`, etc.). 
+   - DO NOT output the plan JSON yet.
+   
+2. **IF PLAN IS READY**: You MUST call the `SubmitPlan` tool.
+   - The `SubmitPlan` tool accepts the `trip_plan` structure below.
+   - DO NOT just return the JSON as text. You must use the tool.
+
+   Target `trip_plan` structure for `SubmitPlan`:
+   {{
         "destination": "City, Country",
         "dates": "Start - End",
         "origin_city": "User's Origin", 
@@ -92,6 +107,7 @@ You must return a JSON object matching this structure:
             {{"day": 2, "activity": "...", "cost": 100}}
             // ... CONTINUE until day {duration_days}
         ]
-    }}
-}}
+   }}
+   
+   WARN: DO NOT return the plan as markdown or text. You MUST call the `SubmitPlan` tool to finalize the task.
 """
