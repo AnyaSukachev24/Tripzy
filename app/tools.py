@@ -49,7 +49,7 @@ def search_flights_tool(
     - return_date: YYYY-MM-DD (optional)
     """
     print(
-        f"  [Tool] Searching Flights: {origin} -> {destination} on {departure_date} (Adults: {adults}, Amenities: {amenities})"
+        f"  [Tool] Searching Flights: {origin} -> {destination} on {departure_date} (Adults: {adults})"
     )
 
     amadeus_api_key = os.getenv("AMADEUS_API_KEY")
