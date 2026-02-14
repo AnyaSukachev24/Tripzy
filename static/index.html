@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tripzy - Luxury Travel Agent Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+    <div class="container">
+        <!-- SIDEBAR -->
+        <aside class="sidebar">
+            <div class="logo">
+                <h1>Tripzy.</h1>
+            </div>
+
+            <div class="status-card">
+                <h3>Trip Parameters</h3>
+                <div class="stat-item">
+                    <span>Destination</span>
+                    <span id="stat-dest" class="stat-value">-</span>
+                </div>
+                <div class="stat-item">
+                    <span>Budget</span>
+                    <span id="stat-budget" class="stat-value">-</span>
+                </div>
+                <div class="stat-item">
+                    <span>Status</span>
+                    <span id="stat-status" class="stat-value">Idle</span>
+                </div>
+            </div>
+
+            <div class="status-card">
+                <h3>User Profile</h3>
+                <div id="profile-summary" class="stat-value"
+                    style="font-size: 0.85rem; font-weight: 400; color: var(--text-muted);">
+                    Waiting for input...
+                </div>
+            </div>
+
+            <div style="flex: 1;"></div>
+
+            <div class="status-card" style="border-color: var(--primary);">
+                <h3>Agent Thought</h3>
+                <p id="agent-thought" style="font-size: 0.85rem; color: var(--text-muted);">
+                    I'm ready to plan your next adventure.
+                </p>
+            </div>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <main class="main-content">
+            <div id="chat-display" class="chat-display">
+                <!-- Messages will appear here -->
+                <div class="message agent">
+                    Hello! I'm your AI Travel Agent. Where would you like to go today?
+                </div>
+            </div>
+
+            <div id="approval-section" class="input-area hidden"
+                style="background: var(--primary-glow); border-color: var(--primary);">
+                <div style="flex: 1;">
+                    <p style="font-weight: 600;">Plan Ready for Finalization</p>
+                    <p style="font-size: 0.85rem; color: var(--text-muted);">The agent has drafted a plan. Would you
+                        like to generate the final response?</p>
+
+                    <!-- Draft Preview -->
+                    <div id="plan-preview"
+                        style="margin-top: 1rem; padding: 1rem; background: rgba(0,0,0,0.2); border-radius: 8px; font-size: 0.9rem; max-height: 200px; overflow-y: auto; white-space: pre-wrap;">
+                    </div>
+                </div>
+                <button id="approveBtn" style="background: var(--success);">
+                    Confirm & Finalize
+                </button>
+                <button id="cancelBtn" style="background: #ef4444; padding: 0.75rem;">
+                    Cancel
+                </button>
+            </div>
+
+            <div class="input-area">
+                <textarea id="promptInput" placeholder="e.g. 5 days in Kyoto, $3000 budget..."></textarea>
+                <button id="runBtn">
+                    <span>Send</span>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
+                </button>
+            </div>
+        </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="/static/script.js"></script>
+</body>
+
+</html>

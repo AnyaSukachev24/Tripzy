@@ -1,0 +1,221 @@
+{
+  "thread_id": "test_session_76516b11",
+  "started_at": "2026-02-13T18:09:42.917817",
+  "ended_at": "2026-02-13T18:10:02.442161",
+  "messages": [
+    {
+      "timestamp": "2026-02-13T18:09:42.917817",
+      "role": "user",
+      "content": "I want to go on a trip.",
+      "metadata": {}
+    },
+    {
+      "timestamp": "2026-02-13T18:09:45.333384",
+      "type": "state_snapshot",
+      "state": {
+        "messages": [],
+        "user_profile": {
+          "summary": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+        },
+        "next_step": "End",
+        "supervisor_instruction": "Where would you like to go for your trip?",
+        "user_query": "I want to go on a trip.",
+        "steps": [
+          {
+            "module": "ProfileLoader",
+            "prompt": "Loading Profile...",
+            "response": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+          },
+          {
+            "module": "Supervisor",
+            "prompt": "I want to go on a trip.",
+            "response": "Routing to End: The user wants to go on a trip but has not specified a destination, which is critical for planning. We need to ask for the destination first."
+          }
+        ]
+      }
+    },
+    {
+      "timestamp": "2026-02-13T18:09:45.333384",
+      "role": "agent",
+      "content": "Where would you like to go for your trip?",
+      "metadata": {}
+    },
+    {
+      "timestamp": "2026-02-13T18:09:47.383454",
+      "role": "user",
+      "content": "Bali",
+      "metadata": {}
+    },
+    {
+      "timestamp": "2026-02-13T18:09:51.326089",
+      "type": "state_snapshot",
+      "state": {
+        "messages": [],
+        "user_profile": {
+          "summary": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+        },
+        "destination": "Bali",
+        "next_step": "End",
+        "supervisor_instruction": "You chose Bali as your destination—great choice! How many days or weeks are you planning to spend there?",
+        "user_query": "Bali",
+        "steps": [
+          {
+            "module": "ProfileLoader",
+            "prompt": "Loading Profile...",
+            "response": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+          },
+          {
+            "module": "Supervisor",
+            "prompt": "I want to go on a trip.",
+            "response": "Routing to End: The user wants to go on a trip but has not specified a destination, which is critical for planning. We need to ask for the destination first."
+          },
+          {
+            "module": "ProfileLoader",
+            "prompt": "Loading Profile...",
+            "response": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+          },
+          {
+            "module": "Supervisor",
+            "prompt": "Bali",
+            "response": "Routing to End: The user provided a destination but no duration. Duration is critical to proceed with planning, so we need to ask the user for the trip length first."
+          }
+        ]
+      }
+    },
+    {
+      "timestamp": "2026-02-13T18:09:51.326089",
+      "role": "agent",
+      "content": "You chose Bali as your destination—great choice! How many days or weeks are you planning to spend there?",
+      "metadata": {}
+    },
+    {
+      "timestamp": "2026-02-13T18:09:53.375047",
+      "role": "user",
+      "content": "2 weeks",
+      "metadata": {}
+    },
+    {
+      "timestamp": "2026-02-13T18:09:56.907714",
+      "type": "state_snapshot",
+      "state": {
+        "messages": [],
+        "user_profile": {
+          "summary": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+        },
+        "duration_days": 14,
+        "destination": "Bali",
+        "next_step": "End",
+        "supervisor_instruction": "You mentioned 2 weeks for your trip. Just to confirm, that's 14 days, right?",
+        "user_query": "2 weeks",
+        "steps": [
+          {
+            "module": "ProfileLoader",
+            "prompt": "Loading Profile...",
+            "response": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+          },
+          {
+            "module": "Supervisor",
+            "prompt": "I want to go on a trip.",
+            "response": "Routing to End: The user wants to go on a trip but has not specified a destination, which is critical for planning. We need to ask for the destination first."
+          },
+          {
+            "module": "ProfileLoader",
+            "prompt": "Loading Profile...",
+            "response": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+          },
+          {
+            "module": "Supervisor",
+            "prompt": "Bali",
+            "response": "Routing to End: The user provided a destination but no duration. Duration is critical to proceed with planning, so we need to ask the user for the trip length first."
+          },
+          {
+            "module": "ProfileLoader",
+            "prompt": "Loading Profile...",
+            "response": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+          },
+          {
+            "module": "Supervisor",
+            "prompt": "2 weeks",
+            "response": "Routing to End: Duration provided (2 weeks = 14 days), but destination is already known (Bali). However, duration was previously 0 and now updated. Need to confirm or update duration in state before planning."
+          }
+        ]
+      }
+    },
+    {
+      "timestamp": "2026-02-13T18:09:56.907714",
+      "role": "agent",
+      "content": "You mentioned 2 weeks for your trip. Just to confirm, that's 14 days, right?",
+      "metadata": {}
+    },
+    {
+      "timestamp": "2026-02-13T18:09:58.940642",
+      "role": "user",
+      "content": "$5000",
+      "metadata": {}
+    },
+    {
+      "timestamp": "2026-02-13T18:10:02.442161",
+      "type": "state_snapshot",
+      "state": {
+        "messages": [],
+        "user_profile": {
+          "summary": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+        },
+        "duration_days": 14,
+        "destination": "Bali",
+        "next_step": "End",
+        "supervisor_instruction": "To find the best flights ✈️, could you tell me which city you'll be flying from?",
+        "user_query": "$5000",
+        "steps": [
+          {
+            "module": "ProfileLoader",
+            "prompt": "Loading Profile...",
+            "response": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+          },
+          {
+            "module": "Supervisor",
+            "prompt": "I want to go on a trip.",
+            "response": "Routing to End: The user wants to go on a trip but has not specified a destination, which is critical for planning. We need to ask for the destination first."
+          },
+          {
+            "module": "ProfileLoader",
+            "prompt": "Loading Profile...",
+            "response": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+          },
+          {
+            "module": "Supervisor",
+            "prompt": "Bali",
+            "response": "Routing to End: The user provided a destination but no duration. Duration is critical to proceed with planning, so we need to ask the user for the trip length first."
+          },
+          {
+            "module": "ProfileLoader",
+            "prompt": "Loading Profile...",
+            "response": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+          },
+          {
+            "module": "Supervisor",
+            "prompt": "2 weeks",
+            "response": "Routing to End: Duration provided (2 weeks = 14 days), but destination is already known (Bali). However, duration was previously 0 and now updated. Need to confirm or update duration in state before planning."
+          },
+          {
+            "module": "ProfileLoader",
+            "prompt": "Loading Profile...",
+            "response": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+          },
+          {
+            "module": "Supervisor",
+            "prompt": "$5000",
+            "response": "Need more information: To find the best flights ✈️, could you tell me which city you'll be flying from?"
+          }
+        ]
+      }
+    },
+    {
+      "timestamp": "2026-02-13T18:10:02.442161",
+      "role": "agent",
+      "content": "To find the best flights ✈️, could you tell me which city you'll be flying from?",
+      "metadata": {}
+    }
+  ],
+  "final_result": "To find the best flights ✈️, could you tell me which city you'll be flying from?"
+}

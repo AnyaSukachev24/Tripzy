@@ -1,25 +1,117 @@
-from fastapi import FastAPI
+import uvicorn
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import Response, JSONResponse, FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Dict, Optional, Any
-from app.graph import graph
-from fastapi.responses import Response
+from typing import List, Dict, Any, Optional
 import uuid
+import json
+import asyncio
 
-app = FastAPI(title="Tripzy Travel Agent")
+# Import the Graph
+from app.graph import graph
+from app.callbacks import CostCallbackHandler
+from app.conversation_logger import conversation_logger
 
-# --- Models ---
+def format_plan_to_markdown(plan: Dict[str, Any]) -> str:
+    """Converts the JSON trip plan into a readable Markdown string."""
+    if not plan:
+        return "No plan available."
+        
+    origin_city = plan.get('origin_city', '')
+    dates = plan.get('dates', '')
+    
+    md = f"### Trip to {plan.get('destination', 'Unknown')}\n"
+    if origin_city:
+        md += f"**From:** {origin_city}\n"
+    if dates:
+        md += f"**Dates:** {dates}\n"
+        
+    md += f"**Budget Estimate:** ${plan.get('budget_estimate', 0)}\n\n"
+    
+    # --- FLIGHTS ---
+    flights = plan.get('flights', [])
+    if flights:
+        md += "#### ✈️ Flight Options\n"
+        for flight in flights:
+            airline = flight.get('airline', 'Unknown Airline')
+            price = flight.get('price', 'N/A')
+            flight_num = flight.get('flight_number', '')
+            link = flight.get('link', '#')
+            
+            details = f"**{airline}**"
+            if flight_num:
+                details += f" ({flight_num})"
+            details += f" - {price}"
+            
+            if link and link != '#':
+                md += f"- [{details}]({link})\n"
+            else:
+                md += f"- {details}\n"
+        md += "\n"
+        
+    # --- HOTELS ---
+    hotels = plan.get('hotels', [])
+    if hotels:
+        md += "#### 🏨 Accommodation Options\n"
+        for hotel in hotels:
+            name = hotel.get('name', 'Unknown Hotel')
+            price = hotel.get('price', 'N/A')
+            rating = hotel.get('rating', '')
+            link = hotel.get('booking_link', '#')
+            
+            details = f"**{name}**"
+            if rating:
+                details += f" ({rating}★)"
+            details += f" - {price}"
+            
+            if link and link != '#':
+                md += f"- [{details}]({link})\n"
+            else:
+                md += f"- {details}\n"
+        md += "\n"
+    
+    # --- ITINERARY ---
+    md += "#### 📅 Itinerary\n"
+    itinerary = plan.get('itinerary', [])
+    if isinstance(itinerary, list):
+        for item in itinerary:
+            day = item.get('day', '?')
+            activity = item.get('activity', 'No activity')
+            cost = item.get('cost', 0)
+            md += f"- **Day {day}**: {activity} (${cost})\n"
+    
+    return md
 
+app = FastAPI(title="Tripzy Travel Agent (Course Project)")
+
+# CORS (Allow all for Render/Testing)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Serve Static Files
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/")
+async def read_root():
+    return FileResponse('static/index.html')
+
+# --- MODELS ---
 
 class Student(BaseModel):
     name: str
     email: str
 
-
 class TeamInfoResponse(BaseModel):
     group_batch_order_number: str
     team_name: str
     students: List[Student]
-
 
 class AgentInfoResponse(BaseModel):
     description: str
@@ -27,119 +119,207 @@ class AgentInfoResponse(BaseModel):
     prompt_template: Dict[str, str]
     prompt_examples: List[Dict[str, Any]]
 
+class ExecuteRequest(BaseModel):
+    prompt: str
+    thread_id: Optional[str] = None
 
-# --- Endpoints ---
+class ExecuteResponse(BaseModel):
+    status: str
+    response: str
+    steps: List[Dict[str, Any]]
+    error: Optional[str] = None
 
+# --- ENDPOINTS ---
 
 @app.get("/api/team_info", response_model=TeamInfoResponse)
 def get_team_info():
-    """
-    Returns student details.
-    """
+    """Returns student details (Course Requirement)."""
     return {
-        "group_batch_order_number": "1_1",  # Placeholder
-        "team_name": "Tripzy Team",
+        "group_batch_order_number": "BATCH_XX_ORDER_XX", 
+        "team_name": "Tripzy",
         "students": [
-            {"name": "Student A", "email": "a@example.com"},
-            {"name": "Student B", "email": "b@example.com"},
-            {"name": "Student C", "email": "c@example.com"},
-        ],
+            {"name": "Student 1", "email": "s1@example.com"}, 
+            {"name": "Student 2", "email": "s2@example.com"},
+        ]
     }
-
 
 @app.get("/api/agent_info", response_model=AgentInfoResponse)
 def get_agent_info():
-    """
-    Returns agent meta + how to use it.
-    """
+    """Returns agent metadata (Course Requirement)."""
     return {
-        "description": "Tripzy is an AI travel agent designed to help users plan their perfect trip by understanding their needs, researching options, and drafting personalized proposals.",
-        "purpose": "To autonomously solve travel planning problems by leveraging AI reasoning.",
+        "description": "Tripzy is an autonomous travel companion that plans detailed itineraries while strictly adhering to user budgets.",
+        "purpose": "To plan end-to-end travel itineraries with real-time data and budget validation.",
         "prompt_template": {
-            "template": "Plan a trip to {destination} for {days} days with a budget of {budget}."
+            "template": "Plan a {days}-day trip to {destination} with a budget of {budget}."
         },
         "prompt_examples": [
             {
-                "prompt": "I want to go to Paris for 5 days with $2000.",
-                "full_response": "Here is a personalized itinerary for your trip to Paris...",
-                "steps": [],
+                "prompt": "Plan a 3-day trip to Paris for cheap.",
+                "full_response": "Here is a budget-friendly Paris itinerary...",
+                "steps": [
+                    {"module": "Supervisor", "prompt": "...", "response": "Routing to Planner"},
+                    {"module": "Planner", "prompt": "...", "response": "Drafting plan"},
+                ]
             }
-        ],
+        ]
     }
 
+@app.get("/api/model_architecture")
+def get_model_architecture():
+    """Returns the graph image (Course Requirement)."""
+    try:
+        # Generate PNG from LangGraph
+        img_data = graph.get_graph().draw_mermaid_png()
+        return Response(content=img_data, media_type="image/png")
+    except Exception as e:
+        return JSONResponse(
+            status_code=500, 
+            content={"error": f"Failed to generate graph image: {str(e)}"}
+        )
 
-class ExecuteRequest(BaseModel):
-    prompt: str
-    thread_id: Optional[str] = "default_thread"
-
-
-@app.post("/api/execute")
+@app.post("/api/execute", response_model=ExecuteResponse)
 def execute_agent(request: ExecuteRequest):
     """
-    Executes the agent. Handles both new requests and 'Resume' approvals.
+    Main Execution Endpoint. 
+    Runs the LangGraph, captures steps, and returns the final response.
     """
-    # Generate ID if missing (Stateless Bot compatibility)
     thread_id = request.thread_id or str(uuid.uuid4())
     config = {"configurable": {"thread_id": thread_id}}
-
-    # Prepare Input
-    # We allow 'user_query' to update so "Yes" is injected during resume
     input_payload = {"user_query": request.prompt}
-
-    # Execute Graph
-    # If it hits 'Human_Approval', it will stop and return safely.
-    final_state = None
+    
     try:
         final_state = graph.invoke(input_payload, config=config)
-    except Exception as e:
-        # LangGraph might raise an interrupt error in some versions,
-        # but usually just stops. We catch generic errors just in case.
-        print(f"Graph Execution Interrupted or Error: {e}")
-
-    # Check Status using Snapshot (The Source of Truth)
-    snapshot = graph.get_state(config)
-
-    # 1. CHECK FOR PAUSE
-    if snapshot.next and "Human_Approval" in snapshot.next:
-        # We are paused! Fetch the response from the *previous* node (Action_Executor)
-        last_step_response = snapshot.values.get(
-            "final_response", "Waiting for approval..."
-        )
+        plan = final_state.get("trip_plan")
+        instruction = final_state.get("supervisor_instruction")
+        
+        if plan:
+            final_text = format_plan_to_markdown(plan)
+        elif instruction:
+            final_text = instruction
+        else:
+            final_text = "Task completed."
+            
         return {
-            "status": "needs_approval",
-            "response": last_step_response,
-            "steps": snapshot.values.get("steps", []),
-            "thread_id": thread_id,  # Client MUST send this back to resume!
+            "status": "ok",
+            "response": final_text,
+            "steps": final_state.get("steps", []),
+            "error": None
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "response": "An error occurred during execution.",
+            "steps": [],
+            "error": str(e)
         }
 
-    # 2. NORMAL SUCCESS
-    # If final_state is None (due to strict interrupt), use snapshot values
-    result_state = final_state if final_state else snapshot.values
-
-    return {
-        "status": "success",
-        "response": result_state.get("final_response", "Task Complete."),
-        "steps": result_state.get("steps", []),
-        "thread_id": thread_id,
-    }
-
-
-@app.get("/api/model_architecture", responses={200: {"content": {"image/png": {}}}})
-def get_model_architecture():
+@app.post("/api/stream")
+async def stream_agent(request: ExecuteRequest):
     """
-    Returns the architecture diagram as an image (PNG).
+    Streaming Execution Endpoint (SSE).
+    Yields events as they happen in the LangGraph.
     """
+    thread_id = request.thread_id or str(uuid.uuid4())
+    config = {"configurable": {"thread_id": thread_id}}
+    input_payload = {"user_query": request.prompt}
+    
+    #  Log the user message
+    conversation_logger.log_message(thread_id, "user", request.prompt)
+
+    async def event_generator():
+        final_response_content = None
+        try:
+            async for event in graph.astream_events(input_payload, config, version="v2"):
+                kind = event["event"]
+                
+                if kind == "on_chain_start" and event.get("name") == "LangGraph":
+                    msg = {"type": "status", "content": "Starting Graph..."}
+                    yield f"data: {json.dumps(msg)}\n\n"
+                if kind == "on_chat_model_stream":
+                    # We could stream tokens here if we wanted fine-grained output
+                    pass
+                elif kind == "on_tool_start":
+                    tool_name = event.get('name', 'Tool')
+                    msg = {"type": "status", "content": f"Executing Tool: {tool_name}..."}
+                    yield f"data: {json.dumps(msg)}\n\n"
+                elif kind == "on_chain_end" and "node" in event.get("metadata", {}):
+                    node_name = event["metadata"]["node"]
+                    # Optionally capture the state here if needed
+                    yield f"data: {json.dumps({'type': 'node_complete', 'node': node_name})}\n\n"
+
+            # CHECK FOR INTERRUPTS
+            snapshot = graph.get_state(config)
+            
+            # Log state snapshot
+            conversation_logger.log_state_snapshot(thread_id, dict(snapshot.values))
+            
+            if snapshot.next: # If there are nodes pending (like Human_Approval)
+                # Send the draft plan for preview
+                draft_plan = snapshot.values.get("trip_plan")
+                yield f"data: {json.dumps({'type': 'waiting_for_approval', 'thread_id': thread_id, 'preview': draft_plan})}\n\n"
+            else:
+                # Final state retrieval for last response
+                final_state = snapshot.values
+                plan = final_state.get("trip_plan")
+                instruction = final_state.get("supervisor_instruction")
+                
+                final_text = "Task completed."
+                
+                if plan:
+                    final_text = format_plan_to_markdown(plan)
+                elif instruction and instruction != "Done":
+                    final_text = instruction
+                else:
+                    # Fallback: Content from the last step
+                    steps = final_state.get("steps", [])
+                    if steps:
+                        last_step = steps[-1]
+                        if last_step.get("response"):
+                            final_text = last_step["response"]
+
+                # Log the agent response
+                conversation_logger.log_message(thread_id, "agent", final_text)
+                final_response_content = final_text
+                
+                msg = {"type": "final_response", "content": final_text}
+                yield f"data: {json.dumps(msg)}\n\n"
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            
+            # Save conversation to file
+            saved_path = conversation_logger.save_conversation(thread_id, final_response_content)
+            if saved_path:
+                print(f"[UI RUN SAVED] {saved_path}")
+            
+        except Exception as e:
+            error_msg = str(e)
+            conversation_logger.log_message(thread_id, "error", error_msg)
+            conversation_logger.save_conversation(thread_id, {"error": error_msg})
+            yield f"data: {json.dumps({'type': 'error', 'content': error_msg})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+@app.post("/api/approve")
+def approve_trip(request: ExecuteRequest):
+    """
+    Resumes the graph after a human approval interrupt.
+    """
+    if not request.thread_id:
+        return JSONResponse(status_code=400, content={"error": "thread_id is required for approval."})
+    
+    config = {"configurable": {"thread_id": request.thread_id}}
+    
     try:
-        image_data = graph.get_graph().draw_mermaid_png()
-        return Response(content=image_data, media_type="image/png")
+        # Resuming with None input since we are just triggering the next step
+        final_state = graph.invoke(None, config=config)
+        plan = final_state.get("trip_plan")
+        
+        return {
+            "status": "ok",
+            "response": format_plan_to_markdown(plan) if plan else "Trip finalized.",
+            "steps": final_state.get("steps", [])
+        }
     except Exception as e:
-        # Fallback if mermaid rendering fails (e.g. missing tools) or graph issue
-        return Response(
-            content=f"Error generating graph: {str(e)}".encode(), status_code=500
-        )
-
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 if __name__ == "__main__":
-    import uvicorn
-
     uvicorn.run(app, host="0.0.0.0", port=8000)

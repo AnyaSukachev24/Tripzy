@@ -1,0 +1,522 @@
+{
+  "timestamp": "2026-02-13T14:28:04.228477",
+  "total_tests": 10,
+  "completed": 8,
+  "passed": 2,
+  "failed": 6,
+  "pass_rate": 0.25,
+  "individual_results": [
+    {
+      "test_id": "honeymoon_bali_14d",
+      "test_description": "14-day luxury honeymoon to Bali",
+      "generated_plan": {
+        "destination": "Bali, Indonesia",
+        "dates": "To be confirmed by user",
+        "origin_city": "New York City",
+        "budget_estimate": 5000,
+        "flights": [
+          {
+            "airline": "Approximate cost",
+            "price": "$800 - $1200 per person round trip",
+            "link": "https://www.kayak.com/flights/NYC-DPS"
+          }
+        ],
+        "hotels": [
+          {
+            "name": "Budget-friendly: Champlung Sari Hotel Ubud (3-star)",
+            "price": "$50 per night approx",
+            "link": "https://www.booking.com/hotel/id/champlung-sari-ubud.en-gb.html"
+          },
+          {
+            "name": "Moderate: Alaya Resort Ubud (4-star)",
+            "price": "$120 per night approx",
+            "link": "https://www.booking.com/hotel/id/alaya-resort-ubud.en-gb.html"
+          },
+          {
+            "name": "Splurge: The Ubud Village Resort & Spa (5-star)",
+            "price": "$200 per night approx",
+            "link": "https://www.booking.com/hotel/id/the-ubud-village-resort-spa.en-gb.html"
+          }
+        ],
+        "itinerary": [
+          {
+            "day": 1,
+            "activity": "Arrival in Bali (Denpasar). Transfer to Ubud. Relax and enjoy a romantic welcome dinner at a vegan-friendly restaurant like Alchemy.",
+            "cost": 70
+          },
+          {
+            "day": 2,
+            "activity": "Visit the Sacred Monkey Forest Sanctuary and explore Ubud Palace and Ubud Art Market. Lunch at a vegan cafe. Evening traditional Balinese dance performance.",
+            "cost": 60
+          },
+          {
+            "day": 3,
+            "activity": "Couples spa day with Balinese massage and flower bath at a local spa. Romantic dinner overlooking rice terraces.",
+            "cost": 150
+          },
+          {
+            "day": 4,
+            "activity": "Day trip to Tegallalang Rice Terraces and visit a coffee plantation. Picnic lunch with vegan options. Sunset at Campuhan Ridge Walk.",
+            "cost": 50
+          },
+          {
+            "day": 5,
+            "activity": "Cooking class focused on Balinese vegan cuisine. Evening stroll through Ubud\u2019s cafes and galleries.",
+            "cost": 70
+          },
+          {
+            "day": 6,
+            "activity": "Transfer to Seminyak. Check-in to hotel. Relax on Seminyak Beach. Dinner at Earth Cafe, a popular vegan spot.",
+            "cost": 80
+          },
+          {
+            "day": 7,
+            "activity": "Private day tour to Tanah Lot Temple and nearby beaches. Romantic sunset dinner at a beachfront restaurant.",
+            "cost": 120
+          },
+          {
+            "day": 8,
+            "activity": "Morning yoga session for couples. Afternoon free for shopping or beach time. Dinner at a vegan-friendly restaurant like The Shady Shack.",
+            "cost": 60
+          },
+          {
+            "day": 9,
+            "activity": "Day trip to Uluwatu Temple with Kecak Fire Dance at sunset. Dinner at a cliffside restaurant with ocean views.",
+            "cost": 130
+          },
+          {
+            "day": 10,
+            "activity": "Relaxing day at hotel pool or beach. Optional water sports or snorkeling. Casual vegan dinner nearby.",
+            "cost": 50
+          },
+          {
+            "day": 11,
+            "activity": "Visit to Bali Museum and cultural sites in Denpasar. Lunch at a vegan cafe. Evening romantic dinner cruise.",
+            "cost": 140
+          },
+          {
+            "day": 12,
+            "activity": "Day trip to Nusa Penida island for snorkeling and sightseeing. Packed vegan lunch. Return by evening.",
+            "cost": 150
+          },
+          {
+            "day": 13,
+            "activity": "Leisure day for shopping, spa, or beach. Sunset cocktails at a rooftop bar. Farewell romantic dinner.",
+            "cost": 100
+          },
+          {
+            "day": 14,
+            "activity": "Check out and transfer to airport for departure.",
+            "cost": 40
+          }
+        ]
+      },
+      "evaluations": {
+        "cost_realism": {
+          "score": 0.95,
+          "reasoning": "The hotel prices align well with the typical ranges for Bali: budget ($50/night), mid-range ($120/night), and luxury ($200/night) are all within expected limits. Activity costs mostly fall within the $10-100 range, with a few higher-cost activities like spa days ($150), day trips ($120-$150), and dinner cruises ($140), which are reasonable for honeymoon splurges. Meal costs are generally included in activity costs or reasonable for vegan-friendly dining options. Local transport and transfers are modestly priced. The total budget estimate of $5000 for 14 days, including flights ($800-$1200 per person), accommodation, meals, and activities, is realistic for a honeymoon in Bali with a mix of budget to luxury experiences. Minor higher costs for special activities are justified for the trip type. No significant unrealistic costs were found.",
+          "issues": []
+        },
+        "preference_alignment": {
+          "score": 0.95,
+          "reasoning": "The itinerary is highly aligned with a honeymoon trip. It includes numerous romantic dinners, spa days, and private experiences such as couples spa treatments, private tours, and romantic dinners overlooking scenic views. The accommodation options range from budget-friendly to 5-star luxury, with the inclusion of a 5-star resort suitable for honeymooners seeking luxury. Expected activities like romantic dinners, spa treatments, and private experiences are well represented throughout the 14-day duration. The daily pacing balances activity and relaxation appropriately, with leisure days and free time included. The only minor gap is that while luxury accommodation is offered as an option, the plan does not specify that the user must select the luxury tier, so if the user opts for budget options, it may not fully meet the luxury expectation. Overall, the plan is very well suited for a honeymoon.",
+          "matched": [
+            "Romantic dinners",
+            "Spa",
+            "Private experiences",
+            "Luxury accommodation",
+            "Appropriate pacing"
+          ],
+          "missed": []
+        }
+      },
+      "overall_score": 0.95,
+      "passed": true
+    },
+    {
+      "test_id": "family_paris_7d",
+      "test_description": "7-day family trip to Paris with kids",
+      "generated_plan": {
+        "destination": "Paris, France",
+        "dates": "Flexible 7 days (user to confirm exact dates)",
+        "origin_city": "London",
+        "budget_estimate": 3000,
+        "flights": [
+          {
+            "airline": "British Airways",
+            "price": "660 USD (approx. for 4 passengers round trip)",
+            "link": "https://www.britishairways.com"
+          }
+        ],
+        "hotels": [
+          {
+            "name": "Hotel ibis Paris Montmartre 18\u00e8me",
+            "price": "Approx. $85 per night",
+            "link": "https://all.accor.com/hotel/0990/index.en.shtml",
+            "rating": "3-star",
+            "notes": "Budget-friendly, family rooms, near metro, good access to attractions"
+          },
+          {
+            "name": "Novotel Paris Centre Gare Montparnasse",
+            "price": "Approx. $150 per night",
+            "link": "https://all.accor.com/hotel/0647/index.en.shtml",
+            "rating": "4-star",
+            "notes": "Mid-range, family-friendly, pool, vegan options nearby"
+          },
+          {
+            "name": "Le Roch Hotel & Spa",
+            "price": "Approx. $300 per night",
+            "link": "https://www.leroch-hotel.com/en/",
+            "rating": "5-star",
+            "notes": "Splurge option, luxury, spa, central location"
+          }
+        ],
+        "itinerary": [
+          {
+            "day": 1,
+            "activity": "Arrival in Paris. Check-in at hotel. Afternoon visit to Jardin des Tuileries for kids to play and relax. Dinner at Le Potager du Marais (vegan French cuisine).",
+            "cost": 50
+          },
+          {
+            "day": 2,
+            "activity": "Visit the Louvre Museum in the morning (family tickets). Afternoon walk along the Seine and visit the Notre-Dame Cathedral exterior and nearby parks. Dinner at Hank Vegan Burger.",
+            "cost": 100
+          },
+          {
+            "day": 3,
+            "activity": "Explore Mus\u00e9e d'Orsay in the morning. Afternoon visit to Luxembourg Gardens with playgrounds for kids. Evening vegan crepes at VG P\u00e2tisserie.",
+            "cost": 80
+          },
+          {
+            "day": 4,
+            "activity": "Day trip to the Eiffel Tower area. Picnic lunch with vegan sandwiches in Champ de Mars park. Visit the nearby Quai Branly Museum (ethnographic museum).",
+            "cost": 90
+          },
+          {
+            "day": 5,
+            "activity": "Visit Cit\u00e9 des Sciences et de l'Industrie (science museum with kid-friendly exhibits). Evening stroll in Canal Saint-Martin area and dinner at Le Faitout (vegan-friendly).",
+            "cost": 90
+          },
+          {
+            "day": 6,
+            "activity": "Explore Montmartre district: Sacr\u00e9-C\u0153ur Basilica, Place du Tertre artists' square. Afternoon at Parc des Buttes-Chaumont playground. Dinner at L'Abattoir V\u00e9g\u00e9tal.",
+            "cost": 80
+          },
+          {
+            "day": 7,
+            "activity": "Morning visit to Mus\u00e9e de l'Orangerie (Monet\u2019s Water Lilies). Afternoon shopping at vegan-friendly stores and souvenir hunting. Evening train or flight back to London.",
+            "cost": 70
+          }
+        ]
+      },
+      "evaluations": {
+        "cost_realism": {
+          "score": 0.9,
+          "reasoning": "The hotel prices align well with the typical cost ranges for Paris: budget hotels at $85/night (slightly above the $20-50 range but plausible for Paris), mid-range at $150/night, and luxury at $300/night, all within expected ranges. Activity costs per day ($50-$100) are reasonable given museum tickets, meals, and local transport. Meal costs are consistent with the $5-30 per meal guideline, considering family meals and dining at vegan-friendly restaurants. The flight cost of $660 for 4 round-trip tickets from London to Paris is realistic. Overall, the total budget estimate of $3000 for 7 days for a family of 4 is reasonable. The only minor issue is the budget hotel price being slightly higher than the typical $20-50/night, but this is common in Paris and justified by location and family rooms.",
+          "issues": [
+            "Budget hotel price ($85/night) is slightly above typical budget range ($20-50/night) but still plausible for Paris"
+          ]
+        },
+        "preference_alignment": {
+          "score": 0.95,
+          "reasoning": "The itinerary is well-aligned with a family trip. Activities include kid-friendly parks, museums with family tickets, and family-friendly dining options, which match the expected activities of kid-friendly, museum, and park visits. The accommodation options range from budget to luxury, including family rooms and mid-range family-friendly hotels, which is suitable for a family trip. The daily pacing includes a mix of museum visits, park time, and relaxed meals, appropriate for families with children. The only minor gap is that while vegan dining options are plentiful, there is no explicit mention of family restaurants beyond vegan-friendly ones, but this is a minor issue given the overall family suitability. Therefore, the itinerary scores very high in alignment with the family trip type and preferences.",
+          "matched": [
+            "Kid-friendly activities",
+            "Museums",
+            "Parks",
+            "Family-friendly accommodation",
+            "Family restaurants"
+          ],
+          "missed": []
+        }
+      },
+      "overall_score": 0.925,
+      "passed": true
+    },
+    {
+      "test_id": "vague_romantic_honeymoon_beaches",
+      "test_description": "Vague request - romantic honeymoon with beaches, no location specified",
+      "generated_plan": {},
+      "evaluations": {
+        "multi_turn_turn_1": {
+          "score": 0.0,
+          "reasoning": "The agent failed to ask any clarifying questions throughout the conversation. Despite the supervisor instruction prompting the agent to ask about the destination, the user did not provide any input, and the agent did not attempt to ask follow-up questions about destination preferences, budget, duration, or travel dates. The conversation flow was stagnant and unhelpful, with no progression or context retention between turns. Critical questions about destination, budget, duration, and travel dates were completely missing, resulting in a poor conversation experience.",
+          "appropriate_questions": [],
+          "missing_questions": [
+            "Where would you like to travel?",
+            "What is your budget for the trip?",
+            "How long do you plan to travel?",
+            "What are your preferred travel dates?"
+          ]
+        },
+        "multi_turn_turn_2": {
+          "score": 0.0,
+          "reasoning": "The agent failed to engage the user in any meaningful way. It did not ask any clarifying questions or attempt to gather necessary information such as destination preferences, dates, or accommodation needs. The conversation flow was non-existent as the user provided no input and the agent simply ended the conversation without prompting or follow-up. There was no evidence of context retention or progressive information gathering. Critical questions about destination region, specific dates, and accommodation preferences were completely missing.",
+          "appropriate_questions": [],
+          "missing_questions": [
+            "destination_region",
+            "specific_dates",
+            "accommodation_preferences"
+          ]
+        },
+        "multi_turn_turn_3": {
+          "score": 0.0,
+          "reasoning": "The agent failed to engage the user in any meaningful way. It did not ask any clarifying questions or attempt to gather necessary information such as the user's preferred destination or activity preferences. The conversation flow was non-existent as the user provided no input and the agent did not prompt further beyond the initial supervisor instruction. The agent did not remember or build upon any context between turns, repeatedly routing to end without interaction. Critical questions about specific country preferences and activity preferences were completely missing, and the agent did not suggest any Asian beach destinations as expected.",
+          "appropriate_questions": [],
+          "missing_questions": [
+            "Where would you like to travel?",
+            "Do you have any specific country preferences?",
+            "What activities do you enjoy during your trips?",
+            "Are you interested in beach destinations like Maldives, Bali, or Phuket?"
+          ]
+        },
+        "vague_request_handling": {
+          "score": 0.0,
+          "reasoning": "The agent did not ask any clarifying questions regarding the user's preferences, budget, duration, or travel dates. It also did not provide any destination suggestions or explain how any destinations might fit the criteria of a romantic honeymoon with beaches. The response indicates the agent repeatedly routed to an end state due to lack of input, without engaging the user further to clarify or suggest options. Therefore, the handling of the vague request was poor and incomplete.",
+          "clarifying_questions": [],
+          "destination_suggestions": []
+        },
+        "cost_realism": {
+          "score": 0.0,
+          "reasoning": "No itinerary details were provided to evaluate. Without specific cost information for accommodation, meals, activities, and transport, it is impossible to assess the realism of the costs for the given destinations and trip type.",
+          "issues": [
+            "No cost details provided in the itinerary"
+          ]
+        },
+        "preference_alignment": {
+          "score": 0.0,
+          "reasoning": "No trip plan details were provided, so it is impossible to evaluate alignment with the honeymoon trip type and preferences.",
+          "matched": [],
+          "missed": [
+            "Honeymoon activities",
+            "Luxury accommodation",
+            "Expected activities (beach, romantic, water activities)"
+          ]
+        }
+      },
+      "overall_score": 0.0,
+      "passed": false
+    },
+    {
+      "test_id": "vague_family_europe",
+      "test_description": "Vague request - family trip in Europe, no specific destination",
+      "generated_plan": {},
+      "evaluations": {
+        "multi_turn_turn_1": {
+          "score": 0.0,
+          "reasoning": "The agent failed to ask any clarifying questions throughout the conversation. It repeatedly prompted the user to provide a destination but did not attempt to gather any other necessary information such as number of people, kids' ages, budget, duration, or interests. The conversation flow was not natural or helpful as it ended prematurely without progressing. The agent did not remember or build upon any context between turns, simply repeating the same prompt. Critical questions about family composition, budget, duration, and interests were completely missing.",
+          "appropriate_questions": [],
+          "missing_questions": [
+            "number_of_people",
+            "kids_ages",
+            "budget",
+            "duration",
+            "interests"
+          ]
+        },
+        "multi_turn_turn_2": {
+          "score": 0.0,
+          "reasoning": "The agent failed to engage the user effectively as the user did not provide any input, and the agent did not ask any clarifying or follow-up questions to elicit necessary information. The agent repeatedly prompted for the destination but did not ask about trip duration, interests, or country preferences, which are critical for planning. There was no progressive gathering of information, no natural conversation flow, and no evidence of context retention between turns. Overall, the agent did not fulfill the expected behavior of asking about trip duration or suggesting family-friendly European destinations, resulting in a poor conversation quality.",
+          "appropriate_questions": [],
+          "missing_questions": [
+            "Where would you like to go?",
+            "How long is your trip?",
+            "What are your interests for this trip?",
+            "Do you have any country preferences, especially in Europe?"
+          ]
+        },
+        "multi_turn_turn_3": {
+          "score": 0.1,
+          "reasoning": "The agent failed to engage the user effectively as the user did not provide any input throughout the conversation. The agent repeatedly prompted the user to specify a destination but did not ask any other clarifying questions or suggest possible destinations based on the user's profile. There was no progressive gathering of information, no natural flow, and no context retention beyond the initial prompt. Critical questions such as suggesting specific cities with historical significance or asking about the user's preferred activity pace were completely missing. Overall, the conversation was minimal and unproductive due to lack of user input and limited agent initiative.",
+          "appropriate_questions": [],
+          "missing_questions": [
+            "Could you please specify which city or cities you are interested in?",
+            "Would you prefer a relaxed or active pace during your trip?",
+            "Are you interested in visiting historical sites such as museums in cities like Rome, Paris, London, or Amsterdam?"
+          ]
+        },
+        "vague_request_handling": {
+          "score": 0.0,
+          "reasoning": "The agent did not ask any clarifying questions to better understand the user's preferences, budget, duration, or family details. It also did not provide any destination suggestions or explain how they fit the user's criteria. The response shows repeated prompts asking for a destination but no engagement with the vague request or attempt to guide the user with options. Therefore, the handling of the vague request was poor and unhelpful.",
+          "clarifying_questions": [],
+          "destination_suggestions": []
+        },
+        "cost_realism": {
+          "score": 0.0,
+          "reasoning": "No itinerary details were provided, so I cannot evaluate the costs for the trip to Rome, Paris, London, Amsterdam, and Barcelona. Without specific cost information for accommodation, meals, activities, and transport, it is impossible to assess realism.",
+          "issues": [
+            "No cost details provided in the itinerary"
+          ]
+        },
+        "preference_alignment": {
+          "score": 0.0,
+          "reasoning": "No trip plan details were provided, so it is impossible to evaluate alignment with the family trip type and preferences.",
+          "matched": [],
+          "missed": [
+            "kid-friendly activities",
+            "museums",
+            "parks",
+            "family restaurants"
+          ]
+        }
+      },
+      "overall_score": 0.016666666666666666,
+      "passed": false
+    },
+    {
+      "test_id": "vague_caravan_trip",
+      "test_description": "Vague request - caravan trip, where to travel",
+      "generated_plan": {},
+      "evaluations": {
+        "multi_turn_turn_1": {
+          "score": 0.0,
+          "reasoning": "The agent did not ask any questions during the conversation. It repeatedly noted that no user input was provided and that it needed to ask for the destination first, but it never actually asked the user any questions. Therefore, it failed to gather any information progressively, did not remember or build on any context, and the conversation flow was not helpful or natural. Critical questions such as destination, budget, duration, region preferences, and scenic route preferences were all missing.",
+          "appropriate_questions": [],
+          "missing_questions": [
+            "destination",
+            "budget",
+            "duration",
+            "region preferences",
+            "scenic route preferences"
+          ]
+        },
+        "multi_turn_turn_2": {
+          "score": 0.0,
+          "reasoning": "The agent failed to engage the user effectively as the user did not provide any input, and the agent did not attempt to ask any clarifying or follow-up questions beyond the initial prompt. The conversation ended prematurely without gathering any information about the user's travel preferences or destination. There was no progressive information gathering, no natural flow, and no context retention beyond the initial prompt. Critical questions about region, climate preference, and route type were not asked, and the agent did not suggest scenic caravan routes as expected.",
+          "appropriate_questions": [],
+          "missing_questions": [
+            "Where would you like to travel?",
+            "What region are you interested in?",
+            "Do you have a climate preference for your trip?",
+            "What type of route do you prefer? For example, would you like scenic caravan routes?"
+          ]
+        },
+        "multi_turn_turn_3": {
+          "score": 0.0,
+          "reasoning": "The agent did not engage in any meaningful conversation with the user. It failed to ask any clarifying questions or gather any information beyond the initial prompt. The user did not provide any input, and the agent simply routed to end without attempting to elicit necessary details such as destination or preferences. There was no progressive information gathering, no context retention, and no helpful suggestions or questions. Critical questions about specific country preferences or camping style were completely missing. Overall, the conversation was non-existent and unhelpful.",
+          "appropriate_questions": [],
+          "missing_questions": [
+            "Where would you like to travel?",
+            "Do you prefer campsites or wild camping?",
+            "Are you interested in coastal caravan routes?",
+            "Which specific countries or regions are you considering?"
+          ]
+        },
+        "vague_request_handling": {
+          "score": 0.0,
+          "reasoning": "The agent did not ask any clarifying questions to better understand the user's preferences, budget, duration, or region preference. It also did not provide any destination suggestions or explain why any destination would fit the criteria. The response indicates the agent repeatedly routed to an end state due to lack of input, without engaging the user to clarify or suggest options. Therefore, the handling of the vague request was poor and unhelpful.",
+          "clarifying_questions": [],
+          "destination_suggestions": []
+        },
+        "cost_realism": {
+          "score": 0.0,
+          "reasoning": "No itinerary details were provided to evaluate. Without specific cost information for accommodation, meals, activities, and transport, it is impossible to assess the realism of the costs for the given destinations and trip duration.",
+          "issues": [
+            "No cost details provided in the itinerary"
+          ]
+        },
+        "preference_alignment": {
+          "score": 0.0,
+          "reasoning": "No itinerary details were provided, so it is impossible to evaluate alignment with the road trip type and expected activities.",
+          "matched": [],
+          "missed": [
+            "scenic_drive",
+            "coastal",
+            "camping"
+          ]
+        }
+      },
+      "overall_score": 0.0,
+      "passed": false
+    },
+    {
+      "test_id": "extreme_budget_impossible",
+      "test_description": "Extreme budget - $20 for a week trip",
+      "generated_plan": {},
+      "evaluations": {},
+      "overall_score": 0.0,
+      "passed": false
+    },
+    {
+      "test_id": "extreme_budget_very_tight",
+      "test_description": "Extreme budget - $300 for a week",
+      "generated_plan": {},
+      "evaluations": {
+        "multi_turn_turn_1": {
+          "score": 0.0,
+          "reasoning": "The agent did not ask any questions or engage with the user beyond the initial prompt. There was no attempt to clarify the user's destination preferences, budget flexibility, or travel expectations. The conversation ended prematurely without gathering any information, resulting in a poor conversation flow and no context retention between turns.",
+          "appropriate_questions": [],
+          "missing_questions": [
+            "destination_flexibility",
+            "home_location",
+            "travel_expectations"
+          ]
+        },
+        "multi_turn_turn_2": {
+          "score": 0.1,
+          "reasoning": "The agent failed to engage the user effectively as the user did not provide any input, and the agent did not attempt to ask any clarifying or follow-up questions beyond the initial prompt. The conversation ended prematurely without gathering any information about the user's travel preferences or destination. The agent did not remember or utilize the user's profile information to suggest ultra-budget options like national parks camping or nearby state parks. Critical questions such as asking about the specific region or availability of camping gear were missing, which are essential for providing tailored travel advice. Overall, the conversation flow was minimal and unhelpful, lacking progressive information gathering and natural interaction.",
+          "appropriate_questions": [],
+          "missing_questions": [
+            "specific_region",
+            "camping_gear_availability"
+          ]
+        },
+        "cost_realism": {
+          "score": 0.9,
+          "reasoning": "The itinerary mostly aligns with the expected cost ranges for an ultra-budget trip to nearby national parks, state parks, and budget camping areas. Accommodation costs fall within the $20-50 per night range, meals are generally priced between $5-15 per meal, and activities are mostly under $50. Local transport costs are also within the $5-30 per day guideline. However, there are a few instances where meal prices slightly exceed the typical budget tier, and one activity is priced at $120, which is above the expected maximum of $100 for this destination and trip type. Overall, the costs are realistic with minor exceptions.",
+          "issues": [
+            "One activity priced at $120 exceeds the typical maximum of $100 for activities in this destination and trip type.",
+            "Some meals priced at $35 exceed the typical $5-30 range for meals in an ultra-budget trip."
+          ]
+        },
+        "preference_alignment": {
+          "score": 0.0,
+          "reasoning": "No trip plan details were provided, so it is impossible to evaluate alignment with the ultra_budget trip type and expected activities.",
+          "matched": [],
+          "missed": [
+            "camping",
+            "hiking",
+            "free_activities"
+          ]
+        }
+      },
+      "overall_score": 0.25,
+      "passed": false
+    },
+    {
+      "test_id": "attractions_only_request",
+      "test_description": "Request for attractions plan only, no flights or hotels",
+      "generated_plan": {},
+      "evaluations": {
+        "plan_type_compliance": {
+          "score": 0.0,
+          "reasoning": "The plan is empty and does not include any components. Since the requested plan type is 'attractions_and_reservations_only', the plan should include daily_itinerary, attraction_bookings, and restaurant_reservations. None of these components are present, so the plan is incomplete. There are no components included that should be excluded, but all required components are missing.",
+          "correctly_included": [],
+          "incorrectly_included": []
+        },
+        "cost_realism": {
+          "score": 0.9,
+          "reasoning": "The itinerary's costs mostly align with typical Barcelona prices. Accommodation is within the mid-range tier at $120/night, which fits the $50-150/night guideline. Meals average around $25, which is reasonable for mid-tier dining. Activities are priced between $15 and $60, all within the $10-100 range. Local transport is estimated at $20/day, also realistic. The total cost for 5 days sums up to about $1,000, which is appropriate for a mid-range trip in Barcelona. The only minor issue is a slightly high cost for one activity priced at $95, which is near the upper limit but still acceptable.",
+          "issues": [
+            "One activity priced at $95 is near the upper limit but still within the realistic range"
+          ]
+        },
+        "preference_alignment": {
+          "score": 0.8,
+          "reasoning": "The itinerary includes key cultural and sightseeing activities such as Sagrada Familia, Park Guell, and the Gothic Quarter, which align well with a general trip focused on cultural exploration. The inclusion of restaurants supports the expectation of dining experiences. However, there is no information about accommodation tier or daily pacing, making it difficult to fully assess alignment. The activities are appropriate for a general trip, but without details on accommodation or pacing, the evaluation is partial.",
+          "matched": [
+            "Cultural sites",
+            "Restaurants",
+            "Sightseeing activities"
+          ],
+          "missed": [
+            "Accommodation tier information",
+            "Daily pacing details"
+          ]
+        }
+      },
+      "overall_score": 0.5666666666666668,
+      "passed": false
+    }
+  ]
+}

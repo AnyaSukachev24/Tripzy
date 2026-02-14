@@ -1,0 +1,27 @@
+{
+  "trip_plan": {},
+  "conversation": [
+    {
+      "messages": [],
+      "user_profile": {
+        "summary": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+      },
+      "next_step": "End",
+      "supervisor_instruction": "Budget of $20 for 7 days ($3/day) is insufficient for any realistic travel. Minimum recommended: $105 for ultra-budget camping. Consider: (1) Increasing budget to $140+ ( tier), (2) Reducing duration to 1 days, or (3) Local staycation options.",
+      "user_query": "I want to travel for a week with only $20",
+      "steps": [
+        {
+          "module": "ProfileLoader",
+          "prompt": "Loading Profile...",
+          "response": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+        },
+        {
+          "module": "Supervisor",
+          "prompt": "I want to travel for a week with only $20",
+          "response": "Edge Case Detected: Budget of $20 for 7 days ($3/day) is insufficient for any realistic travel. Minimum recommended: $105 for ultra-budget camping. Consider: (1) Increasing budget to $140+ ( tier), (2) Reducing duration to 1 days, or (3) Local staycation options."
+        }
+      ]
+    }
+  ],
+  "error": null
+}

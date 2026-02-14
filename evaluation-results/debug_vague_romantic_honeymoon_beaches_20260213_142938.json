@@ -1,0 +1,128 @@
+{
+  "trip_plan": {},
+  "conversation": [
+    {
+      "messages": [],
+      "user_profile": {
+        "summary": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+      },
+      "trip_type": "honeymoon",
+      "next_step": "End",
+      "supervisor_instruction": "Where would you like to go for your romantic honeymoon with beaches?",
+      "user_query": "I want to go to a romantic honeymoon with beaches",
+      "steps": [
+        {
+          "module": "ProfileLoader",
+          "prompt": "Loading Profile...",
+          "response": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+        },
+        {
+          "module": "Supervisor",
+          "prompt": "I want to go to a romantic honeymoon with beaches",
+          "response": "Routing to End: The user specified a trip type (honeymoon) and preference (beaches) but did not mention a destination or duration, which are critical for planning. We need to ask for the destination first."
+        }
+      ]
+    },
+    {
+      "messages": [],
+      "user_profile": {
+        "summary": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+      },
+      "duration_days": 10,
+      "budget_limit": 4000.0,
+      "budget_currency": "USD",
+      "trip_type": "honeymoon",
+      "next_step": "End",
+      "supervisor_instruction": "Where would you like to go for your 10-day trip with a $4000 budget?",
+      "user_query": "We have $4000 and can go for 10 days",
+      "steps": [
+        {
+          "module": "ProfileLoader",
+          "prompt": "Loading Profile...",
+          "response": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+        },
+        {
+          "module": "Supervisor",
+          "prompt": "I want to go to a romantic honeymoon with beaches",
+          "response": "Routing to End: The user specified a trip type (honeymoon) and preference (beaches) but did not mention a destination or duration, which are critical for planning. We need to ask for the destination first."
+        },
+        {
+          "module": "ProfileLoader",
+          "prompt": "Loading Profile...",
+          "response": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+        },
+        {
+          "module": "Supervisor",
+          "prompt": "We have $4000 and can go for 10 days",
+          "response": "Routing to End: The user provided budget and duration but did not specify a destination, which is critical for planning. Need to ask for the destination first."
+        }
+      ]
+    },
+    {
+      "messages": [],
+      "user_profile": {
+        "summary": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+      },
+      "duration_days": 10,
+      "budget_limit": 4000.0,
+      "budget_currency": "USD",
+      "trip_type": "honeymoon",
+      "next_step": "End",
+      "supervisor_instruction": "Where in Asia would you like to travel? Any particular country or city in mind?",
+      "user_query": "Maybe somewhere in Asia, we love tropical weather",
+      "steps": [
+        {
+          "module": "ProfileLoader",
+          "prompt": "Loading Profile...",
+          "response": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+        },
+        {
+          "module": "Supervisor",
+          "prompt": "I want to go to a romantic honeymoon with beaches",
+          "response": "Routing to End: The user specified a trip type (honeymoon) and preference (beaches) but did not mention a destination or duration, which are critical for planning. We need to ask for the destination first."
+        },
+        {
+          "module": "ProfileLoader",
+          "prompt": "Loading Profile...",
+          "response": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+        },
+        {
+          "module": "Supervisor",
+          "prompt": "We have $4000 and can go for 10 days",
+          "response": "Routing to End: The user provided budget and duration but did not specify a destination, which is critical for planning. Need to ask for the destination first."
+        },
+        {
+          "module": "ProfileLoader",
+          "prompt": "Loading Profile...",
+          "response": "User likes: Budget travel, Museums, Vegan food. (Mock Profile - No API Key)"
+        },
+        {
+          "module": "Supervisor",
+          "prompt": "Maybe somewhere in Asia, we love tropical weather",
+          "response": "Routing to Researcher for destination suggestions."
+        },
+        {
+          "module": "Researcher",
+          "prompt": "Executing Web Search: Suggest 3-5 travel destinations matching these pre...",
+          "response": "Search failed: Could not import ddgs python package. Please install it with `pip install -U ddgs`."
+        },
+        {
+          "module": "Supervisor",
+          "prompt": "Maybe somewhere in Asia, we love tropical weather",
+          "response": "Routing to Researcher for destination suggestions."
+        },
+        {
+          "module": "Researcher",
+          "prompt": "Executing Web Search: Suggest 3-5 travel destinations matching these pre...",
+          "response": "Search failed: Could not import ddgs python package. Please install it with `pip install -U ddgs`."
+        },
+        {
+          "module": "Supervisor",
+          "prompt": "Maybe somewhere in Asia, we love tropical weather",
+          "response": "Routing to End: The user mentioned a general region (Asia) and a preference (tropical weather) but did not specify a precise destination or trip duration, which are critical for planning. Asking for a specific destination will help proceed."
+        }
+      ]
+    }
+  ],
+  "error": null
+}
