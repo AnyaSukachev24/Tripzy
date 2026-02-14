@@ -70,12 +70,12 @@ This roadmap is ordered by **logical dependencies** - each phase builds on the p
 - [ x] Digital nomad requirements
 - [ ] **Test Coverage:** `special_accessibility_needs`, `special_dietary_restrictions`, `pet_friendly_trip`
 
-### Phase 25: User Personalization & Learning
-**Goal:** Remember and learn from user preferences.
-- [ ] Create user profile storage
-- [ ] Extract preferences from conversation history
-- [ ] Personalize suggestions
-- [ ] Learn from feedback
+### Phase 25: Tooling & Real API Integration
+**Goal:** Enable real-world data and fix tooling issues.
+- [ ] Fix the `SubmitPlan` tool structure and validation
+- [ ] Implement real Amadeus API integration (Secrets: `AMADEUS_API_KEY`, `AMADEUS_API_SECRET`) via `os.getenv`
+- [ ] Update `search_flights_tool` and `search_hotels_tool` to use real API
+- [ ] Create new tool to discover destinations from Wiki index
 
 ### Phase 26: Optimization & Polish
 **Goal:** Performance and UX polish.
@@ -100,7 +100,7 @@ Phase 22 (Edge Cases) ─────┼────┘
                            ├──> Phase 23 (Partial Plans) ──┐
                            │                               │
                            ├──> Phase 24 (Special Req) ────┤
-                           │                               ├──> Phase 25 (Personalization)
+                           │                               ├──> Phase 25 (Tooling/API)
                            └──> Phase 26 (Optimization) ───┘
 ```
 
