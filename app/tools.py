@@ -900,7 +900,6 @@ def suggest_destination_tool(
     query = " ".join(parts)
 
     # Try RAG first
-    store = _get_wikivoyage_store()
     # Try RAG first
     try:
         matches = _query_pinecone_inference(query, k=5, namespace="wikivoyage")
@@ -2017,3 +2016,75 @@ def search_cheapest_dates_tool(
             {"departureDate": "2024-05-15", "returnDate": "2024-05-22", "price": {"total": "145.00", "currency": "EUR"}},
         ]
         return json.dumps({"warning": f"Live date search failed ({e}). Showing mock data.", "results": mock_dates}, indent=2)
+
+
+# =====================================================================
+# 6. USER PROFILE (Pinecone)
+# =====================================================================
+@tool
+def get_user_profile(user_id: str) -> dict:
+    """
+    Retrieves the user's travel profile and preferences from the database.
+    Inputs:
+    - user_id: The unique identifier for the user (e.g., email address)
+    """
+    print(f"  [Tool] Fetching profile for user: {user_id}")
+    try:
+        # Get Pinecone index
+        try:
+             # Try to get it from global scope if available
+             _, index = _get_pinecone_client_and_index()
+        except NameError:
+             # Fallback if helper is not in scope
+             from pinecone import Pinecone
+             import os
+             api_key = os.getenv("PINECONE_API_KEY")
+             index_name = os.getenv("PINECONE_INDEX_NAME")
+             if not api_key or not index_name:
+                 return {}
+             pc = Pinecone(api_key=api_key)
+             index = pc.Index(index_name)
+
+        if not index:
+            return {}
+
+        # Fetch vector by ID from 'user_profiles' namespace
+        # Sanitize ID if needed (e.g. email to safe string)
+        # We try multiple variations of ID to find a match
+        safe_id = user_id.replace("@", "_").replace(".", "_")
+        ids_to_fetch = [user_id, f"profile_{safe_id}", safe_id]
+        
+        fetch_response = index.fetch(ids=ids_to_fetch, namespace="user_profiles")
+        
+        vector_data = None
+        for uid in ids_to_fetch:
+            if uid in fetch_response.vectors:
+                vector_data = fetch_response.vectors[uid]
+                print(f"  [Tool] Found profile with ID: {uid}")
+                break
+        
+        if vector_data:
+            metadata = vector_data.get("metadata", {})
+            
+            def parse_list_val(val):
+                if isinstance(val, list): return val
+                if isinstance(val, str): return [x.strip() for x in val.split(",") if x.strip()]
+                return []
+
+            # Map to schema
+            profile = {
+                "user_id": user_id,
+                "travel_style": metadata.get("travel_style") or metadata.get("travel style"),
+                "dietary_needs": parse_list_val(metadata.get("dietary_needs") or metadata.get("dietary needs")),
+                "accessibility_needs": parse_list_val(metadata.get("accessibility_needs") or metadata.get("accessibility needs")),
+                "interests": parse_list_val(metadata.get("interests")),
+                "home_city": metadata.get("home_city") or metadata.get("home city"),
+            }
+            return profile
+        else:
+            print(f"  [Tool] User profile not found for {user_id}")
+            return {}
+            
+    except Exception as e:
+        print(f"  [Error] Failed to fetch user profile: {e}")
+        return {}
