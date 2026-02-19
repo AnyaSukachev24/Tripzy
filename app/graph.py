@@ -1,6 +1,6 @@
 from typing import Any, Dict, Literal, List
 from langgraph.checkpoint.memory import MemorySaver
-from app.state import AgentState, Amenity, TripPlan
+from app.state import AgentState, Amenity, TripPlan, UserProfile
 from langgraph.graph import StateGraph, START, END
 
 
@@ -57,7 +57,9 @@ from app.tools import (
     resolve_airport_code_tool,
     get_airline_info_tool,
     search_tours_activities_tool,
+    search_tours_activities_tool,
     search_points_of_interest_tool,
+    get_user_profile,
 )
 
 
@@ -163,6 +165,7 @@ class SupervisorOutput(BaseModel):
     )
     request_type: Literal["Planning", "Discovery", "FlightOnly", "HotelOnly", "AttractionsOnly"] = Field(
         description="Intent: 'Planning' for full trips, 'Discovery' for vague/suggestion requests, 'FlightOnly'/'HotelOnly'/'AttractionsOnly' for partial plans.",
+        default="Planning",
     )
 
 
@@ -203,6 +206,34 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
 
     sys.stdout.flush()
 
+    # --- Phase 29: User Profile Retrieval ---
+    user_profile_update = {}
+    current_profile = state.get("user_profile")
+    
+    if not current_profile:
+        try:
+            # TODO: In production, get user_id from context/session
+            # For now, we use the test profile we inspected earlier
+            test_user_id = "test@example.com" 
+            # Note: The tool handles ID sanitization/lookup
+            profile_dict = get_user_profile(test_user_id)
+            if profile_dict:
+                current_profile = UserProfile(**profile_dict)
+                user_profile_update = {"user_profile": current_profile}
+                print(f"  [Supervisor] Loaded User Profile: {current_profile.travel_style}, {current_profile.dietary_needs}")
+        except Exception as e:
+            print(f"  [Supervisor] Failed to load user profile: {e}")
+
+    # Prepare Profile String for Context
+    profile_context = "Unknown"
+    if current_profile:
+        profile_context = (
+            f"Style: {current_profile.travel_style or 'Any'}, "
+            f"Diet: {', '.join(current_profile.dietary_needs)}, "
+            f"Interests: {', '.join(current_profile.interests)}, "
+            f"Accessibility: {', '.join(current_profile.accessibility_needs)}"
+        )
+
     # Simple Router Logic (Optimization: Don't call LLM for "Hi")
     if user_query.lower() in ["hi", "hello", "test"]:
         return {
@@ -226,7 +257,7 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             [f"- {s.get('response')[:500]}..." for s in research_steps[-3:]]
         )
 
-    current_context = f"CURRENT STATE:\n- Destination: {state.get('destination') or 'Not Set'}\n- Duration: {state.get('duration_days') or 0} days\n- Budget: {state.get('budget_limit') or 0} {state.get('budget_currency') or 'USD'}\n- Trip Type: {state.get('trip_type') or 'Not Set'}\n- Origin: {state.get('origin_city') or 'Not Set'}\n- Travelers: {state.get('traveling_personas_number') or 1}\n- Amenities: {state.get('amenities') or []}\n{research_history}"
+    current_context = f"CURRENT STATE:\n- User Profile: {profile_context}\n- Destination: {state.get('destination') or 'Not Set'}\n- Duration: {state.get('duration_days') or 0} days\n- Budget: {state.get('budget_limit') or 0} {state.get('budget_currency') or 'USD'}\n- Trip Type: {state.get('trip_type') or 'Not Set'}\n- Origin: {state.get('origin_city') or 'Not Set'}\n- Travelers: {state.get('traveling_personas_number') or 1}\n- Amenities: {state.get('amenities') or []}\n{research_history}"
 
     # Construct Messages for ChatPromptTemplate
     messages = [
@@ -360,6 +391,16 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             # DIFFERENT REQUREMENTS BASED ON REQUEST TYPE
             req_type = result.request_type or "Planning"
             
+            # --- MANUAL OVERRIDE FOR ATTRACTIONS ONLY ---
+            # LLMs struggle to differentiate "Planning with known destination" vs "AttractionsOnly".
+            # If user explicitly says they have booked/flights/hotel, force AttractionsOnly.
+            user_query_lower = state.get("user_query", "").lower()
+            if "already booked" in user_query_lower or "have flights" in user_query_lower or "have hotel" in user_query_lower:
+                print("  [OVERRIDE] Detected 'already booked' intent -> Forcing AttractionsOnly")
+                req_type = "AttractionsOnly"
+                # Also update the result object so it propagates correctly
+                result.request_type = "AttractionsOnly"
+
             # Destination is always required
             if not current_destination:
                 missing_required.append("destination")
@@ -422,6 +463,7 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                     "traveling_personas_number": result.traveling_personas_number
                     or state.get("traveling_personas_number", 1),
                     "amenities": result.amenities,
+                    "request_type": req_type, # Ensure this is persisted!
                     "steps": [
                         {
                             "module": "Supervisor",
@@ -452,7 +494,12 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             "request_type": result.request_type,
             "steps": [step_log],
         }
-        return updates
+        
+        # Merge profile update if any
+        if user_profile_update:
+            updates.update(user_profile_update) # Changed from step_log.update to updates.update
+
+        return updates # Changed from step_log to updates
     except Exception as e:
         print(f"  Supervisor Error: {str(e)}")
         error_msg = f"System Error: {str(e)}"
@@ -468,7 +515,7 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
 
 # 2. PLANNER NODE
 def planner_node(state: AgentState) -> Dict[str, Any]:
-    print("--- NODE: PLANNER ---")
+    print("--- NODE: TRIP_PLANNER ---")
     instruction = state.get("supervisor_instruction", "")
 
     # Get context data
@@ -550,12 +597,24 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
 
     print(f"  [DEBUG] CALLING PLANNER with specific details...")
 
+    # Phase 29: Format User Profile for Planner
+    user_profile = state.get("user_profile")
+    user_profile_str = "None"
+    if user_profile:
+        user_profile_str = (
+            f"Style: {user_profile.travel_style or 'Any'}, "
+            f"Diet: {', '.join(user_profile.dietary_needs)}, "
+            f"Interests: {', '.join(user_profile.interests)}, "
+            f"Accessibility: {', '.join(user_profile.accessibility_needs)}"
+        )
+
     try:
         # Invoke LLM
         result = safe_llm_invoke(
             chain,
             {
                 "instruction": instruction,
+                "user_profile": user_profile_str,
                 "feedback": state.get("critique_feedback", "None"),
                 "research_info": research_info if research_info else "None",
                 "trip_plan": str(state.get("trip_plan", "None")),
