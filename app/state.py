@@ -35,6 +35,23 @@ def reduce_amenities(
     return list(set(left + right))
 
 
+# ==============================================================================
+# Data Models (Structured Content)
+# ==============================================================================
+
+class UserProfile(BaseModel):
+    """
+    Represents a user's travel preferences and constraints.
+    """
+    user_id: str = Field(description="Unique identifier for the user (e.g., email)")
+    name: Optional[str] = Field(default=None, description="User's display name")
+    travel_style: Optional[str] = Field(default=None, description="Travel style (e.g., luxury, budget, balanced, adventure)")
+    dietary_needs: List[str] = Field(default_factory=list, description="List of dietary restrictions")
+    accessibility_needs: List[str] = Field(default_factory=list, description="List of accessibility requirements")
+    interests: List[str] = Field(default_factory=list, description="List of improved travel interests")
+    home_city: Optional[str] = Field(default=None, description="User's home city for flight origins")
+
+
 # =========================================================
 # TripPlan Pydantic Model — structured output schema
 # =========================================================
@@ -125,4 +142,5 @@ class AgentState(TypedDict):
     # --- 4. ROUTING METADATA (new) ---
     request_type: Optional[str]  # "Planning", "Discovery", "FlightOnly", "HotelOnly", "AttractionsOnly"
     researcher_calls: Optional[int]  # Count of researcher node invocations (loop guard)
+    user_profile: Optional[UserProfile]  # Retrieved user preferences
     budget_warning: Optional[str]  # Budget-aware warning from critique
