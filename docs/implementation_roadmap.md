@@ -48,6 +48,13 @@ This roadmap is ordered by **logical dependencies** - each phase builds on the p
 - [x] Past date rejection
 - [x] Large group warning logic
 
+### Phase 23: Advanced Amadeus Integration (Completed)
+- [x] Implement 8 new Amadeus tools (Activities, Price Metrics, Flight Status, etc.)
+- [x] Register new tools in Graph (Planner & Researcher)
+- [x] Update Planner Prompts for new capabilities
+- [x] Enrich existing tools (Flights, Hotels, Destinations) with price metrics and sentiments
+- [x] Comprehensive verification & Golden Dataset testing
+
 ---
 
 ## 🔧 CURRENT PRIORITIES (Phases 23-26)
@@ -70,19 +77,61 @@ This roadmap is ordered by **logical dependencies** - each phase builds on the p
 - [ x] Digital nomad requirements
 - [ ] **Test Coverage:** `special_accessibility_needs`, `special_dietary_restrictions`, `pet_friendly_trip`
 
-### Phase 25: Plan Structure & Tooling
+### Phase 25: Plan Structure & Tooling (Completed)
 **Goal:** Formalize the trip plan structure and ensure tool reliability.
+- [x] Implement real Amadeus API integration for flights (sandbox verified ✅)
+- [x] Implement real Amadeus API integration for hotels (sandbox verified ✅)
+- [x] Multi-source flight aggregator: Amadeus + Google Flights (fast_flights) + Kiwi.com (Model Context Protocol)
+- [x] New tools: `suggest_destination_tool`, `suggest_attractions_tool`, `create_user_profile_tool`, `create_plan_tool`
 - [ ] Create `BaseModel` structure for `TripPlan` (strict schema)
 - [ ] Fix `SubmitPlan` tool to use the new `TripPlan` model
-- [ ] Implement real Amadeus API integration (Secrets: `AMADEUS_API_KEY`, `AMADEUS_API_SECRET`) via `os.getenv`
-- [ ] Update `search_flights_tool` and `search_hotels_tool` to use real API
-- [ ] Create new tool to discover destinations from Wiki index
 
-### Phase 26: Optimization & Polish
-**Goal:** Performance and UX polish.
-- [ ] Caching for expensive API calls
-- [ ] Cost optimization (prompt compression)
-- [ ] Final UI polish
+### Phase 26: Amadeus API Enrichment (Completed)
+- **Goal**: Integrate additional Amadeus APIs (Tours, POI, Cheapest Dates, etc.) and implement rate limiting.
+- **Actions**:
+  - [x] Create `amadeus_rate_limiter.py` with shared client (10 TPS test / 40 TPS prod).
+  - [x] Implement `resolve_airport_code_tool` (City Search).
+  - [x] Implement `get_airline_info_tool` (Airline Lookup).
+  - [x] Implement `search_tours_activities_tool` (Tours & Activities).
+  - [x] Implement `search_points_of_interest_tool` (POI).
+  - [x] Implement `search_cheapest_dates_tool` (Flight Cheapest Date).
+  - [x] Update `search_flights_tool` and `search_hotels_tool` to use shared client.
+  - [x] Register new tools in `graph.py` and prompts.
+- **Outcome**: A richer set of travel tools and robust API usage management.
+
+### Phase 30: Vector Knowledge Base Upgrade (Completed)
+**Goal:** Transition to Pinecone's Integrated Inference for improved scalability.
+- [x] Migrate `ingest_wikivoyage.py` to use Pinecone Inference (1024d) instead of local Google embeddings (768d).
+- [x] Update `search_travel_knowledge` tool to match the new embedding dimension.
+- [x] Update `create_user_profile_tool` to use Pinecone Inference.
+- [x] Verify ingestion and search with sample data.
+
+### Phase 31: Advanced Flight Search via Kiwi MCP (Completed)
+**Goal:** Integrate the official Kiwi.com MCP server for expanded flight inventory.
+- [x] Implement `KiwiMCPClient` to connect to `https://mcp.kiwi.com` (SSE/RPC).
+- [x] Wrap Kiwi MCP tools as `KiwiMCPSearchTool` (sync wrapper) in the agent's toolset.
+- [x] Register new tool in `graph.py` for the Planner/Booker.
+- [x] Validate flight search results against Amadeus to ensure complementary coverage.
+
+### Phase 27: Smart Graph Flow Redesign
+**Goal:** Intelligent routing through Discovery → Research → Planning → Assembly → Approval.
+- [ ] Budget-aware planning loop (re-search with tighter constraints if over budget)
+- [ ] Partial plan support (flights-only, hotels-only, attractions-only)
+- [ ] Smart Supervisor routing: detect request type (Discovery, FlightsOnly, HotelsOnly, FullPlan)
+- [ ] Update Supervisor and Planner prompts for new routing logic
+
+### Phase 28: Wikivoyage RAG & Knowledge Base
+**Goal:** Populate and leverage the Wikivoyage knowledge base.
+- [ ] Obtain complete Wikivoyage data dump
+- [ ] Run ingestion script to populate Pinecone index
+- [ ] **RAG Enhancement**: Configure `search_travel_knowledge` to support vague requests (e.g., "warm beaches") and result in specific destination/attraction suggestions.
+- [ ] Verify RAG-based destination and attraction suggestions
+
+### Phase 29: User Profiles & Personalization
+**Goal:** Use stored profiles for personalized recommendations.
+- [ ] Configure Pinecone API keys for user_profiles namespace
+- [ ] Test create_user_profile_tool with real Pinecone storage
+- [ ] Implement personalized recommendations based on stored preferences
 
 ---
 
@@ -101,9 +150,13 @@ Phase 22 (Edge Cases) ─────┼────┘
                            ├──> Phase 23 (Partial Plans) ──┐
                            │                               │
                            ├──> Phase 24 (Special Req) ────┤
-                           │                               ├──> Phase 25 (Tooling/API)
-                           └──> Phase 26 (Optimization) ───┘
+                           │                               ├──> Phase 25 (Tooling/API) ✅
+                           │                               │        │
+                           │                               │        ├──> Phase 27 (Smart Graph)
+                           │                               │        ├──> Phase 28 (RAG)
+                           └──> Phase 26 (Optimization) ───┘        └──> Phase 29 (Personalization)
 ```
 
 > **See `tests/evaluations/EVALUATION_GUIDE.md` for evaluation framework documentation.**
+
 

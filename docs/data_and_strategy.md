@@ -11,11 +11,17 @@ We will treat "Client Data" as the primary context source.
     3.  **Past Bookings**: "User usually stays at Marriott" or "User prefers 5-star hotels".
 *   **Vector Database**: 
     *   **Tech**: **Pinecone** (Required by Course).
-    *   **Embedding Model**: OpenAI `text-embedding-3-small` (via LLMod.ai or Direct).
+    *   **Embedding Models**:
+        *   **tripzy** (Default): 1024 dimensions (Integrated Inference: `llama-text-embed-v2`) - **Active**.
+        *   **tripzy-small**: 1024 dimensions (Backup).
+        *   *Note*: Local Google embeddings (768d) are no longer used for ingestion/querying in favor of server-side inference.
 *   **Workflow**:
-    1.  User Query: "Plan a weekend in Rome."
-    2.  Retriever: Searches DB for "Rome", "Italy", "Weekend trips", "European preferences".
-    3.  Found Context: "User hated the small room in Paris (2023)." -> *Agent avoids small boutique hotels.*
+    1.  **Vague Request (Discovery)**: "Warm place in December."
+        *   *Action*: RAG retrieves "Canary Islands", "Thailand", "Mexico" based on semantic match + "Warm" tag.
+        *   *Result*: Agent suggests these options with rich descriptions from Wikivoyage.
+    2.  **Specific Planning**: "Trip to Rome."
+        *   *Action*: Retriever searches DB for "Rome", "Italy", "European preferences".
+        *   *Found Context*: "User hated the small room in Paris (2023)." -> *Agent avoids small boutique hotels.*
 
 ### B. Relational Database (Application State)
 *   **Tech**: **Supabase** (Required by Course).
@@ -47,6 +53,11 @@ The agents need to interact with the real world.
 2.  **SerpApi (Google Flights)**:
     *   *Cost*: **Limited Free Tier** (100 searches/mo).
     *   *Status*: **Optional**. We will default to Amadeus or Scraping techniques if strictly $0 is needed.
+
+3.  **Kiwi.com (MCP)**:
+    *   *Cost*: **Free** (Public MCP Server).
+    *   *Use Case*: Real-time flight search with flexible parameters and booking links.
+    *   *Tech*: Model Context Protocol over SSE.
 
 ### C. LLM Strategy (Cost Control & Course Budget)
 *   **Current (Development)**: **Google Gemini 1.5 Flash** (Free) or **Ollama** (Free).
