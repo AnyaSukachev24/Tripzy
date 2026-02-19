@@ -118,11 +118,11 @@ This roadmap is ordered by **logical dependencies** - each phase builds on the p
 - [x] Obtain complete Wikivoyage data dump and run full ingestion (Partially completed with sample data: Paris, London, Bali)
 - [x] Verify RAG-based destination/attraction suggestions with real populated index (Verified with `tests/verify_rag_populated.py`)
 
-### Phase 29: User Profiles & Personalization
+### Phase 29: User Profiles & Personalization ✅
 **Goal:** Use stored profiles for personalized recommendations.
-- [ ] Configure Pinecone API keys for `user_profiles` namespace
-- [ ] Test `create_user_profile_tool` with real Pinecone storage
-- [ ] Implement personalized recommendations based on stored preferences
+- [x] Configure Pinecone API keys for `user_profiles` namespace
+- [x] Test `get_user_profile` tool with real Pinecone storage
+- [x] Implement personalized recommendations based on stored preferences (in Supervisor/Planner)
 
 ### Phase 32: Full Flow Validation (In Progress)
 **Goal:** Validate the complete graph end-to-end with real use cases.
