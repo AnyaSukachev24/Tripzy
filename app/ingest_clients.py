@@ -2,8 +2,7 @@ import json
 import os
 import time
 from dotenv import load_dotenv
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_pinecone import PineconeVectorStore
+from dotenv import load_dotenv
 from langchain_core.documents import Document
 
 # Load environment variables
@@ -64,21 +63,56 @@ def ingest_clients():
         doc = Document(page_content=page_content, metadata=metadata)
         documents.append(doc)
 
-    # 3. Initialize Embeddings
-    # specific model can be "models/embedding-001" or "models/text-embedding-004" depending on availability
-    # We will use "models/text-embedding-004" as it is generally better for retrieval tasks with Gemini
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
+    # 3. Initialize Pinecone
+    try:
+        from pinecone import Pinecone
+    except ImportError:
+        print("Error: 'pinecone' package not found.")
+        return
+
+    pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+    
+    if index_name not in pc.list_indexes().names():
+        print(f"Error: Index '{index_name}' not found.")
+        return
+        
+    index = pc.Index(index_name)
 
     # 4. Ingest into Pinecone
-    print(f"Ingesting {len(documents)} documents into Pinecone index '{index_name}'...")
-
+    print(f"Ingesting {len(documents)} documents into Pinecone index '{index_name}' (namespace: clients)...")
+    
     try:
-        # Using from_documents automatically uses the environment variables for API key if set (PINECONE_API_KEY)
-        vector_store = PineconeVectorStore.from_documents(
-            documents=documents, embedding=embeddings, index_name=index_name
+        # Prepare text for embedding
+        texts = [doc.page_content for doc in documents]
+        
+        # Generate embeddings via inference API
+        embeddings_response = pc.inference.embed(
+            model="llama-text-embed-v2",
+            inputs=texts,
+            parameters={"input_type": "passage", "truncate": "END"}
         )
+        
+        # Prepare vectors
+        vectors = []
+        for i, embedding_data in enumerate(embeddings_response):
+            doc = documents[i]
+            # Ensure metadata is flat and compatible (strings, numbers, booleans, list of strings)
+            metadata = doc.metadata.copy()
+            clean_metadata = {k: str(v) if not isinstance(v, (str, int, float, bool, list)) else v for k, v in metadata.items()}
+            # Add text
+            clean_metadata["text"] = doc.page_content
+            
+            vectors.append({
+                "id": str(clean_metadata.get("client_id", f"client_{i}")),
+                "values": embedding_data["values"],
+                "metadata": clean_metadata
+            })
+            
+        # Upsert
+        index.upsert(vectors=vectors, namespace="clients")
+        
         print("--- Ingestion Complete ---")
-        print(f"Successfully added {len(documents)} clients to index '{index_name}'")
+        print(f"Successfully added {len(vectors)} clients to index '{index_name}'")
 
     except Exception as e:
         print(f"Error during ingestion: {e}")
