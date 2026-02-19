@@ -41,6 +41,18 @@ from app.tools import (
     web_search_tool,
     search_flights_tool,
     search_hotels_tool,
+    suggest_destination_tool,
+    suggest_attractions_tool,
+    create_plan_tool,
+    search_activities_tool,
+    flight_price_analysis_tool,
+    flight_status_tool,
+    airport_search_tool,
+    airline_lookup_tool,
+    travel_recommendations_tool,
+    cheapest_flights_tool,
+    hotel_ratings_tool,
+    search_flights_with_kiwi_tool,
 )
 
 
@@ -451,7 +463,22 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
 
     # DEFINE TOOLS FOR PLANNER
     # We bind the search tools directly to the LLM
-    tools = [search_flights_tool, search_hotels_tool]
+    tools = [
+        search_flights_tool,
+        search_hotels_tool,
+        suggest_destination_tool,
+        suggest_attractions_tool,
+        create_plan_tool,
+        search_activities_tool,
+        flight_price_analysis_tool,
+        flight_status_tool,
+        airport_search_tool,
+        airline_lookup_tool,
+        travel_recommendations_tool,
+        cheapest_flights_tool,
+        hotel_ratings_tool,
+        search_flights_with_kiwi_tool,
+    ]
 
     # We also need a structured way to return the FINAL plan.
     # We can use a "SubmitPlan" tool or just rely on the final_response text if we want to keep it simple,
@@ -662,6 +689,18 @@ def researcher_node(state: AgentState) -> Dict[str, Any]:
             tool_map = {
                 "search_flights_tool": search_flights_tool,
                 "search_hotels_tool": search_hotels_tool,
+                "suggest_destination_tool": suggest_destination_tool,
+                "suggest_attractions_tool": suggest_attractions_tool,
+                "create_plan_tool": create_plan_tool,
+                "search_activities_tool": search_activities_tool,
+                "flight_price_analysis_tool": flight_price_analysis_tool,
+                "flight_status_tool": flight_status_tool,
+                "airport_search_tool": airport_search_tool,
+                "airline_lookup_tool": airline_lookup_tool,
+                "travel_recommendations_tool": travel_recommendations_tool,
+                "cheapest_flights_tool": cheapest_flights_tool,
+                "hotel_ratings_tool": hotel_ratings_tool,
+                "search_flights_with_kiwi_tool": search_flights_with_kiwi_tool,
             }
 
             for tc in tool_calls:
