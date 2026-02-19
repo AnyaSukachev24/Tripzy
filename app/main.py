@@ -191,18 +191,31 @@ def execute_agent(request: ExecuteRequest):
         final_state = graph.invoke(input_payload, config=config)
         plan = final_state.get("trip_plan")
         instruction = final_state.get("supervisor_instruction")
-        
+        budget_warning = final_state.get("budget_warning")
+        steps = final_state.get("steps", [])
+
+        # Smart response selection: prefer real content over routing tags
+        INTERNAL_TAGS = {"Plan Drafted", "Done", "None", ""}
+
         if plan:
             final_text = format_plan_to_markdown(plan)
-        elif instruction:
+            if budget_warning:
+                final_text = f"⚠️ **Budget Note:** {budget_warning}\n\n{final_text}"
+        elif instruction and instruction not in INTERNAL_TAGS:
             final_text = instruction
         else:
+            # Fallback: last step response with real content
             final_text = "Task completed."
-            
+            for step in reversed(steps):
+                resp = step.get("response", "")
+                if resp and not any(resp.startswith(tag) for tag in ["Routing to", "Need more", "Edge Case", "Error"]):
+                    final_text = resp
+                    break
+
         return {
             "status": "ok",
             "response": final_text,
-            "steps": final_state.get("steps", []),
+            "steps": steps,
             "error": None
         }
     except Exception as e:
@@ -262,20 +275,27 @@ async def stream_agent(request: ExecuteRequest):
                 final_state = snapshot.values
                 plan = final_state.get("trip_plan")
                 instruction = final_state.get("supervisor_instruction")
-                
+                budget_warning = final_state.get("budget_warning")
+                steps = final_state.get("steps", [])
+
+                # Smart response selection (same logic as /execute)
+                INTERNAL_TAGS = {"Plan Drafted", "Done", "None", ""}
+
                 final_text = "Task completed."
-                
+
                 if plan:
                     final_text = format_plan_to_markdown(plan)
-                elif instruction and instruction != "Done":
+                    if budget_warning:
+                        final_text = f"⚠️ **Budget Note:** {budget_warning}\n\n{final_text}"
+                elif instruction and instruction not in INTERNAL_TAGS:
                     final_text = instruction
                 else:
-                    # Fallback: Content from the last step
-                    steps = final_state.get("steps", [])
-                    if steps:
-                        last_step = steps[-1]
-                        if last_step.get("response"):
-                            final_text = last_step["response"]
+                    # Fallback: last step with real user-facing content
+                    for step in reversed(steps):
+                        resp = step.get("response", "")
+                        if resp and not any(resp.startswith(tag) for tag in ["Routing to", "Need more", "Edge Case", "Error", "Executing"]):
+                            final_text = resp
+                            break
 
                 # Log the agent response
                 conversation_logger.log_message(thread_id, "agent", final_text)

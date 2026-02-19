@@ -88,7 +88,7 @@ This roadmap is ordered by **logical dependencies** - each phase builds on the p
 
 ---
 
-## 🔧 CURRENT PRIORITIES (Phases 23, 27-29, 32)
+## 🔧 CURRENT PRIORITIES (Phases 23, 27-29, 32-33)
 
 ### Phase 23: Partial Plan Support
 **Goal:** Support different types of plans based on user needs.
@@ -99,11 +99,15 @@ This roadmap is ordered by **logical dependencies** - each phase builds on the p
 - [ ] Respect existing bookings and don't re-plan those components
 - **Test Coverage:** `attractions_only_request`, `full_plan_request`, `flights_only_request`
 
-### Phase 27: Smart Graph Flow Redesign
+### Phase 27: Smart Graph Flow Redesign ✅
 **Goal:** Intelligent routing with plan-type awareness.
-- [ ] Budget-aware planning loop (re-search with tighter constraints if over budget)
-- [ ] Smart Supervisor routing: detect request type — Discovery, FlightsOnly, HotelsOnly, FullPlan
-- [ ] Update Supervisor + Planner prompts for new routing logic (partial plans)
+- [x] Budget-aware Critique: if `plan_cost > budget * 1.15` → route back to Planner with specific feedback
+- [x] Researcher dynamic routing: goes directly to `Trip_Planner` when called from Planner (TOOL_CALLS:), or back to `Supervisor` for discovery queries
+- [x] `researcher_calls` counter added to AgentState — max 4 calls before forced End (loop guard)
+- [x] `request_type` field: Planning / Discovery / FlightOnly / HotelOnly / AttractionsOnly (detected by Supervisor)
+- [x] Duration mismatch validation hardened: exact day count in feedback message
+- [x] `SubmitPlan` tool improved: `trip_plan` field now has rich description + default to avoid crash on partial LLM response
+- [x] `content_str` guard: Planner no longer crashes when LLM returns tool_calls with no text content
 
 ### Phase 28: Wikivoyage RAG & Knowledge Base
 **Goal:** Populate and leverage the Wikivoyage knowledge base.
@@ -129,6 +133,14 @@ This roadmap is ordered by **logical dependencies** - each phase builds on the p
 - [ ] Confirm edge case blocking works (budget $20 case)
 - [ ] Confirm Discovery mode routes vague queries to Researcher
 - [ ] Update walkthrough.md with validation results
+
+### Phase 33: TripPlan Schema & Response Quality ✅
+**Goal:** Formalize plan schema and improve user-facing responses.
+- [x] `TripPlan` Pydantic model in `state.py` (FlightInfo, HotelInfo, ItineraryDay sub-models)
+- [x] Smart response selection in `main.py` (INTERNAL_TAGS filtering)
+- [x] Budget warning surfaced to user in final response
+- [x] Tests: `verify_graph_improvements.py` (5/5 pass)
+- [x] Tests: `verify_graph_flow.py` (real LLM graph flow validation)
 
 ---
 
