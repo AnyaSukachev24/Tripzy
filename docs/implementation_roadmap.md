@@ -130,7 +130,7 @@ This roadmap is ordered by **logical dependencies** - each phase builds on the p
 - [x] Created `tests/verify_hotel_full_flow.py` — hotel tool direct + graph
 - [/] Running 5-case full-flow validation (in progress — LLM rate-limit retries)
 - [ ] Confirm all tools dispatch correctly from Planner → Researcher
-- [ ] Confirm edge case blocking works (budget $20 case)
+- [x] Confirm edge case blocking works (budget $20 case) - Verified via `tests/test_edge_cases_advanced.py`
 - [ ] Confirm Discovery mode routes vague queries to Researcher
 - [ ] Update walkthrough.md with validation results
 
