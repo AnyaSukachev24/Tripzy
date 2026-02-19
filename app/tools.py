@@ -986,8 +986,6 @@ def suggest_attractions_tool(
     query = " ".join(parts)
 
     # Try RAG first
-    store = _get_wikivoyage_store()
-    # Try RAG first
     try:
         matches = _query_pinecone_inference(query, k=8, namespace="wikivoyage")
         if matches:
@@ -996,6 +994,12 @@ def suggest_attractions_tool(
             for match in matches:
                 metadata = match.get("metadata", {})
                 title = metadata.get("title", "Unknown")
+                
+                # Filter by relevance: Title must match destination (fuzzy)
+                # This prevents "Paris" results showing up for "Tokyo" when index is small
+                if destination.lower() not in title.lower() and title.lower() not in destination.lower():
+                    continue
+
                 section = metadata.get("section", "")
                 snippet = metadata.get("text", "")[:400]
                 # Deduplicate
@@ -1011,8 +1015,11 @@ def suggest_attractions_tool(
                             "score": match.get("score", 0)
                         }
                     )
-            print(f"  [Tool] RAG returned {len(attractions)} attractions")
-            return json.dumps(attractions, indent=2)
+            
+            if attractions:
+                print(f"  [Tool] RAG returned {len(attractions)} attractions")
+                return json.dumps(attractions, indent=2)
+            
     except Exception as e:
         print(f"  [Warning] Wikivoyage RAG failed: {e}")
 

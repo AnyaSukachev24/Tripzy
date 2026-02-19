@@ -45,11 +45,11 @@ class TestFrontendFormat(unittest.TestCase):
         self.assertIn("2024-12-01", md) # Dates
         
         # Check Sections
-        self.assertIn("✈️ Flights", md)
+        self.assertIn("✈️ Flight Options", md)
         self.assertIn("Garuda Indonesia", md)
         self.assertIn("GA88", md)
         
-        self.assertIn("🏨 Accommodation", md)
+        self.assertIn("🏨 Accommodation Options", md)
         self.assertIn("Bali Resort", md)
         self.assertIn("4.5", md)
         

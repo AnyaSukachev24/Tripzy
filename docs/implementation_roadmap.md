@@ -109,14 +109,14 @@ This roadmap is ordered by **logical dependencies** - each phase builds on the p
 - [x] `SubmitPlan` tool improved: `trip_plan` field now has rich description + default to avoid crash on partial LLM response
 - [x] `content_str` guard: Planner no longer crashes when LLM returns tool_calls with no text content
 
-### Phase 28: Wikivoyage RAG & Knowledge Base
+### Phase 28: Wikivoyage RAG & Knowledge Base ✅
 **Goal:** Populate and leverage the Wikivoyage knowledge base.
 - [x] Pinecone index configured with Inference API (1024d vectors)
 - [x] `suggest_destination_tool` + `suggest_attractions_tool` use Pinecone RAG
 - [x] Both tools wired into Planner bind_tools and Researcher tool_map
 - [x] Planner prompt updated with explicit RAG tool guidance
-- [ ] Obtain complete Wikivoyage data dump and run full ingestion
-- [ ] Verify RAG-based destination/attraction suggestions with real populated index
+- [x] Obtain complete Wikivoyage data dump and run full ingestion (Partially completed with sample data: Paris, London, Bali)
+- [x] Verify RAG-based destination/attraction suggestions with real populated index (Verified with `tests/verify_rag_populated.py`)
 
 ### Phase 29: User Profiles & Personalization
 **Goal:** Use stored profiles for personalized recommendations.

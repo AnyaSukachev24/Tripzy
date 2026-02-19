@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 # Prompts
 from app.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
-from app.prompts.planner_prompt import PLANNER_SYSTEM_PROMPT
+from app.prompts.planner_prompt import PLANNER_SYSTEM_PROMPT, get_planner_prompt
 from app.prompts.critique_prompt import CRITIQUE_SYSTEM_PROMPT
 
 # Tools
@@ -163,7 +163,6 @@ class SupervisorOutput(BaseModel):
     )
     request_type: Literal["Planning", "Discovery", "FlightOnly", "HotelOnly", "AttractionsOnly"] = Field(
         description="Intent: 'Planning' for full trips, 'Discovery' for vague/suggestion requests, 'FlightOnly'/'HotelOnly'/'AttractionsOnly' for partial plans.",
-        default="Planning",
     )
 
 
@@ -358,17 +357,34 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             current_destination = state.get("destination") or result.destination
             current_duration = state.get("duration_days") or result.duration_days
 
+            # DIFFERENT REQUREMENTS BASED ON REQUEST TYPE
+            req_type = result.request_type or "Planning"
+            
+            # Destination is always required
             if not current_destination:
                 missing_required.append("destination")
-            if not current_duration or current_duration == 0:
-                missing_required.append("duration")
-            # Origin is good to have but maybe not strictly blocking if we want to just browse?
-            # But for "Plan a trip", yes.
-            # Let's make it soft-blocking or ask nicely.
-            # For now, let's treat it as required for "Trip_Planner".
+
+            # Duration: Required for Planning. Optional for others.
+            if req_type == "Planning":
+                if not current_duration or current_duration == 0:
+                    missing_required.append("duration")
+            
+            # Origin: Required for FlightOnly. 
+            # For Planning, it's good but maybe optional? Let's keep it optional for Planning to be safe, 
+            # but strict for FlightOnly where moving people is the whole point.
             current_origin = state.get("origin_city") or result.origin_city
-            if not current_origin:
-                missing_required.append("origin")
+            if req_type == "FlightOnly":
+                if not current_origin:
+                    missing_required.append("origin")
+            
+            # For HotelOnly, we might want check-in/out dates, usually implied by "duration" or specific dates.
+            # If duration is 0, we might ask "for how many nights?"
+            if req_type == "HotelOnly":
+                if not current_duration or current_duration == 0:
+                    # Optional: enforce duration for hotels too?
+                    # valid: "Hotel in Paris" -> 1 night default? Or ask?
+                    # Let's ask to be helpful.
+                    missing_required.append("duration")
 
             # If missing required info, ask for the FIRST missing piece
             if missing_required:
@@ -378,7 +394,10 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                 if "destination" in missing_required:
                     clarifying_question = f"That sounds great! 🌍 But could you tell me where you'd like to go for your {topic}? (e.g., Paris, Bali, Tokyo)"
                 elif "duration" in missing_required:
-                    clarifying_question = f"I'd love to plan this {topic} for you! 🗓️ How many days or weeks are you thinking of traveling?"
+                    if req_type == "HotelOnly":
+                        clarifying_question = f"I'd love to find you a hotel! 🏨 How many nights do you need to stay?"
+                    else:
+                        clarifying_question = f"I'd love to plan this {topic} for you! 🗓️ How many days or weeks are you thinking of traveling?"
                 elif "origin" in missing_required:
                     clarifying_question = f"To find the best flights ✈️, could you tell me which city you'll be flying from?"
                 else:
@@ -509,10 +528,14 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
     # Bind tools + SubmitPlan
     # processing_tools = tools + [SubmitPlan] # LangChain can bind Pydantic models as tools
 
+    # Dynamic Prompt based on Request Type
+    request_type = state.get("request_type", "Planning")
+    system_prompt = get_planner_prompt(request_type)
+
     # Construct prompt
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", PLANNER_SYSTEM_PROMPT),
+            ("system", system_prompt),
             (
                 "human",
                 "Current Check: Duration={duration_days}, Dest={destination}, Budget={budget_limit}, Number of travelers={traveling_personas_number} Amenities={amenities}. Instruction: {instruction}",
@@ -630,7 +653,9 @@ def critique_node(state: AgentState) -> Dict[str, Any]:
     current_revisions = state.get("revision_count", 0)
 
     # HARD VALIDATION 1: Check duration before calling LLM
-    if trip_plan and "itinerary" in trip_plan:
+    # Only for full "Planning" requests. Partial plans don't need strict itinerary days.
+    request_type = state.get("request_type", "Planning")
+    if request_type == "Planning" and trip_plan and "itinerary" in trip_plan:
         actual_days = len(trip_plan.get("itinerary", []))
         print(f"  [VALIDATION] Expected {duration_days} days, got {actual_days} days")
 
@@ -645,7 +670,8 @@ def critique_node(state: AgentState) -> Dict[str, Any]:
             }
 
     # HARD VALIDATION 2: Budget check
-    if trip_plan and budget_limit and budget_limit > 0:
+    # Skip for FlightOnly/HotelOnly as total cost might be just one component
+    if request_type == "Planning" and trip_plan and budget_limit and budget_limit > 0:
         plan_cost = trip_plan.get("budget_estimate", 0)
         if plan_cost > 0 and plan_cost > budget_limit * 1.15:  # 15% overage tolerance
             print(f"  [BUDGET EXCEEDED] Plan=${plan_cost:.0f}, Limit=${budget_limit:.0f}")
