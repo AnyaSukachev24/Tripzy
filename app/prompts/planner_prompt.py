@@ -22,6 +22,7 @@ Your goal is to find the best flight options based on the user's request.
 
 ### INPUT CONTEXT:
 - User Request: {{instruction}}
+- User Profile: {{user_profile}}
 - Research Info: {{research_info}}
 
 {base_extraction}
@@ -50,6 +51,7 @@ Your goal is to find the best hotel options based on the user's request.
 
 ### INPUT CONTEXT:
 - User Request: {{instruction}}
+- User Profile: {{user_profile}}
 - Research Info: {{research_info}}
 - Amenities: {{amenities}}
 
@@ -78,6 +80,7 @@ Your goal is to find the best things to do, tours, and attractions.
 
 ### INPUT CONTEXT:
 - User Request: {{instruction}}
+- User Profile: {{user_profile}}
 - Research Info: {{research_info}}
 
 {base_extraction}
@@ -105,6 +108,7 @@ Your goal is to create a structured travel itinerary based on the user's request
 
 ### INPUT CONTEXT:
 - User Request: {instruction}
+- User Profile: {user_profile}
 - Amenities: {amenities}
 - Research Info: {research_info}
 - Critique Feedback: {feedback} (If any)
