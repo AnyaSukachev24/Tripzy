@@ -160,6 +160,21 @@ def _search_amadeus_flights(
         return results
     except Exception as e:
         print(f"  [Amadeus] Failed: {e}")
+        try:
+            print(f"  [Amadeus] Failed Params: {params}")
+            if hasattr(e, "response"):
+                if hasattr(e.response, "parsed") and isinstance(
+                    e.response.parsed, dict
+                ):
+                    import json
+
+                    print(
+                        f"  [Amadeus] Error Details: {json.dumps(e.response.parsed, indent=2)}"
+                    )
+                elif hasattr(e.response, "body"):
+                    print(f"  [Amadeus] Error Body: {e.response.body}")
+        except:
+            pass
         return []
 
 
