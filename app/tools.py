@@ -136,6 +136,14 @@ def _search_amadeus_flights(
 
         response = amadeus_call(amadeus.shopping.flight_offers_search.get, **params)
         results = []
+        print(f"  [Amadeus] Returned {len(response.data)} direct flights")
+        if len(response.data) == 0:
+            print(
+                f"  [Amadeus] No direct flights found, searching for non-stop flights"
+            )
+            params["nonStop"] = "false"
+            response = amadeus_call(amadeus.shopping.flight_offers_search.get, **params)
+            print(f"  [Amadeus] Returned {len(response.data)} non-stop flights")
         for offer in response.data[:5]:
             flight = {
                 "source": "Amadeus",
@@ -164,7 +172,6 @@ def _search_amadeus_flights(
                     }
                 )
             results.append(flight)
-        print(f"  [Amadeus] Returned {len(results)} flights")
         return results
     except Exception as e:
         print(f"  [Amadeus] Failed: {e}")
@@ -603,10 +610,11 @@ def search_flights_tool(
     )
     all_results.extend(amadeus_flights)
 
-    google_flights = _search_google_flights(
-        origin, destination, departure_date, return_date, adults, currency
-    )
-    all_results.extend(google_flights)
+    # Google Flights skipped for now
+    # google_flights = _search_google_flights(
+    #     origin, destination, departure_date, return_date, adults, currency
+    # )
+    # all_results.extend(google_flights)
 
     kiwi_flights = _search_kiwi_flights(
         origin, destination, departure_date, return_date, adults, currency
