@@ -6,11 +6,14 @@ langchain
 langchain-openai
 langchain-google-genai
 langchain-community
+langchain-pinecone
 duckduckgo-search
 pinecone
 supabase
 pydantic
 langsmith
 amadeus
+fast-flights
+httpx
 streamlit
 langchainhub

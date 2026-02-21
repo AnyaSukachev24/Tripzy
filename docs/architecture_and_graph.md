@@ -62,7 +62,8 @@ The graph consists of specialized nodes.
 *   **Action**: 
     1. Parse user query.
     2. Query Vector DB (Chroma/Pinecone) for user history.
-    3. Output: Up-to-date `user_profile` in state.
+    3. **Destination Discovery (RAG)**: If the request is vague (e.g., "warm place in December"), querying the `travel_knowledge` index to retrieve matching destinations and attractions based on semantic similarity.
+    4. Output: Up-to-date `user_profile` in state and potential destination candidates.
 
 #### 2. **The Planner (The Brain)**
 *   **Role**: Orchestrator. Breaks high-level goals into sub-tasks.
@@ -74,10 +75,10 @@ The graph consists of specialized nodes.
 #### 3. **The Researcher (The Scout)**
 *   **Role**: Real-time data fetcher.
 *   **Sub-Agents**:
-    *   *Flight Scout*: Uses **Amadeus Test API** (Free).
+    *   *Flight Scout*: Uses **Amadeus Test API** (Free) + **Kiwi MCP** (Live Search).
     *   *Hotel Scout*: Uses **DuckDuckGo** (Search) + Amadeus (Free).
-    *   *Destination Analyst*: Uses **DuckDuckGo** (`site:wikivoyage.org`) for high-quality, free destination info (Research Insight).
-*   **Tools Standard**: MCP (Model Context Protocol).
+    *   *Destination Analyst*: Uses **Pinecone Integrated Inference** (RAG) + **DuckDuckGo** for high-quality destination info.
+*   **Tools Standard**: MCP (Model Context Protocol) client integrated for Kiwi.com.
 
 #### 4. **The Critic (The Quality Control)**
 *   **Role**: Validates the plan *before* it reaches the user (Self-Correction).
