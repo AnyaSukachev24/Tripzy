@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 # Prompts
 from app.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
 from app.prompts.planner_prompt import PLANNER_SYSTEM_PROMPT, get_planner_prompt
-from app.prompts.critique_prompt import CRITIQUE_SYSTEM_PROMPT
+from app.prompts.critique_prompt import CRITIQUE_SYSTEM_PROMPT, get_critique_prompt
 
 # Tools
 from app.tools import (
@@ -163,7 +163,9 @@ class SupervisorOutput(BaseModel):
         description="List of amenities extracted from the user request.",
         default=[],
     )
-    request_type: Literal["Planning", "Discovery", "FlightOnly", "HotelOnly", "AttractionsOnly"] = Field(
+    request_type: Literal[
+        "Planning", "Discovery", "FlightOnly", "HotelOnly", "AttractionsOnly"
+    ] = Field(
         description="Intent: 'Planning' for full trips, 'Discovery' for vague/suggestion requests, 'FlightOnly'/'HotelOnly'/'AttractionsOnly' for partial plans.",
         default="Planning",
     )
@@ -209,18 +211,20 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
     # --- Phase 29: User Profile Retrieval ---
     user_profile_update = {}
     current_profile = state.get("user_profile")
-    
+
     if not current_profile:
         try:
             # TODO: In production, get user_id from context/session
             # For now, we use the test profile we inspected earlier
-            test_user_id = "test@example.com" 
+            test_user_id = "test@example.com"
             # Note: The tool handles ID sanitization/lookup
             profile_dict = get_user_profile(test_user_id)
             if profile_dict:
                 current_profile = UserProfile(**profile_dict)
                 user_profile_update = {"user_profile": current_profile}
-                print(f"  [Supervisor] Loaded User Profile: {current_profile.travel_style}, {current_profile.dietary_needs}")
+                print(
+                    f"  [Supervisor] Loaded User Profile: {current_profile.travel_style}, {current_profile.dietary_needs}"
+                )
         except Exception as e:
             print(f"  [Supervisor] Failed to load user profile: {e}")
 
@@ -390,13 +394,19 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
 
             # DIFFERENT REQUREMENTS BASED ON REQUEST TYPE
             req_type = result.request_type or "Planning"
-            
+
             # --- MANUAL OVERRIDE FOR ATTRACTIONS ONLY ---
             # LLMs struggle to differentiate "Planning with known destination" vs "AttractionsOnly".
             # If user explicitly says they have booked/flights/hotel, force AttractionsOnly.
             user_query_lower = state.get("user_query", "").lower()
-            if "already booked" in user_query_lower or "have flights" in user_query_lower or "have hotel" in user_query_lower:
-                print("  [OVERRIDE] Detected 'already booked' intent -> Forcing AttractionsOnly")
+            if (
+                "already booked" in user_query_lower
+                or "have flights" in user_query_lower
+                or "have hotel" in user_query_lower
+            ):
+                print(
+                    "  [OVERRIDE] Detected 'already booked' intent -> Forcing AttractionsOnly"
+                )
                 req_type = "AttractionsOnly"
                 # Also update the result object so it propagates correctly
                 result.request_type = "AttractionsOnly"
@@ -409,15 +419,15 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             if req_type == "Planning":
                 if not current_duration or current_duration == 0:
                     missing_required.append("duration")
-            
-            # Origin: Required for FlightOnly. 
-            # For Planning, it's good but maybe optional? Let's keep it optional for Planning to be safe, 
+
+            # Origin: Required for FlightOnly.
+            # For Planning, it's good but maybe optional? Let's keep it optional for Planning to be safe,
             # but strict for FlightOnly where moving people is the whole point.
             current_origin = state.get("origin_city") or result.origin_city
             if req_type == "FlightOnly":
                 if not current_origin:
                     missing_required.append("origin")
-            
+
             # For HotelOnly, we might want check-in/out dates, usually implied by "duration" or specific dates.
             # If duration is 0, we might ask "for how many nights?"
             if req_type == "HotelOnly":
@@ -463,7 +473,7 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                     "traveling_personas_number": result.traveling_personas_number
                     or state.get("traveling_personas_number", 1),
                     "amenities": result.amenities,
-                    "request_type": req_type, # Ensure this is persisted!
+                    "request_type": req_type,  # Ensure this is persisted!
                     "steps": [
                         {
                             "module": "Supervisor",
@@ -494,12 +504,14 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             "request_type": result.request_type,
             "steps": [step_log],
         }
-        
+
         # Merge profile update if any
         if user_profile_update:
-            updates.update(user_profile_update) # Changed from step_log.update to updates.update
+            updates.update(
+                user_profile_update
+            )  # Changed from step_log.update to updates.update
 
-        return updates # Changed from step_log to updates
+        return updates  # Changed from step_log to updates
     except Exception as e:
         print(f"  Supervisor Error: {str(e)}")
         error_msg = f"System Error: {str(e)}"
@@ -566,10 +578,12 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
     class SubmitPlan(BaseModel):
         """Submit the finalized trip plan. ALWAYS call this when the plan is ready."""
 
-        final_response: str = Field(description="Friendly, rich Markdown response to show the user.")
+        final_response: str = Field(
+            description="Friendly, rich Markdown response to show the user."
+        )
         trip_plan: Dict[str, Any] = Field(
             default={},
-            description="The complete trip plan JSON with keys: destination, origin_city, dates, duration_days, budget_estimate, budget_currency, trip_type, travelers, flights, hotels, itinerary. REQUIRED - always include this."
+            description="The complete trip plan JSON with keys: destination, origin_city, dates, duration_days, budget_estimate, budget_currency, trip_type, travelers, flights, hotels, itinerary. REQUIRED - always include this.",
         )
 
     # Bind tools + SubmitPlan
@@ -585,7 +599,7 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
             ("system", system_prompt),
             (
                 "human",
-                "Current Check: Duration={duration_days}, Dest={destination}, Budget={budget_limit}, Number of travelers={traveling_personas_number} Amenities={amenities}. Instruction: {instruction}",
+                "Current Check: Duration={duration_days}, Dest={destination}, Origin City={origin_city}, Budget={budget_limit}, Number of travelers={traveling_personas_number} Amenities={amenities}. Instruction: {instruction}",
             ),
         ]
     )
@@ -631,11 +645,15 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
         )
 
         # Helper to parse tool calls
-        tool_calls = result.tool_calls if hasattr(result, 'tool_calls') and result.tool_calls else []
-        content = result.content if hasattr(result, 'content') else ""
+        tool_calls = (
+            result.tool_calls
+            if hasattr(result, "tool_calls") and result.tool_calls
+            else []
+        )
+        content = result.content if hasattr(result, "content") else ""
         content_str = content if content else ""
 
-        print(f"  Planner Content: {content_str[:100]}...")
+        print(f"  Planner Content: {content_str}")
         print(f"  Tool Calls: {len(tool_calls)}")
         print(f"  Tool Calls: {tool_calls}")
 
@@ -645,24 +663,38 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
             "response": content_str if content_str else "Executing Tools...",
         }
 
-        updates = {"steps": [step_log]}
-
-        if not tool_calls:
-            # No tools called? The LLM gave a text response (rare with bind_tools)
-            # Use content as supervisor instruction and route back to Supervisor
-            updates["supervisor_instruction"] = content_str or "Planner needs more information."
-            updates["next_step"] = "Supervisor"
-            return updates
-
-        # Analyze Tool Calls
-        # If "SubmitPlan" is called, we are done with planning
+        # Handle SubmitPlan Call Before Routing
         submit_plan_call = next(
-            (tc for tc in tool_calls if tc["name"] == "SubmitPlan"), None
+            (
+                tc
+                for tc in tool_calls
+                if isinstance(tc, dict) and tc.get("name") == "SubmitPlan"
+            ),
+            None,
         )
 
         if submit_plan_call:
             submission = submit_plan_call["args"]
             print(f"  [DEBUG] SubmitPlan Args: {list(submission.keys())}")
+            final_res = submission.get("final_response", "")
+            if final_res:
+                step_log["response"] = final_res
+
+        updates = {"steps": [step_log]}
+
+        if not tool_calls:
+            # No tools called? The LLM gave a text response (rare with bind_tools)
+            # Use content as supervisor instruction and route back to Supervisor
+            updates["supervisor_instruction"] = (
+                content_str or "Planner needs more information."
+            )
+            updates["next_step"] = "Supervisor"
+            return updates
+
+        # Analyze Tool Calls
+        # If "SubmitPlan" is called, we are done with planning
+        if submit_plan_call:
+            submission = submit_plan_call["args"]
             updates["trip_plan"] = submission.get("trip_plan", {})
             updates["supervisor_instruction"] = "Plan Drafted"
             updates["next_step"] = "Critique"
@@ -697,8 +729,13 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
         # Guard: if researcher called too many times, go to End instead of looping
         researcher_calls = state.get("researcher_calls", 0)
         if researcher_calls >= 4:
-            print(f"  [GUARD] Max researcher calls reached ({researcher_calls}). Ending.")
-            return {"next_step": "End", "supervisor_instruction": f"I encountered an issue planning your trip: {e}. Please try again with more specific details."}
+            print(
+                f"  [GUARD] Max researcher calls reached ({researcher_calls}). Ending."
+            )
+            return {
+                "next_step": "End",
+                "supervisor_instruction": f"I encountered an issue planning your trip: {e}. Please try again with more specific details.",
+            }
         return {"next_step": "Researcher", "supervisor_instruction": f"Error: {e}"}
 
 
@@ -725,7 +762,13 @@ def critique_node(state: AgentState) -> Dict[str, Any]:
                 "critique_feedback": feedback,
                 "revision_count": current_revisions + 1,
                 "next_step": "Trip_Planner",
-                "steps": [{"module": "Critique", "prompt": "Duration Validation", "response": feedback}],
+                "steps": [
+                    {
+                        "module": "Critique",
+                        "prompt": "Duration Validation",
+                        "response": feedback,
+                    }
+                ],
             }
 
     # HARD VALIDATION 2: Budget check
@@ -733,7 +776,9 @@ def critique_node(state: AgentState) -> Dict[str, Any]:
     if request_type == "Planning" and trip_plan and budget_limit and budget_limit > 0:
         plan_cost = trip_plan.get("budget_estimate", 0)
         if plan_cost > 0 and plan_cost > budget_limit * 1.15:  # 15% overage tolerance
-            print(f"  [BUDGET EXCEEDED] Plan=${plan_cost:.0f}, Limit=${budget_limit:.0f}")
+            print(
+                f"  [BUDGET EXCEEDED] Plan=${plan_cost:.0f}, Limit=${budget_limit:.0f}"
+            )
             if current_revisions < 3:
                 budget_feedback = (
                     f"BUDGET EXCEEDED: The plan costs ${plan_cost:.0f} but the user's budget is ${budget_limit:.0f}. "
@@ -744,22 +789,49 @@ def critique_node(state: AgentState) -> Dict[str, Any]:
                     "revision_count": current_revisions + 1,
                     "next_step": "Trip_Planner",
                     "budget_warning": budget_feedback,
-                    "steps": [{"module": "Critique", "prompt": "Budget Validation", "response": budget_feedback}],
+                    "steps": [
+                        {
+                            "module": "Critique",
+                            "prompt": "Budget Validation",
+                            "response": budget_feedback,
+                        }
+                    ],
                 }
 
     # Proceed with LLM-based critique
+    critique_prompt_text = get_critique_prompt(request_type)
     prompt = ChatPromptTemplate.from_messages(
-        [("system", CRITIQUE_SYSTEM_PROMPT), ("human", "Plan to Review: {trip_plan}")]
+        [("system", critique_prompt_text), ("human", "Plan to Review: {trip_plan}")]
     )
 
     chain = prompt | llm.with_structured_output(CritiqueOutput)
+
+    user_profile = state.get("user_profile")
+    user_profile_str = "None"
+    if user_profile:
+        user_profile_str = (
+            f"Style: {user_profile.travel_style or 'Any'}, "
+            f"Diet: {', '.join(user_profile.dietary_needs)}, "
+            f"Interests: {', '.join(user_profile.interests)}, "
+            f"Accessibility: {', '.join(user_profile.accessibility_needs)}"
+        )
+
+    final_response = "No written response."
+    steps_list = state.get("steps", [])
+    for step in reversed(steps_list):
+        if step.get("module") == "Planner":
+            final_response = step.get("response", final_response)
+            break
 
     result = safe_llm_invoke(
         chain,
         {
             "instruction": instruction,
+            "user_profile": user_profile_str,
             "trip_plan": str(trip_plan),
-            "budget": str(state.get("budget", "None")),
+            "final_response": final_response,
+            "request_type": request_type,
+            "budget": str(state.get("budget_limit", "None")),
             "duration_days": duration_days,
         },
     )
@@ -1036,9 +1108,11 @@ workflow.add_conditional_edges(
 # Human Approval Logic
 workflow.add_edge("Human_Approval", "Trip_Planner")
 
+
 # Researcher routes dynamically (to Trip_Planner or Supervisor depending on caller)
 def route_researcher(state: AgentState):
     return state.get("next_step", "Supervisor")
+
 
 workflow.add_conditional_edges(
     "Researcher",
