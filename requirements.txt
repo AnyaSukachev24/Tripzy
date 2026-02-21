@@ -17,3 +17,4 @@ fast-flights
 httpx
 streamlit
 langchainhub
+isodate
