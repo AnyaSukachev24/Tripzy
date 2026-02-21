@@ -4,6 +4,7 @@ import os
 from langchain_core.tools import tool
 from langchain_community.tools import DuckDuckGoSearchRun
 from dotenv import load_dotenv
+import isodate
 
 load_dotenv()
 
@@ -153,12 +154,12 @@ def _search_amadeus_flights(
                             "arrival": seg.get("arrival", {}),
                             "carrierCode": seg.get("carrierCode", ""),
                             "number": seg.get("number", ""),
-                            "duration": seg.get("duration", ""),
+                            "duration": isodate.parse_duration(seg.get("duration", "")),
                         }
                     )
                 flight["itineraries"].append(
                     {
-                        "duration": itin.get("duration", ""),
+                        "duration": isodate.parse_duration(itin.get("duration", "")),
                         "segments": segments,
                     }
                 )
@@ -609,14 +610,57 @@ def search_flights_tool(
             origin, destination, departure_date, return_date, adults
         )
 
-    # Sort by price (lowest first)
-    def get_price(f):
-        try:
-            return float(f.get("price", {}).get("total", "99999"))
-        except (ValueError, TypeError):
-            return 99999
+    # Sort by price (lowest first), then by duration (shortest first)
+    def get_sort_keys(f):
+        import re
 
-    all_results.sort(key=get_price)
+        # 1. Price
+        try:
+            price = float(f.get("price", {}).get("total", "99999"))
+        except (ValueError, TypeError) as e:
+            print(f"[DEBUG] Error parsing price from {f.get('price')}: {e}")
+            price = 99999.0
+
+        # 2. Duration
+        duration_str = ""
+        if f.get("itineraries"):
+            duration_str = f["itineraries"][0].get("duration", "")
+        else:
+            duration_str = f.get("duration", "")
+        print(f"[  DEBUG] Duration: {duration_str}, type: {type(duration_str)}")
+
+        total_minutes = 999999
+
+        # If it's already a timedelta object (from isodate parsing, Amadeus)
+        if hasattr(duration_str, "total_seconds"):
+            try:
+                total_minutes = int(duration_str.total_seconds() // 60)
+            except Exception as e:
+                print(f"[DEBUG] Error calling total_seconds on duration: {e}")
+        else:
+            # Clean the string (remove quotes, extra spaces)
+            if isinstance(duration_str, str):
+                clean_str = duration_str.strip("").upper()
+            else:
+                clean_str = str(duration_str).upper()
+
+            # Try to parse string durations (e.g. 'PT3H5M' string not parsed properly, or '3 hr 5 min')
+            try:
+                # Regex to find any numbers followed by H or M (case insensitive)
+                hours = re.search(r"(\d+)\s*H", clean_str)
+                minutes = re.search(r"(\d+)\s*M", clean_str)
+
+                h_val = int(hours.group(1)) if hours else 0
+                m_val = int(minutes.group(1)) if minutes else 0
+
+                if h_val > 0 or m_val > 0:
+                    total_minutes = (h_val * 60) + m_val
+            except Exception as e:
+                print(f"[DEBUG] Failed string duration parsing for '{clean_str}': {e}")
+
+        return (price, total_minutes)
+
+    all_results.sort(key=get_sort_keys)
 
     # Enrich with Price Analysis (Phase B1)
     try:
@@ -658,7 +702,7 @@ def search_flights_tool(
     # Summary
     sources = set(f.get("source", "Unknown") for f in all_results)
     print(f"  [Tool] Aggregated {len(all_results)} flights from: {', '.join(sources)}")
-    return json.dumps(all_results, indent=2)
+    return json.dumps(all_results, indent=2, default=str)
 
 
 # =====================================================================
