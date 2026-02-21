@@ -187,7 +187,12 @@ def _search_amadeus_flights(
 
 
 def _search_google_flights(
-    origin: str, destination: str, departure_date: str, return_date: str, adults: int
+    origin: str,
+    destination: str,
+    departure_date: str,
+    return_date: str,
+    adults: int,
+    currency: str = "USD",
 ) -> List[Dict]:
     """Source 2: Google Flights via fast_flights library (scraper)."""
     try:
@@ -282,7 +287,7 @@ def _search_google_flights(
                 "type": "flight-offer",
                 "id": f"gf-{i+1}",
                 "price": {
-                    "currency": "USD",
+                    "currency": currency,
                     "total": f"{price_val:.2f}",
                     "grandTotal": f"{price_val:.2f}",
                 },
@@ -300,7 +305,12 @@ def _search_google_flights(
 
 
 def _search_kiwi_flights(
-    origin: str, destination: str, departure_date: str, return_date: str, adults: int
+    origin: str,
+    destination: str,
+    departure_date: str,
+    return_date: str,
+    adults: int,
+    currency: str = "USD",
 ) -> List[Dict]:
     """Source 3: Kiwi.com via Tequila public search API."""
     try:
@@ -323,7 +333,7 @@ def _search_kiwi_flights(
             "date_from": date_from,
             "date_to": date_from,
             "adults": adults,
-            "curr": "USD",
+            "curr": currency,
             "limit": 5,
         }
         if return_date:
@@ -594,12 +604,12 @@ def search_flights_tool(
     all_results.extend(amadeus_flights)
 
     google_flights = _search_google_flights(
-        origin, destination, departure_date, return_date, adults
+        origin, destination, departure_date, return_date, adults, currency
     )
     all_results.extend(google_flights)
 
     kiwi_flights = _search_kiwi_flights(
-        origin, destination, departure_date, return_date, adults
+        origin, destination, departure_date, return_date, adults, currency
     )
     all_results.extend(kiwi_flights)
 
