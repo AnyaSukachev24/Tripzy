@@ -627,7 +627,6 @@ def search_flights_tool(
             duration_str = f["itineraries"][0].get("duration", "")
         else:
             duration_str = f.get("duration", "")
-        print(f"[  DEBUG] Duration: {duration_str}, type: {type(duration_str)}")
 
         total_minutes = 999999
 
