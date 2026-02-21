@@ -11,6 +11,7 @@ def get_planner_prompt(request_type: str = "Planning") -> str:
    - **Inspect User Request**: CAREFULLY read the `User Request` line.
    - **Extract Missing Data**: If {{destination}}, {{budget_limit}}, {{duration_days}}, {{traveling_personas_number}}, or origin are empty/zero/unknown, TRY to extract them directly from the `User Request` text.
    - **USE EXTRACTED DATA**: Use these extracted values IMMEDIATELY for your planning.
+   - **CURRENT DATE**: The current system date is {{current_date}}. ALL searched flights, hotels, and dates MUST be strictly in the future relative to this date!
 """
 
     # ----------------------------------------------------------------
@@ -21,6 +22,7 @@ def get_planner_prompt(request_type: str = "Planning") -> str:
 Your goal is to find the best flight options based on the user's request.
 
 ### INPUT CONTEXT:
+- Current Date: {{current_date}}
 - User Request: {{instruction}}
 - User Profile: {{user_profile}}
 - Research Info: {{research_info}}
@@ -50,6 +52,7 @@ Your goal is to find the best flight options based on the user's request.
 Your goal is to find the best hotel options based on the user's request.
 
 ### INPUT CONTEXT:
+- Current Date: {{current_date}}
 - User Request: {{instruction}}
 - User Profile: {{user_profile}}
 - Research Info: {{research_info}}
@@ -79,6 +82,7 @@ Your goal is to find the best hotel options based on the user's request.
 Your goal is to find the best things to do, tours, and attractions.
 
 ### INPUT CONTEXT:
+- Current Date: {{current_date}}
 - User Request: {{instruction}}
 - User Profile: {{user_profile}}
 - Research Info: {{research_info}}
@@ -107,6 +111,7 @@ Your goal is to find the best things to do, tours, and attractions.
 Your goal is to create a structured travel itinerary based on the user's request.
 
 ### INPUT CONTEXT:
+- Current Date: {current_date}
 - User Request: {instruction}
 - User Profile: {user_profile}
 - Amenities: {amenities}

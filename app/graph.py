@@ -1,4 +1,5 @@
 from typing import Any, Dict, Literal, List
+from datetime import datetime
 from langgraph.checkpoint.memory import MemorySaver
 from app.state import AgentState, Amenity, TripPlan, UserProfile
 from langgraph.graph import StateGraph, START, END
@@ -641,6 +642,7 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
                 "origin_city": origin_city,
                 "traveling_personas_number": traveling_personas_number,
                 "amenities": amenities,
+                "current_date": datetime.today().strftime("%Y-%m-%d"),
             },
         )
 
