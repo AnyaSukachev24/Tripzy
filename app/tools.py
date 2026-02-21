@@ -105,7 +105,12 @@ def web_search_tool(query: str) -> str:
 
 
 def _search_amadeus_flights(
-    origin: str, destination: str, departure_date: str, return_date: str, adults: int
+    origin: str,
+    destination: str,
+    departure_date: str,
+    return_date: str,
+    adults: int,
+    currency: str,
 ) -> List[Dict]:
     """Source 1: Amadeus Self-Service API — structured, reliable, sandbox or prod."""
     from app.amadeus_rate_limiter import get_amadeus_client, amadeus_call
@@ -122,6 +127,8 @@ def _search_amadeus_flights(
             "departureDate": departure_date,
             "adults": adults,
             "max": 5,
+            "currencyCode": currency,
+            "nonStop": "true",
         }
         if return_date:
             params["returnDate"] = return_date
@@ -560,6 +567,7 @@ def search_flights_tool(
     departure_date: str,
     return_date: Optional[str] = None,
     adults: int = 1,
+    currency: str = "USD",
 ) -> str:
     """
     Searches for flights across multiple sources: Amadeus, Google Flights, and Kiwi.com.
@@ -580,7 +588,7 @@ def search_flights_tool(
 
     # Query all sources (each handles its own errors)
     amadeus_flights = _search_amadeus_flights(
-        origin, destination, departure_date, return_date, adults
+        origin, destination, departure_date, return_date, adults, currency
     )
     all_results.extend(amadeus_flights)
 

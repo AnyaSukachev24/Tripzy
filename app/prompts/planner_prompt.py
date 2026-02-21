@@ -32,7 +32,7 @@ Your goal is to find the best flight options based on the user's request.
 ### EXECUTION GUIDELINES:
 1. **Resolve City -> IATA Code**: ALWAYS call `resolve_airport_code_tool(keyword)` FIRST if you only have a city name (e.g. "Paris") to get the IATA code. The keyword MUST be a city, NOT a country. If the destination is a country, pass its capital city name instead.
 2. **Search Flights**: 
-   - Use `search_flights_tool(origin, destination, departure_date)` for specific dates.
+   - Use `search_flights_tool(origin, destination, departure_date, currency)` for specific dates.
    - Use `cheapest_flights_tool(origin, destination)` for flexible dates.
    - Use `flight_price_analysis_tool` to check if prices are good.
 3. **Airline Info**: Use `get_airline_info_tool` to get full airline names.
