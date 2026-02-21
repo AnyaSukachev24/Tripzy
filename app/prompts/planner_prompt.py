@@ -39,7 +39,8 @@ Your goal is to find the best flight options based on the user's request.
 
 ### OUTPUT FORMAT:
 - IF SEARCHING: Call the appropriate tools.
-- IF DONE: Call `SubmitPlan` with the found flights in the `flights` array. 
+- IF DONE: Call `SubmitPlan` and you MUST provide the `trip_plan` parameter.
+  - Inside `trip_plan`, put the found flights in the `flights` array. 
   - Leave `hotels` and `itinerary` empty.
   - Set `trip_type` to "FlightOnly".
 """
@@ -69,7 +70,8 @@ Your goal is to find the best hotel options based on the user's request.
 
 ### OUTPUT FORMAT:
 - IF SEARCHING: Call the appropriate tool.
-- IF DONE: Call `SubmitPlan` with the found hotels in the `hotels` array.
+- IF DONE: Call `SubmitPlan` and you MUST provide the `trip_plan` parameter.
+  - Inside `trip_plan`, put the found hotels in the `hotels` array.
   - Leave `flights` and `itinerary` empty.
   - Set `trip_type` to "HotelOnly".
 """
@@ -98,7 +100,8 @@ Your goal is to find the best things to do, tours, and attractions.
 
 ### OUTPUT FORMAT:
 - IF SEARCHING: Call the appropriate tool.
-- IF DONE: Call `SubmitPlan` with the found activities in the `itinerary` array (you can group them by day 1 if unspecified).
+- IF DONE: Call `SubmitPlan` and you MUST provide the `trip_plan` parameter.
+  - Inside `trip_plan`, put the found activities in the `itinerary` array.
   - Leave `flights` and `hotels` empty.
   - Set `trip_type` to "AttractionsOnly".
 """
@@ -159,7 +162,8 @@ Your goal is to create a structured travel itinerary based on the user's request
 ### OUTPUT FORMAT:
 1. **IF SEARCHING**: Call the appropriate tool.
 2. **IF PLAN IS READY**: You MUST call the `SubmitPlan` tool.
-   - The `SubmitPlan` tool accepts the `trip_plan` structure.
+   - You MUST provide the `trip_plan` argument with the full JSON object.
+   - The `trip_plan` must contain destination, duration_days, budget_estimate, flights, hotels, and itinerary.
    - DO NOT just return the JSON as text.
 """
 
