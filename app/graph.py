@@ -576,22 +576,83 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
     # BUT the existing architecture expects a JSON `trip_plan` object.
     # Let's bind a "SubmitPlan" tool to handle the final output structured data.
 
+    # Dynamic Prompt based on Request Type
+    request_type = state.get("request_type", "Planning")
+
+    from pydantic import create_model
+    from typing import Optional
+
+    class Flight(BaseModel):
+        source: str = Field(
+            ..., description="The airline or source providing the flight"
+        )
+        origin: str = Field(..., description="The origin airport or city")
+        destination: str = Field(..., description="The destination airport or city")
+        price: float = Field(..., description="The price of the flight")
+        duration: str = Field(..., description="The duration of the flight")
+        date: str = Field(..., description="The date of the flight")
+        is_direct: bool = Field(
+            ..., description="True if the flight is direct, False otherwise"
+        )
+
+    base_fields = {
+        "destination": (str, Field(default="", description="Destination city")),
+        "origin_city": (str, Field(default="", description="Origin city")),
+        "dates": (str, Field(default="", description="Date range")),
+        "duration_days": (int, Field(default=0, description="Duration in days")),
+        "budget_estimate": (
+            float,
+            Field(default=0.0, description="Estimated total budget"),
+        ),
+        "budget_currency": (str, Field(default="USD", description="Currency")),
+        "trip_type": (str, Field(default=request_type, description="Trip type")),
+        "travelers": (int, Field(default=1, description="Number of travelers")),
+    }
+
+    if request_type in ["Planning", "FlightOnly"]:
+        base_fields["outbound_flight"] = (
+            Flight,
+            Field(
+                ...,
+                description="The outbound flight from origin to destination. REQUIRED.",
+            ),
+        )
+        base_fields["return_flight"] = (
+            Flight,
+            Field(
+                default=None,
+                description="The return flight from destination back to origin. Optional.",
+            ),
+        )
+    if request_type in ["Planning", "HotelOnly"]:
+        base_fields["hotels"] = (
+            List[Dict[str, Any]],
+            Field(
+                ..., description="Selected hotels as a list of dictionaries. REQUIRED."
+            ),
+        )
+    if request_type in ["Planning", "AttractionsOnly"]:
+        base_fields["itinerary"] = (
+            List[Dict[str, Any]],
+            Field(..., description="Daily itinerary of activities. REQUIRED."),
+        )
+
+    TripPlanData = create_model("TripPlanData", **base_fields)
+
     class SubmitPlan(BaseModel):
         """Submit the finalized trip plan. ALWAYS call this when the plan is ready."""
 
         final_response: str = Field(
             description="Friendly, rich Markdown response to show the user."
         )
-        trip_plan: Dict[str, Any] = Field(
-            default={},
-            description="The complete trip plan JSON with keys: destination, origin_city, dates, duration_days, budget_estimate, budget_currency, trip_type, travelers, flights, hotels, itinerary. REQUIRED - always include this.",
+        trip_plan: TripPlanData = Field(
+            ...,
+            description="The complete trip plan data. REQUIRED - always include this.",
         )
 
     # Bind tools + SubmitPlan
     # processing_tools = tools + [SubmitPlan] # LangChain can bind Pydantic models as tools
 
-    # Dynamic Prompt based on Request Type
-    request_type = state.get("request_type", "Planning")
     system_prompt = get_planner_prompt(request_type)
 
     # Construct prompt
@@ -683,6 +744,15 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
                 step_log["response"] = final_res
 
         updates = {"steps": [step_log]}
+        # Analyze Tool Calls
+        if submit_plan_call:
+            print(f"  [DEBUG] SubmitPlan Args: {submit_plan_call}")
+            submission = submit_plan_call.get("args", {})
+            trip_plan = submission.get("trip_plan", {})
+            updates["trip_plan"] = trip_plan
+            updates["supervisor_instruction"] = "Plan Drafted"
+            updates["next_step"] = "Critique"
+            return updates
 
         if not tool_calls:
             # No tools called? The LLM gave a text response (rare with bind_tools)
@@ -694,13 +764,6 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
             return updates
 
         # Analyze Tool Calls
-        # If "SubmitPlan" is called, we are done with planning
-        if submit_plan_call:
-            submission = submit_plan_call["args"]
-            updates["trip_plan"] = submission.get("trip_plan", {})
-            updates["supervisor_instruction"] = "Plan Drafted"
-            updates["next_step"] = "Critique"
-            return updates
 
         # If Search Tools are called, route to Researcher (updated to handle tool calls)
         # We pass the tool_calls list to Researcher via state or instruction
