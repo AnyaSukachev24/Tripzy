@@ -48,7 +48,7 @@ Return a JSON object with:
   * If duration not mentioned in User Input, USE THE VALUE FROM "CURRENT STATE".
   * If not in Current State, set to 0.
   * Logic: "X days" → X, "X weeks" → X*7.
-- "destination": (Optional) Extract destination. If not mentioned in input, USE VALUE FROM "CURRENT STATE" (unless user explicitly changes it).
+- "destination": (Optional) Extract destination. If not mentioned in input, USE VALUE FROM "CURRENT STATE" (unless user explicitly changes it). Must be a city name. If country is mentioned, use the capital city of that country.  
 - "budget_limit": (Optional) Extract budget. If not mentioned, USE VALUE FROM "CURRENT STATE".
 - "budget_currency": (Optional) Extract currency. Default: "USD".
 - "trip_type": (Optional) Detect trip type. If not mentioned, USE VALUE FROM "CURRENT STATE".

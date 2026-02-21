@@ -19,10 +19,11 @@ def _get_pinecone_client_and_index():
     if _pinecone_index is None:
         try:
             from pinecone import Pinecone
+
             api_key = os.getenv("PINECONE_API_KEY")
             if not api_key:
                 return None, None
-            
+
             _pinecone_client = Pinecone(api_key=api_key)
             index_name = os.getenv("PINECONE_INDEX_NAME", "tripzy")
             _pinecone_index = _pinecone_client.Index(index_name)
@@ -32,7 +33,9 @@ def _get_pinecone_client_and_index():
     return _pinecone_client, _pinecone_index
 
 
-def _query_pinecone_inference(query: str, k: int = 5, namespace: str = "wikivoyage") -> List[Any]:
+def _query_pinecone_inference(
+    query: str, k: int = 5, namespace: str = "wikivoyage"
+) -> List[Any]:
     """
     Queries Pinecone using the Inference API to generate the query embedding.
     """
@@ -45,22 +48,18 @@ def _query_pinecone_inference(query: str, k: int = 5, namespace: str = "wikivoya
         embedding_response = pc.inference.embed(
             model="llama-text-embed-v2",
             inputs=[query],
-            parameters={"input_type": "query", "truncate": "END"}
+            parameters={"input_type": "query", "truncate": "END"},
         )
         query_values = embedding_response[0]["values"]
 
         # 2. Query Index
         results = index.query(
-            vector=query_values,
-            top_k=k,
-            include_metadata=True,
-            namespace=namespace
+            vector=query_values, top_k=k, include_metadata=True, namespace=namespace
         )
         return results["matches"]
     except Exception as e:
         print(f"  [Warning] Pinecone Inference Query failed: {e}")
         return []
-
 
 
 # =====================================================================
@@ -70,6 +69,7 @@ def _get_amadeus_client():
     """Get an authenticated, rate-limited Amadeus client."""
     try:
         from app.amadeus_rate_limiter import get_amadeus_client
+
         return get_amadeus_client()
     except Exception as e:
         print(f"  [Warning] Rate limiter module error: {e}")
@@ -103,15 +103,19 @@ def web_search_tool(query: str) -> str:
 #    Sources: Amadeus API → Google Flights → Kiwi.com
 # =====================================================================
 
-def _search_amadeus_flights(origin: str, destination: str, departure_date: str,
-                            return_date: str, adults: int) -> List[Dict]:
+
+def _search_amadeus_flights(
+    origin: str, destination: str, departure_date: str, return_date: str, adults: int
+) -> List[Dict]:
     """Source 1: Amadeus Self-Service API — structured, reliable, sandbox or prod."""
     from app.amadeus_rate_limiter import get_amadeus_client, amadeus_call
+
     amadeus = get_amadeus_client()
     if not amadeus:
         return []
     try:
         from amadeus import ResponseError
+
         params = {
             "originLocationCode": origin.upper()[:3],
             "destinationLocationCode": destination.upper()[:3],
@@ -136,17 +140,21 @@ def _search_amadeus_flights(origin: str, destination: str, departure_date: str,
             for itin in offer.get("itineraries", []):
                 segments = []
                 for seg in itin.get("segments", []):
-                    segments.append({
-                        "departure": seg.get("departure", {}),
-                        "arrival": seg.get("arrival", {}),
-                        "carrierCode": seg.get("carrierCode", ""),
-                        "number": seg.get("number", ""),
-                        "duration": seg.get("duration", ""),
-                    })
-                flight["itineraries"].append({
-                    "duration": itin.get("duration", ""),
-                    "segments": segments,
-                })
+                    segments.append(
+                        {
+                            "departure": seg.get("departure", {}),
+                            "arrival": seg.get("arrival", {}),
+                            "carrierCode": seg.get("carrierCode", ""),
+                            "number": seg.get("number", ""),
+                            "duration": seg.get("duration", ""),
+                        }
+                    )
+                flight["itineraries"].append(
+                    {
+                        "duration": itin.get("duration", ""),
+                        "segments": segments,
+                    }
+                )
             results.append(flight)
         print(f"  [Amadeus] Returned {len(results)} flights")
         return results
@@ -155,17 +163,28 @@ def _search_amadeus_flights(origin: str, destination: str, departure_date: str,
         return []
 
 
-def _search_google_flights(origin: str, destination: str, departure_date: str,
-                           return_date: str, adults: int) -> List[Dict]:
+def _search_google_flights(
+    origin: str, destination: str, departure_date: str, return_date: str, adults: int
+) -> List[Dict]:
     """Source 2: Google Flights via fast_flights library (scraper)."""
     try:
         from fast_flights import FlightData, Passengers, get_flights
 
-        flight_data_list = [FlightData(date=departure_date, from_airport=origin.upper()[:3],
-                                        to_airport=destination.upper()[:3])]
+        flight_data_list = [
+            FlightData(
+                date=departure_date,
+                from_airport=origin.upper()[:3],
+                to_airport=destination.upper()[:3],
+            )
+        ]
         if return_date:
-            flight_data_list.append(FlightData(date=return_date, from_airport=destination.upper()[:3],
-                                                to_airport=origin.upper()[:3]))
+            flight_data_list.append(
+                FlightData(
+                    date=return_date,
+                    from_airport=destination.upper()[:3],
+                    to_airport=origin.upper()[:3],
+                )
+            )
 
         passengers = Passengers(adults=adults)
         trip_type = "round-trip" if return_date else "one-way"
@@ -177,15 +196,19 @@ def _search_google_flights(origin: str, destination: str, departure_date: str,
         )
 
         results = []
-        flights_list = raw.flights if hasattr(raw, 'flights') else (raw if isinstance(raw, list) else [])
+        flights_list = (
+            raw.flights
+            if hasattr(raw, "flights")
+            else (raw if isinstance(raw, list) else [])
+        )
 
         for i, f in enumerate(flights_list[:5]):
             # Normalize to our standard format
             price_str = ""
-            if hasattr(f, 'price'):
+            if hasattr(f, "price"):
                 price_str = str(f.price).replace("$", "").replace(",", "").strip()
-            elif isinstance(f, dict) and 'price' in f:
-                price_str = str(f['price']).replace("$", "").replace(",", "").strip()
+            elif isinstance(f, dict) and "price" in f:
+                price_str = str(f["price"]).replace("$", "").replace(",", "").strip()
 
             price_val = 0.0
             try:
@@ -195,33 +218,41 @@ def _search_google_flights(origin: str, destination: str, departure_date: str,
 
             # Build segments from flight legs
             segments = []
-            departure_info = {"iataCode": origin.upper()[:3], "at": f"{departure_date}T08:00:00"}
-            arrival_info = {"iataCode": destination.upper()[:3], "at": f"{departure_date}T12:00:00"}
+            departure_info = {
+                "iataCode": origin.upper()[:3],
+                "at": f"{departure_date}T08:00:00",
+            }
+            arrival_info = {
+                "iataCode": destination.upper()[:3],
+                "at": f"{departure_date}T12:00:00",
+            }
 
-            if hasattr(f, 'departure') and f.departure:
+            if hasattr(f, "departure") and f.departure:
                 departure_info["at"] = str(f.departure)
-            if hasattr(f, 'arrival') and f.arrival:
+            if hasattr(f, "arrival") and f.arrival:
                 arrival_info["at"] = str(f.arrival)
 
             duration_str = ""
-            if hasattr(f, 'duration'):
+            if hasattr(f, "duration"):
                 duration_str = str(f.duration)
-            elif isinstance(f, dict) and 'duration' in f:
-                duration_str = str(f['duration'])
+            elif isinstance(f, dict) and "duration" in f:
+                duration_str = str(f["duration"])
 
             airline = ""
-            if hasattr(f, 'airline'):
+            if hasattr(f, "airline"):
                 airline = str(f.airline)
-            elif isinstance(f, dict) and 'airline' in f:
-                airline = str(f['airline'])
+            elif isinstance(f, dict) and "airline" in f:
+                airline = str(f["airline"])
 
-            segments.append({
-                "departure": departure_info,
-                "arrival": arrival_info,
-                "carrierCode": airline[:2].upper() if airline else "GF",
-                "number": "",
-                "duration": duration_str,
-            })
+            segments.append(
+                {
+                    "departure": departure_info,
+                    "arrival": arrival_info,
+                    "carrierCode": airline[:2].upper() if airline else "GF",
+                    "number": "",
+                    "duration": duration_str,
+                }
+            )
 
             flight_info = {
                 "source": "Google Flights",
@@ -245,8 +276,9 @@ def _search_google_flights(origin: str, destination: str, departure_date: str,
         return []
 
 
-def _search_kiwi_flights(origin: str, destination: str, departure_date: str,
-                         return_date: str, adults: int) -> List[Dict]:
+def _search_kiwi_flights(
+    origin: str, destination: str, departure_date: str, return_date: str, adults: int
+) -> List[Dict]:
     """Source 3: Kiwi.com via Tequila public search API."""
     try:
         import httpx
@@ -258,7 +290,9 @@ def _search_kiwi_flights(origin: str, destination: str, departure_date: str,
             return []
 
         parts = departure_date.split("-")
-        date_from = f"{parts[2]}/{parts[1]}/{parts[0]}" if len(parts) == 3 else departure_date
+        date_from = (
+            f"{parts[2]}/{parts[1]}/{parts[0]}" if len(parts) == 3 else departure_date
+        )
 
         params = {
             "fly_from": origin.upper()[:3],
@@ -271,7 +305,11 @@ def _search_kiwi_flights(origin: str, destination: str, departure_date: str,
         }
         if return_date:
             rparts = return_date.split("-")
-            ret_fmt = f"{rparts[2]}/{rparts[1]}/{rparts[0]}" if len(rparts) == 3 else return_date
+            ret_fmt = (
+                f"{rparts[2]}/{rparts[1]}/{rparts[0]}"
+                if len(rparts) == 3
+                else return_date
+            )
             params["return_from"] = ret_fmt
             params["return_to"] = ret_fmt
             params["flight_type"] = "round"
@@ -304,22 +342,28 @@ def _search_kiwi_flights(origin: str, destination: str, departure_date: str,
             # Build segments from route
             segments = []
             for route in kf.get("route", []):
-                segments.append({
-                    "departure": {
-                        "iataCode": route.get("flyFrom", ""),
-                        "at": route.get("local_departure", ""),
-                    },
-                    "arrival": {
-                        "iataCode": route.get("flyTo", ""),
-                        "at": route.get("local_arrival", ""),
-                    },
-                    "carrierCode": route.get("airline", ""),
-                    "number": str(route.get("flight_no", "")),
-                    "duration": "",
-                })
+                segments.append(
+                    {
+                        "departure": {
+                            "iataCode": route.get("flyFrom", ""),
+                            "at": route.get("local_departure", ""),
+                        },
+                        "arrival": {
+                            "iataCode": route.get("flyTo", ""),
+                            "at": route.get("local_arrival", ""),
+                        },
+                        "carrierCode": route.get("airline", ""),
+                        "number": str(route.get("flight_no", "")),
+                        "duration": "",
+                    }
+                )
 
             # Duration in hours/mins
-            dur_secs = kf.get("duration", {}).get("total", 0) if isinstance(kf.get("duration"), dict) else 0
+            dur_secs = (
+                kf.get("duration", {}).get("total", 0)
+                if isinstance(kf.get("duration"), dict)
+                else 0
+            )
             dur_h = dur_secs // 3600
             dur_m = (dur_secs % 3600) // 60
             duration_str = f"PT{dur_h}H{dur_m}M" if dur_secs else ""
@@ -347,8 +391,9 @@ def _search_kiwi_flights(origin: str, destination: str, departure_date: str,
         return []
 
 
-def _generate_mock_flights(origin: str, destination: str, departure_date: str,
-                           return_date: str, adults: int) -> List[Dict]:
+def _generate_mock_flights(
+    origin: str, destination: str, departure_date: str, return_date: str, adults: int
+) -> List[Dict]:
     """Fallback: realistic mock flight data when all APIs fail."""
     import random
 
@@ -376,44 +421,69 @@ def _generate_mock_flights(origin: str, destination: str, departure_date: str,
             "source": "Mock",
             "type": "flight-offer",
             "id": f"mock-{i+1}",
-            "itineraries": [{
-                "duration": f"PT{dur_h}H{dur_m}M",
-                "segments": [{
-                    "departure": {"iataCode": origin.upper()[:3], "at": f"{departure_date}T{dep_hour:02d}:00:00"},
-                    "arrival": {"iataCode": destination.upper()[:3],
-                                "at": f"{departure_date}T{(dep_hour + dur_h) % 24:02d}:{dur_m:02d}:00"},
-                    "carrierCode": airline["code"],
-                    "number": str(random.randint(100, 9999)),
+            "itineraries": [
+                {
                     "duration": f"PT{dur_h}H{dur_m}M",
-                }],
-            }],
-            "price": {"currency": "USD", "total": f"{price:.2f}", "base": f"{price * 0.85:.2f}",
-                      "grandTotal": f"{price:.2f}"},
+                    "segments": [
+                        {
+                            "departure": {
+                                "iataCode": origin.upper()[:3],
+                                "at": f"{departure_date}T{dep_hour:02d}:00:00",
+                            },
+                            "arrival": {
+                                "iataCode": destination.upper()[:3],
+                                "at": f"{departure_date}T{(dep_hour + dur_h) % 24:02d}:{dur_m:02d}:00",
+                            },
+                            "carrierCode": airline["code"],
+                            "number": str(random.randint(100, 9999)),
+                            "duration": f"PT{dur_h}H{dur_m}M",
+                        }
+                    ],
+                }
+            ],
+            "price": {
+                "currency": "USD",
+                "total": f"{price:.2f}",
+                "base": f"{price * 0.85:.2f}",
+                "grandTotal": f"{price:.2f}",
+            },
             "validatingAirlineCodes": [airline["code"]],
             "airline_name": airline["name"],
         }
         if return_date:
             ret_h = random.randint(8, 21)
-            flight["itineraries"].append({
-                "duration": f"PT{dur_h}H{dur_m + 10}M",
-                "segments": [{
-                    "departure": {"iataCode": destination.upper()[:3], "at": f"{return_date}T{ret_h:02d}:00:00"},
-                    "arrival": {"iataCode": origin.upper()[:3],
-                                "at": f"{return_date}T{(ret_h + dur_h) % 24:02d}:{(dur_m + 10) % 60:02d}:00"},
-                    "carrierCode": airline["code"],
-                    "number": str(random.randint(100, 9999)),
+            flight["itineraries"].append(
+                {
                     "duration": f"PT{dur_h}H{dur_m + 10}M",
-                }],
-            })
+                    "segments": [
+                        {
+                            "departure": {
+                                "iataCode": destination.upper()[:3],
+                                "at": f"{return_date}T{ret_h:02d}:00:00",
+                            },
+                            "arrival": {
+                                "iataCode": origin.upper()[:3],
+                                "at": f"{return_date}T{(ret_h + dur_h) % 24:02d}:{(dur_m + 10) % 60:02d}:00",
+                            },
+                            "carrierCode": airline["code"],
+                            "number": str(random.randint(100, 9999)),
+                            "duration": f"PT{dur_h}H{dur_m + 10}M",
+                        }
+                    ],
+                }
+            )
         mock_results.append(flight)
     return mock_results
 
 
-def _get_flight_price_metrics(origin: str, destination: str, departure_date: str, currency: str = "USD") -> Dict:
+def _get_flight_price_metrics(
+    origin: str, destination: str, departure_date: str, currency: str = "USD"
+) -> Dict:
     """Helper to fetch price metrics from Amadeus or return mock data."""
     try:
         # Try using the rate-limited client from shared module
         from app.amadeus_rate_limiter import get_amadeus_client, amadeus_call
+
         client = get_amadeus_client()
         if client:
             response = amadeus_call(
@@ -433,22 +503,43 @@ def _get_flight_price_metrics(origin: str, destination: str, departure_date: str
     # Fallback / Mock
     return {
         "source": "Mock",
-        "metrics": [{
-             "departureDate": departure_date,
-             "priceMetrics": [
-                {"quartileRanking": "MINIMUM", "amount": "120", "currencyCode": currency},
-                {"quartileRanking": "FIRST", "amount": "180", "currencyCode": currency},
-                {"quartileRanking": "MEDIUM", "amount": "250", "currencyCode": currency},
-                {"quartileRanking": "THIRD", "amount": "350", "currencyCode": currency},
-                {"quartileRanking": "MAXIMUM", "amount": "600", "currencyCode": currency},
-            ]
-        }]
+        "metrics": [
+            {
+                "departureDate": departure_date,
+                "priceMetrics": [
+                    {
+                        "quartileRanking": "MINIMUM",
+                        "amount": "120",
+                        "currencyCode": currency,
+                    },
+                    {
+                        "quartileRanking": "FIRST",
+                        "amount": "180",
+                        "currencyCode": currency,
+                    },
+                    {
+                        "quartileRanking": "MEDIUM",
+                        "amount": "250",
+                        "currencyCode": currency,
+                    },
+                    {
+                        "quartileRanking": "THIRD",
+                        "amount": "350",
+                        "currencyCode": currency,
+                    },
+                    {
+                        "quartileRanking": "MAXIMUM",
+                        "amount": "600",
+                        "currencyCode": currency,
+                    },
+                ],
+            }
+        ],
     }
 
 
 @tool
 def search_flights_tool(
-
     origin: str,
     destination: str,
     departure_date: str,
@@ -465,25 +556,35 @@ def search_flights_tool(
     - return_date: YYYY-MM-DD format (optional, for round trips)
     - adults: Number of adult passengers (default 1)
     """
-    print(f"  [Tool] Multi-Source Flight Search: {origin} -> {destination} on {departure_date}"
-          f" (Return: {return_date}, Adults: {adults})")
+    print(
+        f"  [Tool] Multi-Source Flight Search: {origin} -> {destination} on {departure_date}"
+        f" (Return: {return_date}, Adults: {adults})"
+    )
 
     all_results = []
 
     # Query all sources (each handles its own errors)
-    amadeus_flights = _search_amadeus_flights(origin, destination, departure_date, return_date, adults)
+    amadeus_flights = _search_amadeus_flights(
+        origin, destination, departure_date, return_date, adults
+    )
     all_results.extend(amadeus_flights)
 
-    google_flights = _search_google_flights(origin, destination, departure_date, return_date, adults)
+    google_flights = _search_google_flights(
+        origin, destination, departure_date, return_date, adults
+    )
     all_results.extend(google_flights)
 
-    kiwi_flights = _search_kiwi_flights(origin, destination, departure_date, return_date, adults)
+    kiwi_flights = _search_kiwi_flights(
+        origin, destination, departure_date, return_date, adults
+    )
     all_results.extend(kiwi_flights)
 
     # If no real data from any source, use mock fallback
     if not all_results:
         print("  [Tool] All flight sources failed, using mock data")
-        all_results = _generate_mock_flights(origin, destination, departure_date, return_date, adults)
+        all_results = _generate_mock_flights(
+            origin, destination, departure_date, return_date, adults
+        )
 
     # Sort by price (lowest first)
     def get_price(f):
@@ -491,18 +592,24 @@ def search_flights_tool(
             return float(f.get("price", {}).get("total", "99999"))
         except (ValueError, TypeError):
             return 99999
+
     all_results.sort(key=get_price)
 
     # Enrich with Price Analysis (Phase B1)
     try:
         price_analysis = _get_flight_price_metrics(origin, destination, departure_date)
         metrics = price_analysis.get("metrics", [])
-        
+
         # Find metrics for the departure date
-        relevant_metrics = next((m for m in metrics if m.get("departureDate") == departure_date), None)
-        
+        relevant_metrics = next(
+            (m for m in metrics if m.get("departureDate") == departure_date), None
+        )
+
         if relevant_metrics:
-            quartiles = {pm["quartileRanking"]: float(pm["amount"]) for pm in relevant_metrics.get("priceMetrics", [])}
+            quartiles = {
+                pm["quartileRanking"]: float(pm["amount"])
+                for pm in relevant_metrics.get("priceMetrics", [])
+            }
             min_price = quartiles.get("MINIMUM", 0)
             med_price = quartiles.get("MEDIUM", 0)
             max_price = quartiles.get("MAXIMUM", 0)
@@ -515,10 +622,10 @@ def search_flights_tool(
                     elif p_val <= med_price:
                         flight["deal_status"] = "GOOD DEAL"
                     elif p_val <= max_price:
-                         flight["deal_status"] = "FAIR"
+                        flight["deal_status"] = "FAIR"
                     else:
-                         flight["deal_status"] = "PRICEY"
-                    
+                        flight["deal_status"] = "PRICEY"
+
                     flight["price_context"] = f"Median is ${med_price}"
                 except:
                     pass
@@ -535,19 +642,21 @@ def search_flights_tool(
 # 3. HOTEL SEARCH (Amadeus Integration + Smart Mock Fallback)
 # =====================================================================
 
+
 def _get_hotel_sentiments(hotel_ids: List[str]) -> Dict:
     """Helper to fetch hotel sentiments from Amadeus."""
     if not hotel_ids:
         return {"source": "None", "data": []}
-    
+
     try:
         from app.amadeus_rate_limiter import get_amadeus_client, amadeus_call
+
         client = get_amadeus_client()
         if client:
             # Amadeus Sentiment API takes comma-separated IDs
             response = amadeus_call(
                 client.e_reputation.hotel_sentiments.get,
-                hotelIds=",".join(hotel_ids)[:2000]
+                hotelIds=",".join(hotel_ids)[:2000],
             )
             data = response.data
             if data:
@@ -558,19 +667,21 @@ def _get_hotel_sentiments(hotel_ids: List[str]) -> Dict:
     # Fallback / Mock
     mock_data = []
     for h_id in hotel_ids:
-        mock_data.append({
-            "hotelId": h_id,
-            "overallRating": 85,
-            "numberOfRatings": 120,
-            "sentiments": {
-                "sleepQuality": 85,
-                "service": 80,
-                "facilities": 78,
-                "location": 90,
-                "valueForMoney": 75,
-            },
-            "source": "Mock"
-        })
+        mock_data.append(
+            {
+                "hotelId": h_id,
+                "overallRating": 85,
+                "numberOfRatings": 120,
+                "sentiments": {
+                    "sleepQuality": 85,
+                    "service": 80,
+                    "facilities": 78,
+                    "location": 90,
+                    "valueForMoney": 75,
+                },
+                "source": "Mock",
+            }
+        )
     return {"source": "Mock", "data": mock_data}
 
 
@@ -601,6 +712,7 @@ def search_hotels_tool(
     )
 
     from app.amadeus_rate_limiter import get_amadeus_client, amadeus_call
+
     amadeus = get_amadeus_client()
 
     # --- Real Amadeus API ---
@@ -617,8 +729,7 @@ def search_hotels_tool(
                 list_params["amenities"] = ",".join(amenities).upper()
 
             hotel_list = amadeus_call(
-                amadeus.reference_data.locations.hotels.by_city.get,
-                **list_params
+                amadeus.reference_data.locations.hotels.by_city.get, **list_params
             )
 
             if not hotel_list.data:
@@ -635,7 +746,9 @@ def search_hotels_tool(
                 hotel_details[h["hotelId"]] = {
                     "geoCode": h.get("geoCode", {}),
                     "address": h.get("address", {}),
-                    "rating": h.get("rating", None), # Some endpoints might return it here
+                    "rating": h.get(
+                        "rating", None
+                    ),  # Some endpoints might return it here
                 }
 
             # Get top 20 IDs (Amadeus allows up to 20-50 depending on endpoint, limit to 20 to be safe)
@@ -654,18 +767,20 @@ def search_hotels_tool(
 
             # STEP 3: Clean results
             results = []
-            for offer in offers_response.data[:15]: # Process more to allow sorting
+            for offer in offers_response.data[:15]:  # Process more to allow sorting
                 hid = offer["hotel"]["hotelId"]
                 details = hotel_details.get(hid, {})
-                
+
                 # Try to get rating from offer or details
                 rating = offer["hotel"].get("rating") or details.get("rating") or "N/A"
-                
+
                 # Format address
                 addr_obj = details.get("address", {})
-                address_str = ", ".join([line for line in addr_obj.get("lines", []) if line] + 
-                                      [addr_obj.get("cityName", ""), addr_obj.get("countryCode", "")])
-                
+                address_str = ", ".join(
+                    [line for line in addr_obj.get("lines", []) if line]
+                    + [addr_obj.get("cityName", ""), addr_obj.get("countryCode", "")]
+                )
+
                 hotel_info = {
                     "name": offer["hotel"]["name"],
                     "hotelId": hid,
@@ -704,26 +819,31 @@ def search_hotels_tool(
             try:
                 found_ids = [h["hotelId"] for h in results if "hotelId" in h]
                 if found_ids:
-                     sentiments_data = _get_hotel_sentiments(found_ids)
-                     sentiments_map = {item["hotelId"]: item for item in sentiments_data.get("data", [])}
-                     
-                     for h in results:
-                         h_id = h.get("hotelId")
-                         if h_id and h_id in sentiments_map:
-                             s_info = sentiments_map[h_id]
-                             h["sentiment_rating"] = s_info.get("overallRating", "N/A")
-                             h["review_count"] = s_info.get("numberOfRatings", 0)
-                             h["sentiment_summary"] = s_info.get("sentiments", {})
+                    sentiments_data = _get_hotel_sentiments(found_ids)
+                    sentiments_map = {
+                        item["hotelId"]: item
+                        for item in sentiments_data.get("data", [])
+                    }
+
+                    for h in results:
+                        h_id = h.get("hotelId")
+                        if h_id and h_id in sentiments_map:
+                            s_info = sentiments_map[h_id]
+                            h["sentiment_rating"] = s_info.get("overallRating", "N/A")
+                            h["review_count"] = s_info.get("numberOfRatings", 0)
+                            h["sentiment_summary"] = s_info.get("sentiments", {})
             except Exception as e:
                 print(f"  [Warning] Sentiment enrichment failed: {e}")
 
             # Sorting behavior
             if sort_by == "rating":
+
                 def get_rating_safe(h):
                     r = h.get("sentiment_rating", "N/A")
                     if isinstance(r, (int, float)):
                         return float(r)
                     return 0
+
                 results.sort(key=get_rating_safe, reverse=True)
                 print("  [Tool] Sorted results by Rating")
             else:
@@ -733,7 +853,8 @@ def search_hotels_tool(
                     try:
                         return float(h["total_price"].split()[0])
                     except:
-                        return float('inf')
+                        return float("inf")
+
                 results.sort(key=get_price_safe)
                 print("  [Tool] Sorted results by Price")
 
@@ -798,7 +919,16 @@ def search_hotels_tool(
         rating = round(random.uniform(3.5, 5.0), 1)
         total_price = price_per_night * nights
 
-        available_amenities = ["WiFi", "Breakfast", "Air Conditioning", "Pool", "Gym", "Spa", "Parking", "Restaurant"]
+        available_amenities = [
+            "WiFi",
+            "Breakfast",
+            "Air Conditioning",
+            "Pool",
+            "Gym",
+            "Spa",
+            "Parking",
+            "Restaurant",
+        ]
         hotel_amenities = random.sample(available_amenities, k=random.randint(2, 5))
 
         mock_hotels.append(
@@ -825,6 +955,7 @@ def search_hotels_tool(
 # 4. SUGGEST DESTINATION (Wikivoyage RAG + Amadeus Logic)
 # =====================================================================
 
+
 def _resolve_city_to_iata(city_name: str) -> Optional[str]:
     """Resolves a city name to its IATA code using Amadeus."""
     try:
@@ -832,16 +963,16 @@ def _resolve_city_to_iata(city_name: str) -> Optional[str]:
         if not amadeus:
             return None
         from app.amadeus_rate_limiter import amadeus_call
+
         response = amadeus_call(
-            amadeus.reference_data.locations.get,
-            keyword=city_name,
-            subType="CITY"
+            amadeus.reference_data.locations.get, keyword=city_name, subType="CITY"
         )
         if response.data:
             return response.data[0].get("iataCode")
     except Exception:
         pass
     return None
+
 
 def _get_similar_destinations(city_code: str) -> List[Dict]:
     """Get Amadeus travel recommendations based on a city code."""
@@ -850,22 +981,26 @@ def _get_similar_destinations(city_code: str) -> List[Dict]:
         if not amadeus:
             return []
         from app.amadeus_rate_limiter import amadeus_call
+
         response = amadeus_call(
             amadeus.reference_data.recommended_locations.get,
             cityCodes=city_code,
-            travelerCountryCode="US" 
+            travelerCountryCode="US",
         )
         data = []
         for rec in response.data[:5]:
-             data.append({
-                 "destination": rec.get("name"),
-                 "summary": f"Recommended by Amadeus as similar to {city_code}. Type: {rec.get('subType')}",
-                 "source": "Amadeus (AI Recommendation)",
-                 "score": rec.get("relevance", 0.5)
-             })
+            data.append(
+                {
+                    "destination": rec.get("name"),
+                    "summary": f"Recommended by Amadeus as similar to {city_code}. Type: {rec.get('subType')}",
+                    "source": "Amadeus (AI Recommendation)",
+                    "score": rec.get("relevance", 0.5),
+                }
+            )
         return data
     except Exception:
         return []
+
 
 @tool
 def suggest_destination_tool(
@@ -914,7 +1049,7 @@ def suggest_destination_tool(
                         "destination": title,
                         "summary": snippet,
                         "source": "Wikivoyage",
-                        "score": match.get("score", 0)
+                        "score": match.get("score", 0),
                     }
                 )
             # Enrich with Amadeus Recommendations (Phase B3)
@@ -925,12 +1060,16 @@ def suggest_destination_tool(
                     if iata:
                         similar = _get_similar_destinations(iata)
                         if similar:
-                            print(f"  [Tool] Amadeus enriched with {len(similar)} similar destinations to {top_dest}")
+                            print(
+                                f"  [Tool] Amadeus enriched with {len(similar)} similar destinations to {top_dest}"
+                            )
                             destinations.extend(similar)
             except Exception as e:
                 print(f"  [Warning] Amadeus enrich failed: {e}")
 
-            print(f"  [Tool] Returned {len(destinations)} destination suggestions (RAG + Amadeus)")
+            print(
+                f"  [Tool] Returned {len(destinations)} destination suggestions (RAG + Amadeus)"
+            )
             return json.dumps(destinations, indent=2)
     except Exception as e:
         print(f"  [Warning] Wikivoyage RAG failed: {e}")
@@ -993,10 +1132,13 @@ def suggest_attractions_tool(
             for match in matches:
                 metadata = match.get("metadata", {})
                 title = metadata.get("title", "Unknown")
-                
+
                 # Filter by relevance: Title must match destination (fuzzy)
                 # This prevents "Paris" results showing up for "Tokyo" when index is small
-                if destination.lower() not in title.lower() and title.lower() not in destination.lower():
+                if (
+                    destination.lower() not in title.lower()
+                    and title.lower() not in destination.lower()
+                ):
                     continue
 
                 section = metadata.get("section", "")
@@ -1011,14 +1153,14 @@ def suggest_attractions_tool(
                             "section": section,
                             "description": snippet,
                             "source": "Wikivoyage",
-                            "score": match.get("score", 0)
+                            "score": match.get("score", 0),
                         }
                     )
-            
+
             if attractions:
                 print(f"  [Tool] RAG returned {len(attractions)} attractions")
                 return json.dumps(attractions, indent=2)
-            
+
     except Exception as e:
         print(f"  [Warning] Wikivoyage RAG failed: {e}")
 
@@ -1110,10 +1252,10 @@ def create_user_profile_tool(
             embedding_response = pc.inference.embed(
                 model="llama-text-embed-v2",
                 inputs=[summary],
-                parameters={"input_type": "passage", "truncate": "END"}
+                parameters={"input_type": "passage", "truncate": "END"},
             )
             vector_values = embedding_response[0]["values"]
-            
+
             # 2. Prepare Metadata
             metadata = {
                 "name": name,
@@ -1121,19 +1263,19 @@ def create_user_profile_tool(
                 "travel_style": travel_style or "general",
                 "preferences": ", ".join(preferences) if preferences else "",
                 "dietary_needs": ", ".join(dietary_needs) if dietary_needs else "",
-                "accessibility_needs": ", ".join(accessibility_needs) if accessibility_needs else "",
-                "text": summary  # Store text for retrieval
+                "accessibility_needs": (
+                    ", ".join(accessibility_needs) if accessibility_needs else ""
+                ),
+                "text": summary,  # Store text for retrieval
             }
-            
+
             # 3. Upsert
             vector_id = f"profile_{email.replace('@', '_').replace('.', '_')}"
             index.upsert(
-                vectors=[{
-                    "id": vector_id,
-                    "values": vector_values,
-                    "metadata": metadata
-                }],
-                namespace="user_profiles"
+                vectors=[
+                    {"id": vector_id, "values": vector_values, "metadata": metadata}
+                ],
+                namespace="user_profiles",
             )
 
             print(f"  [Tool] Profile stored in Pinecone")
@@ -1191,7 +1333,9 @@ def create_plan_tool(
     - hotels_data: JSON string of hotel search results (from search_hotels_tool)
     - attractions_data: JSON string of attraction results (from suggest_attractions_tool)
     """
-    print(f"  [Tool] Creating plan: {origin} -> {destination}, {duration_days} days, ${budget} {currency}")
+    print(
+        f"  [Tool] Creating plan: {origin} -> {destination}, {duration_days} days, ${budget} {currency}"
+    )
 
     # Parse JSON inputs safely
     def safe_parse(data_str):
@@ -1209,12 +1353,42 @@ def create_plan_tool(
 
     # Budget allocation by trip type
     allocation = {
-        "honeymoon": {"accommodation": 0.45, "activities": 0.25, "dining": 0.20, "transport": 0.10},
-        "family": {"accommodation": 0.40, "activities": 0.35, "dining": 0.15, "transport": 0.10},
-        "business": {"accommodation": 0.50, "activities": 0.05, "dining": 0.20, "transport": 0.25},
-        "adventure": {"accommodation": 0.25, "activities": 0.50, "dining": 0.10, "transport": 0.15},
-        "solo": {"accommodation": 0.35, "activities": 0.40, "dining": 0.15, "transport": 0.10},
-        "general": {"accommodation": 0.40, "activities": 0.30, "dining": 0.15, "transport": 0.15},
+        "honeymoon": {
+            "accommodation": 0.45,
+            "activities": 0.25,
+            "dining": 0.20,
+            "transport": 0.10,
+        },
+        "family": {
+            "accommodation": 0.40,
+            "activities": 0.35,
+            "dining": 0.15,
+            "transport": 0.10,
+        },
+        "business": {
+            "accommodation": 0.50,
+            "activities": 0.05,
+            "dining": 0.20,
+            "transport": 0.25,
+        },
+        "adventure": {
+            "accommodation": 0.25,
+            "activities": 0.50,
+            "dining": 0.10,
+            "transport": 0.15,
+        },
+        "solo": {
+            "accommodation": 0.35,
+            "activities": 0.40,
+            "dining": 0.15,
+            "transport": 0.10,
+        },
+        "general": {
+            "accommodation": 0.40,
+            "activities": 0.30,
+            "dining": 0.15,
+            "transport": 0.15,
+        },
     }
 
     alloc = allocation.get(trip_type.lower(), allocation["general"])
@@ -1265,7 +1439,9 @@ def create_plan_tool(
             first_flight = flights[0]
             if isinstance(first_flight, dict):
                 price_data = first_flight.get("price", {})
-                flight_cost = float(price_data.get("total", price_data.get("grandTotal", 0)))
+                flight_cost = float(
+                    price_data.get("total", price_data.get("grandTotal", 0))
+                )
         except (ValueError, TypeError, IndexError):
             flight_cost = 0
 
@@ -1276,7 +1452,9 @@ def create_plan_tool(
             if isinstance(first_hotel, dict):
                 total_str = first_hotel.get("total_price", "0")
                 # Extract numeric value
-                hotel_cost = float("".join(c for c in str(total_str) if c.isdigit() or c == ".") or "0")
+                hotel_cost = float(
+                    "".join(c for c in str(total_str) if c.isdigit() or c == ".") or "0"
+                )
         except (ValueError, TypeError, IndexError):
             hotel_cost = 0
 
@@ -1300,10 +1478,10 @@ def create_plan_tool(
         "status": "draft",
     }
 
-    print(f"  [Tool] Plan created: {duration_days} days, {len(itinerary)} itinerary items")
+    print(
+        f"  [Tool] Plan created: {duration_days} days, {len(itinerary)} itinerary items"
+    )
     return json.dumps(plan, indent=2)
-
-
 
 
 # =====================================================================
@@ -1320,7 +1498,9 @@ def search_activities_tool(
     Requires latitude and longitude of the destination.
     Returns a list of activities with names, descriptions, prices, and ratings.
     """
-    print(f"  [Tool] Searching Activities: lat={latitude}, lng={longitude}, radius={radius}")
+    print(
+        f"  [Tool] Searching Activities: lat={latitude}, lng={longitude}, radius={radius}"
+    )
 
     amadeus = _get_amadeus_client()
     if amadeus:
@@ -1332,16 +1512,18 @@ def search_activities_tool(
             )
             activities = []
             for act in response.data[:10]:
-                activities.append({
-                    "name": act.get("name", "Unknown Activity"),
-                    "description": act.get("shortDescription", ""),
-                    "rating": act.get("rating", "N/A"),
-                    "price": act.get("price", {}).get("amount", "N/A"),
-                    "currency": act.get("price", {}).get("currencyCode", "USD"),
-                    "booking_link": act.get("bookingLink", ""),
-                    "pictures": [p for p in act.get("pictures", [])[:2]],
-                    "source": "Amadeus",
-                })
+                activities.append(
+                    {
+                        "name": act.get("name", "Unknown Activity"),
+                        "description": act.get("shortDescription", ""),
+                        "rating": act.get("rating", "N/A"),
+                        "price": act.get("price", {}).get("amount", "N/A"),
+                        "currency": act.get("price", {}).get("currencyCode", "USD"),
+                        "booking_link": act.get("bookingLink", ""),
+                        "pictures": [p for p in act.get("pictures", [])[:2]],
+                        "source": "Amadeus",
+                    }
+                )
             if activities:
                 print(f"  [Amadeus] Found {len(activities)} activities")
                 return json.dumps(activities, indent=2)
@@ -1350,9 +1532,30 @@ def search_activities_tool(
 
     # Mock fallback
     mock = [
-        {"name": "City Walking Tour", "description": "Guided walking tour of historic center", "rating": "4.5", "price": "35", "currency": "USD", "source": "mock"},
-        {"name": "Local Food Tasting", "description": "Sample local cuisine with a guide", "rating": "4.7", "price": "55", "currency": "USD", "source": "mock"},
-        {"name": "Sunset Boat Cruise", "description": "Evening cruise with panoramic views", "rating": "4.3", "price": "70", "currency": "USD", "source": "mock"},
+        {
+            "name": "City Walking Tour",
+            "description": "Guided walking tour of historic center",
+            "rating": "4.5",
+            "price": "35",
+            "currency": "USD",
+            "source": "mock",
+        },
+        {
+            "name": "Local Food Tasting",
+            "description": "Sample local cuisine with a guide",
+            "rating": "4.7",
+            "price": "55",
+            "currency": "USD",
+            "source": "mock",
+        },
+        {
+            "name": "Sunset Boat Cruise",
+            "description": "Evening cruise with panoramic views",
+            "rating": "4.3",
+            "price": "70",
+            "currency": "USD",
+            "source": "mock",
+        },
     ]
     return json.dumps(mock, indent=2)
 
@@ -1372,17 +1575,21 @@ def flight_price_analysis_tool(
     cheap, typical, or expensive. Uses Amadeus Flight Price Analysis API.
     Origin and destination should be IATA airport/city codes (e.g., 'LON', 'PAR').
     """
-    print(f"  [Tool] Flight Price Analysis: {origin} -> {destination} on {departure_date}")
+    print(
+        f"  [Tool] Flight Price Analysis: {origin} -> {destination} on {departure_date}"
+    )
 
-    print(f"  [Tool] Flight Price Analysis: {origin} -> {destination} on {departure_date}")
+    print(
+        f"  [Tool] Flight Price Analysis: {origin} -> {destination} on {departure_date}"
+    )
 
     data = _get_flight_price_metrics(origin, destination, departure_date, currency)
     metrics = data.get("metrics", [])
-    
+
     if data.get("source") == "Mock":
-         # Add a note that it's mock data if needed, or just return as is
-         pass
-         
+        # Add a note that it's mock data if needed, or just return as is
+        pass
+
     if metrics:
         print(f"  [Amadeus] Returned price metrics for {origin}->{destination}")
         return json.dumps(metrics, indent=2)
@@ -1404,7 +1611,9 @@ def flight_status_tool(
     Requires the carrier code (e.g., 'BA') and flight number (e.g., '123').
     Date format: YYYY-MM-DD.
     """
-    print(f"  [Tool] Flight Status: {carrier_code}{flight_number} on {scheduled_departure_date}")
+    print(
+        f"  [Tool] Flight Status: {carrier_code}{flight_number} on {scheduled_departure_date}"
+    )
 
     amadeus = _get_amadeus_client()
     if amadeus:
@@ -1418,15 +1627,29 @@ def flight_status_tool(
             for fl in response.data[:3]:
                 dep = fl.get("flightPoints", [{}])[0] if fl.get("flightPoints") else {}
                 arr = fl.get("flightPoints", [{}])[-1] if fl.get("flightPoints") else {}
-                flights.append({
-                    "carrier": carrier_code.upper(),
-                    "flight_number": flight_number,
-                    "departure": dep.get("iataCode", ""),
-                    "departure_time": dep.get("departure", {}).get("timings", [{}])[0].get("value", "") if dep.get("departure") else "",
-                    "arrival": arr.get("iataCode", ""),
-                    "arrival_time": arr.get("arrival", {}).get("timings", [{}])[0].get("value", "") if arr.get("arrival") else "",
-                    "source": "Amadeus",
-                })
+                flights.append(
+                    {
+                        "carrier": carrier_code.upper(),
+                        "flight_number": flight_number,
+                        "departure": dep.get("iataCode", ""),
+                        "departure_time": (
+                            dep.get("departure", {})
+                            .get("timings", [{}])[0]
+                            .get("value", "")
+                            if dep.get("departure")
+                            else ""
+                        ),
+                        "arrival": arr.get("iataCode", ""),
+                        "arrival_time": (
+                            arr.get("arrival", {})
+                            .get("timings", [{}])[0]
+                            .get("value", "")
+                            if arr.get("arrival")
+                            else ""
+                        ),
+                        "source": "Amadeus",
+                    }
+                )
             if flights:
                 print(f"  [Amadeus] Found {len(flights)} flight schedule entries")
                 return json.dumps(flights, indent=2)
@@ -1471,16 +1694,18 @@ def airport_search_tool(
             )
             locations = []
             for loc in response.data[:10]:
-                locations.append({
-                    "name": loc.get("name", ""),
-                    "iata_code": loc.get("iataCode", ""),
-                    "sub_type": loc.get("subType", ""),
-                    "city": loc.get("address", {}).get("cityName", ""),
-                    "country": loc.get("address", {}).get("countryCode", ""),
-                    "latitude": loc.get("geoCode", {}).get("latitude"),
-                    "longitude": loc.get("geoCode", {}).get("longitude"),
-                    "source": "Amadeus",
-                })
+                locations.append(
+                    {
+                        "name": loc.get("name", ""),
+                        "iata_code": loc.get("iataCode", ""),
+                        "sub_type": loc.get("subType", ""),
+                        "city": loc.get("address", {}).get("cityName", ""),
+                        "country": loc.get("address", {}).get("countryCode", ""),
+                        "latitude": loc.get("geoCode", {}).get("latitude"),
+                        "longitude": loc.get("geoCode", {}).get("longitude"),
+                        "source": "Amadeus",
+                    }
+                )
             if locations:
                 print(f"  [Amadeus] Found {len(locations)} locations for '{keyword}'")
                 return json.dumps(locations, indent=2)
@@ -1489,17 +1714,75 @@ def airport_search_tool(
 
     # Mock fallback — common city → IATA mappings
     common_codes = {
-        "paris": [{"name": "PARIS", "iata_code": "PAR", "sub_type": "CITY", "country": "FR", "source": "mock"}],
-        "london": [{"name": "LONDON", "iata_code": "LON", "sub_type": "CITY", "country": "GB", "source": "mock"}],
-        "new york": [{"name": "NEW YORK", "iata_code": "NYC", "sub_type": "CITY", "country": "US", "source": "mock"}],
-        "tokyo": [{"name": "TOKYO", "iata_code": "TYO", "sub_type": "CITY", "country": "JP", "source": "mock"}],
-        "bali": [{"name": "BALI", "iata_code": "DPS", "sub_type": "AIRPORT", "country": "ID", "source": "mock"}],
-        "rome": [{"name": "ROME", "iata_code": "ROM", "sub_type": "CITY", "country": "IT", "source": "mock"}],
+        "paris": [
+            {
+                "name": "PARIS",
+                "iata_code": "PAR",
+                "sub_type": "CITY",
+                "country": "FR",
+                "source": "mock",
+            }
+        ],
+        "london": [
+            {
+                "name": "LONDON",
+                "iata_code": "LON",
+                "sub_type": "CITY",
+                "country": "GB",
+                "source": "mock",
+            }
+        ],
+        "new york": [
+            {
+                "name": "NEW YORK",
+                "iata_code": "NYC",
+                "sub_type": "CITY",
+                "country": "US",
+                "source": "mock",
+            }
+        ],
+        "tokyo": [
+            {
+                "name": "TOKYO",
+                "iata_code": "TYO",
+                "sub_type": "CITY",
+                "country": "JP",
+                "source": "mock",
+            }
+        ],
+        "bali": [
+            {
+                "name": "BALI",
+                "iata_code": "DPS",
+                "sub_type": "AIRPORT",
+                "country": "ID",
+                "source": "mock",
+            }
+        ],
+        "rome": [
+            {
+                "name": "ROME",
+                "iata_code": "ROM",
+                "sub_type": "CITY",
+                "country": "IT",
+                "source": "mock",
+            }
+        ],
     }
     key = keyword.lower().strip()
     if key in common_codes:
         return json.dumps(common_codes[key], indent=2)
-    return json.dumps([{"name": keyword.upper(), "iata_code": keyword.upper()[:3], "sub_type": "CITY", "source": "mock_guess"}], indent=2)
+    return json.dumps(
+        [
+            {
+                "name": keyword.upper(),
+                "iata_code": keyword.upper()[:3],
+                "sub_type": "CITY",
+                "source": "mock_guess",
+            }
+        ],
+        indent=2,
+    )
 
 
 # =====================================================================
@@ -1523,12 +1806,14 @@ def airline_lookup_tool(
             )
             airlines = []
             for al in response.data:
-                airlines.append({
-                    "code": al.get("iataCode", airline_code.upper()),
-                    "name": al.get("businessName", "Unknown Airline"),
-                    "common_name": al.get("commonName", ""),
-                    "source": "Amadeus",
-                })
+                airlines.append(
+                    {
+                        "code": al.get("iataCode", airline_code.upper()),
+                        "name": al.get("businessName", "Unknown Airline"),
+                        "common_name": al.get("commonName", ""),
+                        "source": "Amadeus",
+                    }
+                )
             if airlines:
                 print(f"  [Amadeus] Found airline: {airlines[0].get('name')}")
                 return json.dumps(airlines, indent=2)
@@ -1537,13 +1822,23 @@ def airline_lookup_tool(
 
     # Mock fallback
     known_airlines = {
-        "BA": "British Airways", "EK": "Emirates", "AA": "American Airlines",
-        "UA": "United Airlines", "DL": "Delta Air Lines", "LH": "Lufthansa",
-        "AF": "Air France", "QR": "Qatar Airways", "SQ": "Singapore Airlines",
-        "TK": "Turkish Airlines", "EY": "Etihad Airways", "NH": "All Nippon Airways",
+        "BA": "British Airways",
+        "EK": "Emirates",
+        "AA": "American Airlines",
+        "UA": "United Airlines",
+        "DL": "Delta Air Lines",
+        "LH": "Lufthansa",
+        "AF": "Air France",
+        "QR": "Qatar Airways",
+        "SQ": "Singapore Airlines",
+        "TK": "Turkish Airlines",
+        "EY": "Etihad Airways",
+        "NH": "All Nippon Airways",
     }
     name = known_airlines.get(airline_code.upper(), f"Airline {airline_code.upper()}")
-    return json.dumps([{"code": airline_code.upper(), "name": name, "source": "mock"}], indent=2)
+    return json.dumps(
+        [{"code": airline_code.upper(), "name": name, "source": "mock"}], indent=2
+    )
 
 
 # =====================================================================
@@ -1570,16 +1865,20 @@ def travel_recommendations_tool(
             )
             recommendations = []
             for rec in response.data[:8]:
-                recommendations.append({
-                    "name": rec.get("name", ""),
-                    "iata_code": rec.get("iataCode", ""),
-                    "sub_type": rec.get("subType", ""),
-                    "type": rec.get("type", ""),
-                    "relevance": rec.get("relevance", 0),
-                    "source": "Amadeus",
-                })
+                recommendations.append(
+                    {
+                        "name": rec.get("name", ""),
+                        "iata_code": rec.get("iataCode", ""),
+                        "sub_type": rec.get("subType", ""),
+                        "type": rec.get("type", ""),
+                        "relevance": rec.get("relevance", 0),
+                        "source": "Amadeus",
+                    }
+                )
             if recommendations:
-                print(f"  [Amadeus] Found {len(recommendations)} destination recommendations")
+                print(
+                    f"  [Amadeus] Found {len(recommendations)} destination recommendations"
+                )
                 return json.dumps(recommendations, indent=2)
         except Exception as e:
             print(f"  [Amadeus Recommendations] Failed: {e}")
@@ -1618,13 +1917,15 @@ def cheapest_flights_tool(
             )
             dates = []
             for item in response.data[:10]:
-                dates.append({
-                    "departure_date": item.get("departureDate", ""),
-                    "return_date": item.get("returnDate", ""),
-                    "price": item.get("price", {}).get("total", "N/A"),
-                    "currency": item.get("price", {}).get("currency", "USD"),
-                    "source": "Amadeus",
-                })
+                dates.append(
+                    {
+                        "departure_date": item.get("departureDate", ""),
+                        "return_date": item.get("returnDate", ""),
+                        "price": item.get("price", {}).get("total", "N/A"),
+                        "currency": item.get("price", {}).get("currency", "USD"),
+                        "source": "Amadeus",
+                    }
+                )
             if dates:
                 print(f"  [Amadeus] Found {len(dates)} cheapest date options")
                 return json.dumps(dates, indent=2)
@@ -1633,9 +1934,27 @@ def cheapest_flights_tool(
 
     # Mock fallback
     mock = [
-        {"departure_date": "2026-07-15", "return_date": "2026-07-22", "price": "180", "currency": "USD", "source": "mock"},
-        {"departure_date": "2026-07-20", "return_date": "2026-07-27", "price": "195", "currency": "USD", "source": "mock"},
-        {"departure_date": "2026-08-01", "return_date": "2026-08-08", "price": "210", "currency": "USD", "source": "mock"},
+        {
+            "departure_date": "2026-07-15",
+            "return_date": "2026-07-22",
+            "price": "180",
+            "currency": "USD",
+            "source": "mock",
+        },
+        {
+            "departure_date": "2026-07-20",
+            "return_date": "2026-07-27",
+            "price": "195",
+            "currency": "USD",
+            "source": "mock",
+        },
+        {
+            "departure_date": "2026-08-01",
+            "return_date": "2026-08-08",
+            "price": "210",
+            "currency": "USD",
+            "source": "mock",
+        },
     ]
     return json.dumps(mock, indent=2)
 
@@ -1656,13 +1975,10 @@ def hotel_ratings_tool(
 
     data = _get_hotel_sentiments(hotel_ids)
     if data.get("data"):
-         print(f"  [Amadeus] Found ratings for {len(data['data'])} hotels")
-         return json.dumps(data["data"], indent=2)
+        print(f"  [Amadeus] Found ratings for {len(data['data'])} hotels")
+        return json.dumps(data["data"], indent=2)
 
     return json.dumps({"error": "No ratings found"}, indent=2)
-
-
-
 
 
 # =====================================================================
@@ -1674,6 +1990,8 @@ def resolve_airport_code_tool(keyword: str) -> str:
     Resolves a city name, airport name, or partial text to IATA airport/city codes.
     Use this BEFORE calling search_flights_tool or search_hotels_tool when the user
     provides a city name instead of an IATA code.
+    IMPORTANT: If the known destination is a country and not a city, you MUST pass
+    the capital city name of that country as the keyword, NOT the country name.
     Inputs:
     - keyword: City name or airport name (e.g., "Paris", "London Heathrow", "JFK")
     Returns: List of matching airports/cities with IATA codes, names, and types.
@@ -1685,29 +2003,110 @@ def resolve_airport_code_tool(keyword: str) -> str:
     amadeus = get_amadeus_client()
     if not amadeus:
         # Fallback: return the keyword as-is (assume it's already a code)
-        return json.dumps([{"iataCode": keyword.upper()[:3], "name": keyword, "type": "fallback"}])
+        return json.dumps(
+            [{"iataCode": keyword.upper()[:3], "name": keyword, "type": "fallback"}]
+        )
 
-    try:
+    # Inner helper to perform the actual amadeus extraction
+    def _fetch_locations(search_kw):
         response = amadeus_call(
             amadeus.reference_data.locations.get,
-            keyword=keyword,
+            keyword=search_kw,
             subType="AIRPORT,CITY",
         )
         results = []
         for loc in response.data[:5]:
-            results.append({
-                "iataCode": loc.get("iataCode", ""),
-                "name": loc.get("name", ""),
-                "detailedName": loc.get("detailedName", ""),
-                "type": loc.get("subType", ""),
-                "cityName": loc.get("address", {}).get("cityName", ""),
-                "countryCode": loc.get("address", {}).get("countryCode", ""),
-            })
+            results.append(
+                {
+                    "iataCode": loc.get("iataCode", ""),
+                    "name": loc.get("name", ""),
+                    "detailedName": loc.get("detailedName", ""),
+                    "type": loc.get("subType", ""),
+                    "cityName": loc.get("address", {}).get("cityName", ""),
+                    "countryCode": loc.get("address", {}).get("countryCode", ""),
+                }
+            )
+        return results
+
+    try:
+        # 1. Attempt initial fetch
+        results = _fetch_locations(keyword)
+
+        # 2. If 0 results, fall back to LLM resolution (in case it is a country like "Turkey")
+        if len(results) == 0:
+            import os
+            from langchain_openai import AzureChatOpenAI
+            from langchain_community.chat_models import ChatOllama
+            from langchain_core.messages import SystemMessage, HumanMessage
+
+            print(
+                f"  [Tool] 0 results found for '{keyword}'. Attempting LLM resolution..."
+            )
+
+            try:
+                if os.getenv("AZURE_OPENAI_API_KEY"):
+                    llm = AzureChatOpenAI(
+                        azure_deployment=os.environ.get(
+                            "AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4.1-mini"
+                        ),
+                        api_version=os.environ.get(
+                            "AZURE_OPENAI_API_VERSION", "2025-01-01-preview"
+                        ),
+                        temperature=0,
+                    )
+                else:
+                    llm = ChatOllama(model="llama3", temperature=0)
+
+                system_msg = SystemMessage(
+                    content="You are a geographic assistant. If the user provides a country name, reply ONLY with the name of its capital city. If the user provides a city or airport name, reply EXACTLY with that city or airport name. Do not include any punctuation, conversational text, or explanation."
+                )
+                human_msg = HumanMessage(content=keyword)
+
+                resolved_keyword = llm.invoke([system_msg, human_msg]).content.strip()
+                print(
+                    f"  [Tool] LLM resolved '{keyword}' to '{resolved_keyword}'. Retrying search..."
+                )
+                keyword = resolved_keyword
+
+                # Try fetching again with the resolved keyword
+                results = _fetch_locations(keyword)
+            except Exception as llm_e:
+                print(f"  [Tool] LLM resolution failed: {llm_e}")
+
         print(f"  [Tool] Found {len(results)} locations for '{keyword}'")
+        if not results:
+            # Final mock fallback for common cities that amadeus sandbox might miss
+            common_mappings = {
+                "tel aviv": "TLV",
+                "paris": "PAR",
+                "london": "LON",
+                "new york": "NYC",
+                "tokyo": "TYO",
+                "bali": "DPS",
+                "rome": "ROM",
+                "istanbul": "IST",
+                "barcelona": "BCN",
+                "madrid": "MAD",
+                "berlin": "BER",
+                "amsterdam": "AMS",
+                "bangkok": "BKK",
+                "dubai": "DXB",
+                "singapore": "SIN",
+            }
+
+            clean_kw = keyword.lower().strip()
+            fallback_code = common_mappings.get(clean_kw, keyword.upper()[:3])
+
+            return json.dumps(
+                [{"iataCode": fallback_code, "name": keyword, "type": "fallback"}]
+            )
         return json.dumps(results, indent=2)
+
     except Exception as e:
         print(f"  [Tool] Airport code resolution failed: {e}")
-        return json.dumps([{"iataCode": keyword.upper()[:3], "name": keyword, "type": "fallback"}])
+        return json.dumps(
+            [{"iataCode": keyword.upper()[:3], "name": keyword, "type": "fallback"}]
+        )
 
 
 # =====================================================================
@@ -1726,7 +2125,9 @@ def get_airline_info_tool(airline_code: str) -> str:
 
     amadeus = get_amadeus_client()
     if not amadeus:
-        return json.dumps({"code": airline_code, "name": airline_code, "type": "fallback"})
+        return json.dumps(
+            {"code": airline_code, "name": airline_code, "type": "fallback"}
+        )
 
     try:
         response = amadeus_call(
@@ -1735,17 +2136,23 @@ def get_airline_info_tool(airline_code: str) -> str:
         )
         results = []
         for airline in response.data[:3]:
-            results.append({
-                "iataCode": airline.get("iataCode", ""),
-                "icaoCode": airline.get("icaoCode", ""),
-                "businessName": airline.get("businessName", ""),
-                "commonName": airline.get("commonName", airline.get("businessName", "")),
-            })
+            results.append(
+                {
+                    "iataCode": airline.get("iataCode", ""),
+                    "icaoCode": airline.get("icaoCode", ""),
+                    "businessName": airline.get("businessName", ""),
+                    "commonName": airline.get(
+                        "commonName", airline.get("businessName", "")
+                    ),
+                }
+            )
         print(f"  [Tool] Found airline info for '{airline_code}'")
         return json.dumps(results, indent=2)
     except Exception as e:
         print(f"  [Tool] Airline lookup failed: {e}")
-        return json.dumps([{"iataCode": airline_code, "name": airline_code, "type": "fallback"}])
+        return json.dumps(
+            [{"iataCode": airline_code, "name": airline_code, "type": "fallback"}]
+        )
 
 
 # =====================================================================
@@ -1767,7 +2174,9 @@ def search_tours_activities_tool(
     - radius: Search radius in km (default 5, max 20)
     Returns: List of activities with name, description, price, booking link, and rating.
     """
-    print(f"  [Tool] Searching tours & activities at ({latitude}, {longitude}), radius={radius}km")
+    print(
+        f"  [Tool] Searching tours & activities at ({latitude}, {longitude}), radius={radius}km"
+    )
     from app.amadeus_rate_limiter import get_amadeus_client, amadeus_call
 
     amadeus = get_amadeus_client()
@@ -1832,7 +2241,9 @@ def search_points_of_interest_tool(
     - categories: Optional filter list from: SIGHTS, BEACH_PARK, HISTORICAL, NIGHTLIFE, RESTAURANT, SHOPPING
     Returns: Ranked list of POIs with name, category, tags, and coordinates.
     """
-    print(f"  [Tool] Searching POIs at ({latitude}, {longitude}), radius={radius}km, categories={categories}")
+    print(
+        f"  [Tool] Searching POIs at ({latitude}, {longitude}), radius={radius}km, categories={categories}"
+    )
     from app.amadeus_rate_limiter import get_amadeus_client, amadeus_call
 
     amadeus = get_amadeus_client()
@@ -1842,45 +2253,47 @@ def search_points_of_interest_tool(
     try:
         # Try primary SDK method
         try:
-            if hasattr(amadeus.reference_data.locations, 'points_of_interest'):
+            if hasattr(amadeus.reference_data.locations, "points_of_interest"):
                 response = amadeus_call(
                     amadeus.reference_data.locations.points_of_interest.get,
                     latitude=latitude,
                     longitude=longitude,
                     radius=min(radius, 20),
-                    categories=",".join(categories).upper() if categories else None
+                    categories=",".join(categories).upper() if categories else None,
                 )
             else:
-                 # Try raw call if SDK helper missing
+                # Try raw call if SDK helper missing
                 response = amadeus_call(
                     amadeus.get,
-                    '/v1/reference-data/locations/pois',
+                    "/v1/reference-data/locations/pois",
                     latitude=latitude,
                     longitude=longitude,
                     radius=min(radius, 20),
-                    categories=",".join(categories).upper() if categories else None
+                    categories=",".join(categories).upper() if categories else None,
                 )
         except AttributeError:
-             # Fallback to raw call
+            # Fallback to raw call
             response = amadeus_call(
                 amadeus.get,
-                '/v1/reference-data/locations/pois',
+                "/v1/reference-data/locations/pois",
                 latitude=latitude,
                 longitude=longitude,
                 radius=min(radius, 20),
-                categories=",".join(categories).upper() if categories else None
+                categories=",".join(categories).upper() if categories else None,
             )
 
         results = []
         for poi in response.data[:15]:
-            results.append({
-                "name": poi.get("name", ""),
-                "category": poi.get("category", ""),
-                "subCategory": poi.get("subCategory", []),
-                "tags": poi.get("tags", []),
-                "rank": poi.get("rank", 0),
-                "geoCode": poi.get("geoCode", {}),
-            })
+            results.append(
+                {
+                    "name": poi.get("name", ""),
+                    "category": poi.get("category", ""),
+                    "subCategory": poi.get("subCategory", []),
+                    "tags": poi.get("tags", []),
+                    "rank": poi.get("rank", 0),
+                    "geoCode": poi.get("geoCode", {}),
+                }
+            )
 
         print(f"  [Tool] Found {len(results)} points of interest")
         return json.dumps(results, indent=2)
@@ -1891,9 +2304,15 @@ def search_points_of_interest_tool(
         mock_pois = [
             {"name": "Mock Eiffel Tower", "category": "SIGHTS", "rank": 1},
             {"name": "Mock Louvre Museum", "category": "SIGHTS", "rank": 2},
-            {"name": "Mock Notre Dame", "category": "SIGHTS", "rank": 5}
+            {"name": "Mock Notre Dame", "category": "SIGHTS", "rank": 5},
         ]
-        return json.dumps({"warning": f"Live POI search failed ({e}). Showing mock data.", "results": mock_pois}, indent=2)
+        return json.dumps(
+            {
+                "warning": f"Live POI search failed ({e}). Showing mock data.",
+                "results": mock_pois,
+            },
+            indent=2,
+        )
 
 
 # =====================================================================
@@ -1919,33 +2338,33 @@ def search_flights_with_kiwi_tool(
     """
     print(f"  [Tool] Searching flights with Kiwi: {origin} -> {destination}")
     from app.mcp_client import KiwiMCPClient
-    
+
     # Create a fresh client for this sync call to ensure clean loop handling
     client = KiwiMCPClient()
-    
+
     try:
         args = {
             "flyFrom": origin,
             "flyTo": destination,
             "departureDate": departure_date,
-            "passengers": {"adults": passengers}
+            "passengers": {"adults": passengers},
         }
         if return_date:
             args["returnDate"] = return_date
-            
+
         result = client.call_tool_sync("search-flight", args)
-        
+
         # Parse result
         # The tool returns a list of flights or a summary.
         # Based on schema description: "You should display the returned results in a markdown table format..."
         # But the raw result from call_tool will be the JSON content block
-        
+
         content = result.get("content", [])
         text_response = ""
         for item in content:
             if item.get("type") == "text":
                 text_response += item.get("text", "")
-        
+
         return text_response or json.dumps(result)
 
     except Exception as e:
@@ -1996,15 +2415,17 @@ def search_cheapest_dates_tool(
         )
         results = []
         for offer in response.data[:10]:
-            results.append({
-                "departureDate": offer.get("departureDate", ""),
-                "returnDate": offer.get("returnDate", ""),
-                "price": {
-                    "total": offer.get("price", {}).get("total", "N/A"),
-                    "currency": offer.get("price", {}).get("currency", "EUR"),
-                },
-                "links": offer.get("links", {}),
-            })
+            results.append(
+                {
+                    "departureDate": offer.get("departureDate", ""),
+                    "returnDate": offer.get("returnDate", ""),
+                    "price": {
+                        "total": offer.get("price", {}).get("total", "N/A"),
+                        "currency": offer.get("price", {}).get("currency", "EUR"),
+                    },
+                    "links": offer.get("links", {}),
+                }
+            )
 
         print(f"  [Tool] Found {len(results)} cheapest date options")
         return json.dumps(results, indent=2)
@@ -2012,10 +2433,24 @@ def search_cheapest_dates_tool(
         print(f"  [Tool] Cheapest dates search failed: {e}")
         # Mock Fallback for Test Environment Reliability
         mock_dates = [
-            {"departureDate": "2024-05-01", "returnDate": "2024-05-08", "price": {"total": "150.00", "currency": "EUR"}},
-            {"departureDate": "2024-05-15", "returnDate": "2024-05-22", "price": {"total": "145.00", "currency": "EUR"}},
+            {
+                "departureDate": "2024-05-01",
+                "returnDate": "2024-05-08",
+                "price": {"total": "150.00", "currency": "EUR"},
+            },
+            {
+                "departureDate": "2024-05-15",
+                "returnDate": "2024-05-22",
+                "price": {"total": "145.00", "currency": "EUR"},
+            },
         ]
-        return json.dumps({"warning": f"Live date search failed ({e}). Showing mock data.", "results": mock_dates}, indent=2)
+        return json.dumps(
+            {
+                "warning": f"Live date search failed ({e}). Showing mock data.",
+                "results": mock_dates,
+            },
+            indent=2,
+        )
 
 
 # =====================================================================
@@ -2032,18 +2467,19 @@ def get_user_profile(user_id: str) -> dict:
     try:
         # Get Pinecone index
         try:
-             # Try to get it from global scope if available
-             _, index = _get_pinecone_client_and_index()
+            # Try to get it from global scope if available
+            _, index = _get_pinecone_client_and_index()
         except NameError:
-             # Fallback if helper is not in scope
-             from pinecone import Pinecone
-             import os
-             api_key = os.getenv("PINECONE_API_KEY")
-             index_name = os.getenv("PINECONE_INDEX_NAME")
-             if not api_key or not index_name:
-                 return {}
-             pc = Pinecone(api_key=api_key)
-             index = pc.Index(index_name)
+            # Fallback if helper is not in scope
+            from pinecone import Pinecone
+            import os
+
+            api_key = os.getenv("PINECONE_API_KEY")
+            index_name = os.getenv("PINECONE_INDEX_NAME")
+            if not api_key or not index_name:
+                return {}
+            pc = Pinecone(api_key=api_key)
+            index = pc.Index(index_name)
 
         if not index:
             return {}
@@ -2053,30 +2489,38 @@ def get_user_profile(user_id: str) -> dict:
         # We try multiple variations of ID to find a match
         safe_id = user_id.replace("@", "_").replace(".", "_")
         ids_to_fetch = [user_id, f"profile_{safe_id}", safe_id]
-        
+
         fetch_response = index.fetch(ids=ids_to_fetch, namespace="user_profiles")
-        
+
         vector_data = None
         for uid in ids_to_fetch:
             if uid in fetch_response.vectors:
                 vector_data = fetch_response.vectors[uid]
                 print(f"  [Tool] Found profile with ID: {uid}")
                 break
-        
+
         if vector_data:
             metadata = vector_data.get("metadata", {})
-            
+
             def parse_list_val(val):
-                if isinstance(val, list): return val
-                if isinstance(val, str): return [x.strip() for x in val.split(",") if x.strip()]
+                if isinstance(val, list):
+                    return val
+                if isinstance(val, str):
+                    return [x.strip() for x in val.split(",") if x.strip()]
                 return []
 
             # Map to schema
             profile = {
                 "user_id": user_id,
-                "travel_style": metadata.get("travel_style") or metadata.get("travel style"),
-                "dietary_needs": parse_list_val(metadata.get("dietary_needs") or metadata.get("dietary needs")),
-                "accessibility_needs": parse_list_val(metadata.get("accessibility_needs") or metadata.get("accessibility needs")),
+                "travel_style": metadata.get("travel_style")
+                or metadata.get("travel style"),
+                "dietary_needs": parse_list_val(
+                    metadata.get("dietary_needs") or metadata.get("dietary needs")
+                ),
+                "accessibility_needs": parse_list_val(
+                    metadata.get("accessibility_needs")
+                    or metadata.get("accessibility needs")
+                ),
                 "interests": parse_list_val(metadata.get("interests")),
                 "home_city": metadata.get("home_city") or metadata.get("home city"),
             }
@@ -2084,7 +2528,7 @@ def get_user_profile(user_id: str) -> dict:
         else:
             print(f"  [Tool] User profile not found for {user_id}")
             return {}
-            
+
     except Exception as e:
         print(f"  [Error] Failed to fetch user profile: {e}")
         return {}
