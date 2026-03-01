@@ -874,6 +874,7 @@ def suggest_destination_tool(
     trip_type: str = "",
     climate: str = "",
     duration_days: int = 0,
+    user_profile: Optional[str] = None,
 ) -> str:
     """
     Suggests travel destinations based on user preferences using the Wikivoyage knowledge base.
@@ -884,54 +885,131 @@ def suggest_destination_tool(
     - trip_type: Type of trip (e.g., "honeymoon", "family", "adventure", "solo")
     - climate: Preferred climate (e.g., "tropical", "cold", "temperate")
     - duration_days: Trip duration to help filter appropriate destinations
+    - user_profile: String summary of the user's profile and preferences for personalization.
     """
     print(f"  [Tool] Suggesting destinations for: {preferences}")
 
-    # Build rich query
+    # ── Build a rich, specific RAG query ─────────────────────────────────────
+    # Expand trip_type into semantic keywords for better Pinecone matching
+    TRIP_TYPE_KEYWORDS = {
+        "honeymoon":   "romantic couples honeymoon love intimate sunset luxury resort",
+        "romantic":    "romantic couples love intimate dinner candlelit views",
+        "family":      "family kids children fun theme park safe beaches activities",
+        "adventure":   "hiking trekking adventure outdoor extreme sports mountains jungle",
+        "solo":        "solo backpacker independent travel hostels meeting people",
+        "budget":      "budget cheap affordable backpacker hostel low-cost",
+        "luxury":      "luxury 5-star resort spa exclusive premium butler fine dining",
+        "cultural":    "culture history museums temples ancient ruins heritage art",
+        "food":        "food gastronomy cuisine street food local markets restaurants",
+        "beach":       "beach tropical island sea snorkeling coral reef water sports waves",
+        "skiing":      "skiing snowboarding winter mountains snow Alps slopes",
+        "business":    "business conference networking city professional",
+        "wellness":    "wellness spa yoga meditation retreat relaxation mindfulness",
+        "wildlife":    "wildlife safari nature animals national park eco-tourism",
+    }
+
+    CLIMATE_KEYWORDS = {
+        "tropical":    "tropical warm humid year-round sunshine beach islands",
+        "warm":        "warm sunny Mediterranean subtropical pleasant temperatures",
+        "cold":        "cold winter snow ice Nordic Scandinavian cosy",
+        "temperate":   "temperate mild four-seasons spring autumn",
+        "desert":      "desert dry arid hot sandy dunes",
+        "alpine":      "alpine mountain cold crisp fresh air",
+    }
+
+    BUDGET_KEYWORDS = {
+        "budget":  "affordable cheap inexpensive budget-friendly low-cost",
+        "medium":  "mid-range value good deal comfortable",
+        "luxury":  "luxury premium high-end exclusive 5-star upscale",
+    }
+
     parts = [preferences]
+
+    # Add trip_type expansion
     if trip_type:
-        parts.append(f"{trip_type} trip")
+        expanded = TRIP_TYPE_KEYWORDS.get(trip_type.lower(), trip_type)
+        parts.append(expanded)
+
+    # Add climate expansion
     if climate:
-        parts.append(f"{climate} climate weather")
-    if budget_tier:
-        parts.append(f"{budget_tier} budget travel")
+        expanded_climate = CLIMATE_KEYWORDS.get(climate.lower(), climate + " climate weather")
+        parts.append(expanded_climate)
+    elif trip_type and any(kw in trip_type.lower() for kw in ["beach", "tropical", "warm"]):
+        parts.append("warm tropical beach")
+
+    # Add budget tier keywords
+    parts.append(BUDGET_KEYWORDS.get(budget_tier, ""))
+
+    # Add duration-specific context
     if duration_days:
-        parts.append(f"{duration_days} days")
-    query = " ".join(parts)
+        if duration_days <= 4:
+            parts.append("short city break weekend getaway")
+        elif duration_days <= 7:
+            parts.append("week-long trip popular destination")
+        else:
+            parts.append("extended stay multiple regions diverse experiences")
+
+    # Add user profile hints
+    if user_profile and user_profile.strip() and user_profile.strip() != "None":
+        parts.append(f"Personalized for: {user_profile}")
+
+    query = " ".join(p for p in parts if p)
+    print(f"  [Tool] RAG query: {query[:200]}...")
 
     # Try RAG first
-    # Try RAG first
     try:
-        matches = _query_pinecone_inference(query, k=5, namespace="wikivoyage")
+        matches = _query_pinecone_inference(query, k=8, namespace="wikivoyage")
         if matches:
             destinations = []
+            seen_names = set()
             for match in matches:
+                # If similarity is too low, the query is outside the mock DB's knowledge base.
+                if match.get("score", 0) < 0.35:
+                    continue
+
                 metadata = match.get("metadata", {})
                 title = metadata.get("title", "Unknown")
-                snippet = metadata.get("text", "")[:300]
+                # Deduplicate by normalized title
+                norm_title = title.lower().strip()
+                if norm_title in seen_names:
+                    continue
+                seen_names.add(norm_title)
+
+                snippet = metadata.get("text", "")[:400]
                 destinations.append(
                     {
                         "destination": title,
                         "summary": snippet,
                         "source": "Wikivoyage",
-                        "score": match.get("score", 0)
+                        "score": round(match.get("score", 0), 3)
                     }
                 )
-            # Enrich with Amadeus Recommendations (Phase B3)
+
+            # Sort by score descending and take top 4
+            destinations = sorted(destinations, key=lambda x: x.get("score", 0), reverse=True)[:4]
+
+            # Enrich with Amadeus Recommendations for top destination
             try:
-                if destinations and len(destinations) > 0:
+                if destinations:
                     top_dest = destinations[0].get("destination", "")
                     iata = _resolve_city_to_iata(top_dest)
                     if iata:
                         similar = _get_similar_destinations(iata)
                         if similar:
                             print(f"  [Tool] Amadeus enriched with {len(similar)} similar destinations to {top_dest}")
-                            destinations.extend(similar)
+                            # Add only if not already suggested
+                            existing = {d["destination"].lower() for d in destinations}
+                            for s in similar:
+                                if s.get("destination", "").lower() not in existing:
+                                    destinations.append(s)
             except Exception as e:
                 print(f"  [Warning] Amadeus enrich failed: {e}")
 
-            print(f"  [Tool] Returned {len(destinations)} destination suggestions (RAG + Amadeus)")
-            return json.dumps(destinations, indent=2)
+            if destinations:
+                print(f"  [Tool] Returned {len(destinations)} destination suggestions (RAG + Amadeus)")
+                return json.dumps(destinations, indent=2)
+            else:
+                print("  [Tool] RAG matches below similarity threshold or none found. Falling back.")
     except Exception as e:
         print(f"  [Warning] Wikivoyage RAG failed: {e}")
 
@@ -944,6 +1022,8 @@ def suggest_destination_tool(
             search_query += f" {trip_type}"
         if climate:
             search_query += f" {climate}"
+        if user_profile and user_profile.strip() and user_profile.strip() != "None":
+            search_query += f" {user_profile}"
         results = search.invoke(search_query)
         return json.dumps(
             {
@@ -991,6 +1071,10 @@ def suggest_attractions_tool(
             attractions = []
             seen = set()
             for match in matches:
+                # If similarity is too low, the query is outside the mock DB's knowledge base.
+                if match.get("score", 0) < 0.35:
+                    continue
+                
                 metadata = match.get("metadata", {})
                 title = metadata.get("title", "Unknown")
                 
@@ -1018,6 +1102,8 @@ def suggest_attractions_tool(
             if attractions:
                 print(f"  [Tool] RAG returned {len(attractions)} attractions")
                 return json.dumps(attractions, indent=2)
+            else:
+                print("  [Tool] RAG matches below similarity threshold or none found. Falling back.")
             
     except Exception as e:
         print(f"  [Warning] Wikivoyage RAG failed: {e}")
@@ -2064,7 +2150,11 @@ def get_user_profile(user_id: str) -> dict:
                 break
         
         if vector_data:
-            metadata = vector_data.get("metadata", {})
+            metadata = getattr(vector_data, "metadata", None)
+            if not isinstance(metadata, dict) and hasattr(vector_data, "get"):
+                metadata = vector_data.get("metadata", {})
+            if not metadata:
+                metadata = {}
             
             def parse_list_val(val):
                 if isinstance(val, list): return val

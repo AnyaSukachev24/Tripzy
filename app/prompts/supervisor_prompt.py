@@ -35,6 +35,7 @@ Coordinate the travel planning process between users and specialist sub-agents t
   * "Things to do" / "Attractions" → **Trip_Planner** (AttractionsOnly)
 - **Researcher**: Questions about facts, weather, events, prices, OR destination suggestions.
 - **Discovery Flow**: "Suggest a destination", "Where should I go" → **Researcher**.
+  * IMPORTANT: If Researcher just ran and returned destination suggestions, route to **End** and summarize the suggestions to the user to choose from. Do NOT route to Researcher again.
 
 ### SAFETY:
 - If the user says "STOP" or "CANCEL", route to END.

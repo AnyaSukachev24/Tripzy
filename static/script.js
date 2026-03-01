@@ -164,8 +164,10 @@ approveBtn.addEventListener('click', async () => {
     if (data.status === 'ok') {
         appendMessage('agent', data.response);
         statStatus.textContent = 'Completed';
+        agentThought.textContent = 'Trip successfully planned!';
     } else {
         appendMessage('system', 'Approval failed: ' + data.error);
+        agentThought.textContent = 'Failed to generate itinerary.';
     }
 });
 

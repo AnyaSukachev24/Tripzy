@@ -212,7 +212,7 @@ def process_edge_cases(
     # Only validate budget strictness if planning
     # If planning, budget MUST be > 0. If not planning (just chatting), ignore 0.
     if is_planning and budget_limit <= 0:
-        validations.append((False, "To plan your trip, I need a budget estimate 💰. How much are you looking to spend?"))
+        validations.append((False, "To plan your trip, I need a budget estimate. How much are you looking to spend? (e.g. $1000, $3000, $5000)"))
     elif budget_limit > 0:
         validations.append(validate_budget(budget_limit, duration_days, trip_type))
         validations.append(validate_conflicting_requirements(budget_limit, duration_days, trip_type, destination))
