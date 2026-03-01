@@ -200,48 +200,59 @@ def ingest_wikivoyage(data_path: str, batch_size: int = 50, max_articles: int = 
         batch = documents[i : i + batch_size]
         batch_texts = [doc.page_content for doc in batch]
         
-        try:
-            # 1. Generate Embeddings via Pinecone Inference
-            # We use the model specified by the user's index configuration request
-            embeddings_response = pc.inference.embed(
-                model="llama-text-embed-v2",
-                inputs=batch_texts,
-                parameters={"input_type": "passage", "truncate": "END"}
-            )
-            
-            # 2. Prepare Vectors for Upsert
-            vectors = []
-            for j, embedding_data in enumerate(embeddings_response):
-                doc = batch[j]
-                # Create a unique ID
-                metadata = doc.metadata
-                # Clean metadata values to ensure they are primitives (str, int, float, bool) or list of strings
-                clean_metadata = {k: v for k, v in metadata.items() if v is not None}
-                # Add text to metadata for retrieval
-                clean_metadata["text"] = doc.page_content
+        import time
+        max_retries = 5
+        for attempt in range(max_retries):
+            try:
+                # 1. Generate Embeddings via Pinecone Inference
+                # We use the model specified by the user's index configuration request
+                embeddings_response = pc.inference.embed(
+                    model="llama-text-embed-v2",
+                    inputs=batch_texts,
+                    parameters={"input_type": "passage", "truncate": "END"}
+                )
                 
-                vector_id = f"{clean_metadata.get('title', 'doc')}_{clean_metadata.get('section', 'sec')}_{clean_metadata.get('chunk_index', j)}"
-                # Sanitize ID
-                vector_id = re.sub(r'[^a-zA-Z0-9_\-]', '_', vector_id)
+                # 2. Prepare Vectors for Upsert
+                vectors = []
+                for j, embedding_data in enumerate(embeddings_response):
+                    doc = batch[j]
+                    # Create a unique ID
+                    metadata = doc.metadata
+                    # Clean metadata values to ensure they are primitives (str, int, float, bool) or list of strings
+                    clean_metadata = {k: v for k, v in metadata.items() if v is not None}
+                    # Add text to metadata for retrieval
+                    clean_metadata["text"] = doc.page_content
+                    
+                    vector_id = f"{clean_metadata.get('title', 'doc')}_{clean_metadata.get('section', 'sec')}_{clean_metadata.get('chunk_index', j)}"
+                    # Sanitize ID
+                    vector_id = re.sub(r'[^a-zA-Z0-9_\-]', '_', vector_id)
+                    
+                    vectors.append({
+                        "id": vector_id,
+                        "values": embedding_data["values"],
+                        "metadata": clean_metadata
+                    })
                 
-                vectors.append({
-                    "id": vector_id,
-                    "values": embedding_data["values"],
-                    "metadata": clean_metadata
-                })
-            
-            # 3. Upsert
-            index.upsert(vectors=vectors, namespace="wikivoyage")
-            
-            total_ingested += len(batch)
-            print(f"   Batch {i // batch_size + 1}: {total_ingested}/{len(documents)} chunks ingested")
-            
-        except Exception as e:
-            print(f"   Error in batch {i // batch_size + 1}: {e}")
-            # Optional: print detailed error if it's an API error
-            if hasattr(e, 'body'):
-                 print(f"   API Error Body: {e.body}")
-            continue
+                # 3. Upsert
+                index.upsert(vectors=vectors, namespace="wikivoyage")
+                
+                total_ingested += len(batch)
+                print(f"   Batch {i // batch_size + 1}: {total_ingested}/{len(documents)} chunks ingested")
+                break # Success!
+                
+            except Exception as e:
+                print(f"   Error in batch {i // batch_size + 1} (Attempt {attempt+1}/{max_retries}): {e}")
+                # Use string matching to detect 429 from pinecone since status attribute might not be directly accessible
+                if "429" in str(e) or "Too Many Requests" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                    wait = (attempt + 1) * 30
+                    print(f"   Rate limit hit. Waiting {wait} seconds...")
+                    time.sleep(wait)
+                elif attempt == max_retries - 1:
+                    print("   Max retries reached. Skipping batch.")
+                    if hasattr(e, 'body'):
+                         print(f"   API Error Body: {e.body}")
+                else:
+                    time.sleep(5) # short wait for other errors
 
     print(f"\n{'=' * 60}")
     print(f"  Ingestion Complete: {total_ingested} chunks from {len(articles)} articles")

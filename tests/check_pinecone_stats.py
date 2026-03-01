@@ -29,12 +29,12 @@ def check_pinecone_stats():
         print("----------------------------\n")
         
         if stats.total_vector_count == 0:
-            print("⚠️ Index is empty! RAG tools will fallback to web search.")
+            print("! Index is empty! RAG tools will fallback to web search.")
         else:
-            print("✅ Index populated.")
+            print("[SUCCESS] Index populated.")
             
     except Exception as e:
-        print(f"❌ Error getting stats: {e}")
+        print(f"[ERROR] Error getting stats: {e}")
 
 if __name__ == "__main__":
     check_pinecone_stats()
