@@ -265,7 +265,10 @@ async def stream_agent(request: ExecuteRequest):
                     payload_to_run = input_payload
                     
                 async for event in graph.astream_events(payload_to_run, config, version="v2"):
-                    kind = event["event"]
+                    kind = event.get("event")
+                    
+                    if not kind:
+                        continue
 
                     if kind == "on_chain_start" and event.get("name") == "LangGraph":
                         await queue.put({"type": "status", "content": "Starting Graph..."})
@@ -425,11 +428,14 @@ async def stream_agent(request: ExecuteRequest):
 
 
             except Exception as e:
+                import traceback
+                error_trace = traceback.format_exc()
+                print(f"  [STREAM ERROR] {error_trace}")
                 error_msg = str(e)
                 if "Errno 22" in error_msg or "RESOURCE_EXHAUSTED" in error_msg or "429" in error_msg or "Too Many Requests" in error_msg:
                     error_msg = "⚠️ The AI service is temporarily busy (rate limit). Please wait a moment and try again."
-                conversation_logger.log_message(thread_id, "error", error_msg)
-                await queue.put({"type": "error", "content": error_msg})
+                conversation_logger.log_message(thread_id, "error", f"Error: {error_msg}")
+                await queue.put({"type": "error", "content": f"Error: {error_msg}"})
             finally:
                 await queue.put(None)  # Sentinel: graph is done
 
