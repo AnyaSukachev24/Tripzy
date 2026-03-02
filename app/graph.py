@@ -489,6 +489,11 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                 print("  [LOOP BREAKER] Same query already sent to Researcher — forcing End with conversational summary.")
                 from langchain_core.messages import SystemMessage, HumanMessage
                 summary_prefs = ", ".join(result.preferences or state.get("preferences") or [])
+                
+                # Ensure text is clean to avoid Windows charmap encoding errors
+                clean_history = str(research_history).encode("ascii", "ignore").decode("ascii")
+                clean_query = str(user_query).encode("ascii", "ignore").decode("ascii")
+                
                 summary_prompt = [
                     SystemMessage(content=(
                         "You are a friendly travel agent. Based on the destination suggestions below, "
@@ -497,16 +502,23 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                         "if they want to refine the search.\n\n"
                         "IMPORTANT: Do NOT mention JSON, scores, or technical data. Write naturally like a friend.\n"
                         f"User preferences: {summary_prefs}\n\n"
-                        f"Destination options:\n{research_history}"
+                        f"Destination options:\n{clean_history}"
                     )),
-                    HumanMessage(content=f"User said: {user_query}")
+                    HumanMessage(content=f"User said: {clean_query}")
                 ]
                 try:
                     summary_resp = llm.invoke(summary_prompt)
                     summary_text = summary_resp.content if hasattr(summary_resp, "content") else str(summary_resp)
                 except Exception as e_sum:
                     print(f"  [LOOP BREAKER] Summary LLM failed: {e_sum}")
-                    summary_text = result.instruction  # fallback to LLM's own instruction
+                    summary_text = ""
+
+                # Guarantee we don't return an empty string, which causes "Task completed." in UI
+                if not summary_text or summary_text.strip() == "":
+                    if result.instruction and result.instruction.strip() != "":
+                        summary_text = result.instruction
+                    else:
+                        summary_text = "I've found some great destination options based on your request. Please let me know if you'd like to hear more details about any specific places!"
 
                 return _apply_profile_updates({
                     "next_step": "End",
