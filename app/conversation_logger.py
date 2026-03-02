@@ -5,6 +5,21 @@ from typing import Dict, Any, List
 from pathlib import Path
 
 
+def _safe_json_default(obj):
+    """Custom JSON serializer that handles Pydantic models and other non-serializable types."""
+    # Pydantic v2
+    if hasattr(obj, 'model_dump'):
+        return obj.model_dump()
+    # Pydantic v1
+    if hasattr(obj, 'dict'):
+        return obj.dict()
+    # Datetime
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    # Anything else: convert to string
+    return str(obj)
+
+
 class ConversationLogger:
     """Logs UI conversation runs to dedicated folder for review and debugging."""
     
@@ -60,7 +75,7 @@ class ConversationLogger:
         }
         
         with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(conversation_data, f, indent=2, ensure_ascii=False)
+            json.dump(conversation_data, f, indent=2, ensure_ascii=False, default=_safe_json_default)
             
         return str(filepath)
         

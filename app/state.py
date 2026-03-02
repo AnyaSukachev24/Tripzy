@@ -45,6 +45,7 @@ class UserProfile(BaseModel):
     """
     user_id: str = Field(description="Unique identifier for the user (e.g., email)")
     name: Optional[str] = Field(default=None, description="User's display name")
+    email: Optional[str] = Field(default=None, description="User's email address (may match user_id)")
     travel_style: Optional[str] = Field(default=None, description="Travel style (e.g., luxury, budget, balanced, adventure)")
     dietary_needs: List[str] = Field(default_factory=list, description="List of dietary restrictions")
     accessibility_needs: List[str] = Field(default_factory=list, description="List of accessibility requirements")
