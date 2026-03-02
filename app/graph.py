@@ -250,12 +250,55 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             f"Accessibility: {', '.join(current_profile.accessibility_needs)}"
         )
 
+    # Helper function to persist user profile on ALL return paths
+    def _apply_profile_updates(updates: dict, extracted_prefs: list = None, extracted_trip_type: str = None) -> dict:
+        """Helper to merge profile updates before returning state."""
+        if user_profile_update:
+            updates.update(user_profile_update)
+            
+        if current_profile:
+            new_prefs_added = False
+            merged_prefs = set(current_profile.interests or [])
+            if extracted_prefs:
+                for p in extracted_prefs:
+                    if p.lower() not in [ext.lower() for ext in merged_prefs]:
+                        merged_prefs.add(p)
+                        new_prefs_added = True
+            
+            merged_diet = set(current_profile.dietary_needs or [])
+            new_style = current_profile.travel_style
+            if extracted_trip_type and not current_profile.travel_style:
+                new_style = extracted_trip_type
+                new_prefs_added = True
+                
+            if new_prefs_added:
+                try:
+                    from app.tools import create_user_profile_tool
+                    user_email = getattr(current_profile, 'email', None) or current_profile.user_id
+                    user_name = getattr(current_profile, 'name', None) or current_profile.user_id
+                    create_user_profile_tool.invoke({
+                        "name": user_name,
+                        "email": user_email,
+                        "preferences": list(merged_prefs),
+                        "dietary_needs": list(merged_diet),
+                        "accessibility_needs": list(current_profile.accessibility_needs or []),
+                        "travel_style": new_style or ""
+                    })
+                    print(f"  [Supervisor] Background profile update triggered. New prefs: {list(merged_prefs - set(current_profile.interests or []))}")
+
+                    current_profile.interests = list(merged_prefs)
+                    current_profile.travel_style = new_style
+                    updates["user_profile"] = current_profile
+                except Exception as e:
+                    print(f"  [Supervisor] Failed to update profile in background: {e}")
+        return updates
+
     # Simple Router Logic (Optimization: Don't call LLM for simple greetings)
     # Strip punctuation/whitespace and check case-insensitively
     import re
     cleaned_query = re.sub(r'[^\w\s]', '', user_query.strip()).lower().strip()
     if cleaned_query in ["hi", "hello", "hey", "test", "yo", "sup"]:
-        return {
+        return _apply_profile_updates({
             "next_step": "End",
             "supervisor_instruction": "Hello! I'm your AI Travel Agent. Where would you like to go today? I can suggest destinations, plan full trips, search for flights and hotels!",
             "steps": [
@@ -265,7 +308,7 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                     "response": "Greeted user and asked for travel intent.",
                 }
             ],
-        }
+        })
 
     # Format context for the LLM so it knows what has already been provided
     # INJECT RESEARCH HISTORY: Get recent steps from Researcher to prevent loops
@@ -546,7 +589,7 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             print(
                 f"  [EDGE CASE DETECTED] {edge_case_result['error_message'][:100]}..."
             )
-            return {
+            return _apply_profile_updates({
                 "next_step": "End",
                 "supervisor_instruction": edge_case_result["error_message"],
                 "destination": result.destination or state.get("destination"),
@@ -567,7 +610,7 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                         "response": f"Edge Case Detected: {edge_case_result['error_message']}",
                     }
                 ],
-            }
+            }, extracted_prefs=result.preferences, extracted_trip_type=result.trip_type)
 
         # MULTI-TURN: Check if we have minimum required information
         # If supervisor wants to route to Trip_Planner, validate we have destination + duration
@@ -640,7 +683,7 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                 print(
                     f"  [MULTI-TURN] Missing required info: {missing_required}. Asking for clarification."
                 )
-                return {
+                return _apply_profile_updates({
                     "messages": messages,
                     "next_step": "End",
                     "supervisor_instruction": clarifying_question,
@@ -664,7 +707,7 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                             "response": f"Need more information: {clarifying_question}",
                         }
                     ],
-                }
+                }, extracted_prefs=result.preferences, extracted_trip_type=result.trip_type)
         else:
             print(
                 f"  [MULTI-TURN] All required info present. Routing to {result.next_step}."
@@ -687,55 +730,7 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             "request_type": result.request_type,
             "steps": [step_log],
         }
-        
-        # Merge profile update if any
-        if user_profile_update:
-            updates.update(user_profile_update)
-            
-        # --- Phase CONTINUOUS UPDATE: Save new preferences to profile ---
-        if current_profile:
-            # Check if there's anything new to add
-            new_prefs_added = False
-            merged_prefs = set(current_profile.interests or [])
-            if result.preferences:
-                for p in result.preferences:
-                    if p.lower() not in [ext.lower() for ext in merged_prefs]:
-                        merged_prefs.add(p)
-                        new_prefs_added = True
-            
-            merged_diet = set(current_profile.dietary_needs or [])
-            # In a real app we'd map keywords to diet, for now just append
-            
-            new_style = current_profile.travel_style
-            if result.trip_type and not current_profile.travel_style:
-                new_style = result.trip_type
-                new_prefs_added = True
-                
-            if new_prefs_added:
-                try:
-                    from app.tools import create_user_profile_tool
-                    # Use user_id as email fallback for profile update
-                    user_email = getattr(current_profile, 'email', None) or current_profile.user_id
-                    user_name = getattr(current_profile, 'name', None) or current_profile.user_id
-                    # Silently update the profile in the background
-                    create_user_profile_tool.invoke({
-                        "name": user_name,
-                        "email": user_email,
-                        "preferences": list(merged_prefs),
-                        "dietary_needs": list(merged_diet),
-                        "accessibility_needs": list(current_profile.accessibility_needs or []),
-                        "travel_style": new_style or ""
-                    })
-                    print(f"  [Supervisor] Background profile update triggered. New prefs: {list(merged_prefs - set(current_profile.interests or []))}")
-
-                    # Update state with new profile object
-                    current_profile.interests = list(merged_prefs)
-                    current_profile.travel_style = new_style
-                    updates["user_profile"] = current_profile
-                except Exception as e:
-                    print(f"  [Supervisor] Failed to update profile in background: {e}")
-
-        return updates
+        return _apply_profile_updates(updates, extracted_prefs=result.preferences, extracted_trip_type=result.trip_type)
     except Exception as e:
         print(f"  Supervisor Error: {str(e)}")
         error_msg = f"System Error: {str(e)}"

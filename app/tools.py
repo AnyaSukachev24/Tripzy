@@ -892,20 +892,20 @@ def suggest_destination_tool(
     # ── Build a rich, specific RAG query ─────────────────────────────────────
     # Expand trip_type into semantic keywords for better Pinecone matching
     TRIP_TYPE_KEYWORDS = {
-        "honeymoon":   "romantic couples honeymoon love intimate sunset luxury resort",
-        "romantic":    "romantic couples love intimate dinner candlelit views",
-        "family":      "family kids children fun theme park safe beaches activities",
-        "adventure":   "hiking trekking adventure outdoor extreme sports mountains jungle",
-        "solo":        "solo backpacker independent travel hostels meeting people",
-        "budget":      "budget cheap affordable backpacker hostel low-cost",
-        "luxury":      "luxury 5-star resort spa exclusive premium butler fine dining",
-        "cultural":    "culture history museums temples ancient ruins heritage art",
-        "food":        "food gastronomy cuisine street food local markets restaurants",
-        "beach":       "beach tropical island sea snorkeling coral reef water sports waves",
-        "skiing":      "skiing snowboarding winter mountains snow Alps slopes",
-        "business":    "business conference networking city professional",
-        "wellness":    "wellness spa yoga meditation retreat relaxation mindfulness",
-        "wildlife":    "wildlife safari nature animals national park eco-tourism",
+        "honeymoon":   "romantic couples honeymoon intimate sunset luxury resort",
+        "romantic":    "romantic couples intimate dinner candlelit views",
+        "family":      "family kids children activities",
+        "adventure":   "adventure outdoor extreme sports",
+        "solo":        "solo backpacker independent travel meeting people",
+        "budget":      "budget cheap affordable low-cost",
+        "luxury":      "luxury 5-star resort exclusive premium fine dining",
+        "cultural":    "culture history museums temples ruins heritage art",
+        "food":        "food gastronomy cuisine local markets restaurants",
+        "beach":       "beach tropical sea water waves",
+        "skiing":      "skiing snowboarding winter snow slopes",
+        "business":    "business conference networking city",
+        "wellness":    "wellness spa yoga meditation retreat relaxation",
+        "wildlife":    "wildlife safari nature animals national park",
     }
 
     CLIMATE_KEYWORDS = {
