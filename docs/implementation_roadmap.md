@@ -142,6 +142,12 @@ This roadmap is ordered by **logical dependencies** - each phase builds on the p
 - [x] Tests: `verify_graph_improvements.py` (5/5 pass)
 - [x] Tests: `verify_graph_flow.py` (real LLM graph flow validation)
 
+### Phase 34: Personalized Destination Discovery (Noa)
+**Goal:** Enhance destination suggestions by fixing Amadeus integration and using the user profile.
+- [ ] Implement Amadeus `_resolve_city_to_iata` and `_get_similar_destinations` helpers.
+- [ ] Update `suggest_destination_tool` to incorporate user profile into destination matching.
+- [ ] Connect profile to Pinecone queries for tailored recommendations.
+
 ---
 
 ## 📊 DEPENDENCY DIAGRAM
