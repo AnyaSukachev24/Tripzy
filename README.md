@@ -1,51 +1,91 @@
 # Tripzy ✈️
-### Your Luxury AI Travel Agent Dashboard
+### Your AI Travel Companion
 
-Tripzy is a state-of-the-art autonomous travel agent built with **LangGraph**, **FastAPI**, and **Gemini**. It doesn't just hallucinate trips; it researches real data, validates costs against your budget, and refine its plans through a Multi-Agent loop.
+Tripzy is an autonomous travel agent built with **LangGraph**, **FastAPI**, and **Azure OpenAI (GPT-4.1-mini)**. It researches real data, validates costs against your budget, suggests destinations through natural conversation, and refines plans through multi-agent feedback loops.
 
 ## ✨ Key Features
-- **Multi-Agent Architecture**: Supervisor, Planner, Researcher, and Critique nodes working in harmony.
-- **Premium Dashboard**: Glassmorphism design with real-time status updates.
-- **SSE Streaming**: Watch the agent "think" and "research" as it builds your itinerary.
-- **Human-in-the-Loop**: The agent pauses for your final approval before finalizing the plan.
-- **Budget Guardrails**: Strict validation to ensure you stay under your limit.
-- **Memory**: Remembers your preferences (RAG via Pinecone).
+
+- **Multi-Agent LangGraph Architecture**: Supervisor, Researcher, Trip_Planner, and Critique nodes working in a stateful cycle.
+- **🗺️ Destination Discovery**: Don't know where to go? Tripzy suggests destinations through conversational refinement powered by RAG (Pinecone) + LLM reasoning. Supports multi-turn dialogue until the user picks a destination.
+- **🔄 Multi-Turn Conversations**: Maintains full conversation history across turns via LangGraph checkpoints — state accumulates naturally across messages.
+- **👤 Personalized Profiles**: Remembers your travel style, dietary preferences, and accessibility needs (RAG via Pinecone). Updates continuously as you chat.
+- **✈️ Real Data**: Live flights (Amadeus), hotels, tours (Viator/GetYourGuide), and POIs — not hallucinations.
+- **💰 Budget Guardrails**: Edge-case validator checks for unrealistic budget/duration combinations before planning begins.
+- **📡 SSE Streaming**: Watch the agent think and research in real-time via Server-Sent Events.
+- **✅ Human-in-the-Loop**: The agent pauses for final approval before generating the complete itinerary.
 
 ## 🚀 Getting Started
 
 ### 1. Environment Setup
 Create a `.env` file:
 ```env
-GOOGLE_API_KEY=your_key_here
-PINECONE_API_KEY=your_key_here
-PINECONE_INDEX=user-profiles
+AZURE_OPENAI_API_KEY=your_key
+AZURE_OPENAI_ENDPOINT=your_endpoint
+AZURE_OPENAI_DEPLOYMENT=gpt-4.1-mini
+PINECONE_API_KEY=your_key
+PINECONE_INDEX=trip-knowledge
+AMADEUS_API_KEY=your_key
+AMADEUS_API_SECRET=your_secret
 ```
 
 ### 2. Local Installation
 ```bash
 pip install -r requirements.txt
-python -m app.main
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 Then visit `http://localhost:8000` to start planning.
 
 ## 📚 Documentation
-For detailed project documentation, architecture details, implementation roadmap, and data strategy, see the **[`docs/`](./docs/)** folder:
-- **[Project Plan](./docs/plan.md)** - High-level objectives
-- **[Architecture & Graph](./docs/architecture_and_graph.md)** - System design details
-- **[Data & Strategy](./docs/data_and_strategy.md)** - Data sources and approach
-- **[Implementation Roadmap](./docs/implementation_roadmap.md)** - Development plan and milestones
 
-## 🛠️ Architecture
-The agent uses a cyclic graph:
-1. **ProfileLoader**: Fetches your preferences.
-2. **Supervisor**: Routes tasks based on your naturally spoken request.
-3. **Trip_Planner**: Drafts the structured itinerary.
-4. **Researcher**: Uses Wikivoyage and real-time search for facts.
-5. **Critique**: Self-corrects the plan for budget and realism.
-6. **Human_Approval**: Interactive pause for user verification.
+| Doc | Description |
+|-----|-------------|
+| [Architecture & Graph](./docs/architecture_and_graph.md) | System design, nodes, and graph flow |
+| [Destination Suggestion](./docs/DESTINATION_SUGGESTION.md) | **NEW** — How Discovery mode, RAG, and the loop breaker work |
+| [RAG Pipeline](./docs/RAG_README.md) | Pinecone setup and retrieval strategy |
+| [Data & Strategy](./docs/data_and_strategy.md) | Data sources and approach |
+| [Implementation Roadmap](./docs/implementation_roadmap.md) | Development milestones |
 
-## 🎓 Course Requirements Meta
-- `GET /api/team_info`: Student details.
-- `GET /api/agent_info`: Agent capabilities.
-- `GET /api/model_architecture`: Live LangGraph visualization.
-- `POST /api/stream`: Full execution trace.
+## 🛠️ Graph Architecture
+
+```
+User Message
+      │
+      ▼
+ SUPERVISOR ──── Classify request type:
+      │          • Discovery (no destination) → Researcher (RAG suggestions)
+      │          • Planning (destination set)  → Trip_Planner
+      │          • FlightOnly / HotelOnly / AttractionsOnly → Trip_Planner
+      │          • GeneralQuestion             → Researcher (web search)
+      │
+      ├──► RESEARCHER  (suggest_destination_tool / search_flights / web_search)
+      │         └──► back to SUPERVISOR
+      │
+      ├──► TRIP_PLANNER (flights + hotels + activities)
+      │         └──► CRITIQUE (self-correction loop)
+      │                   └──► HUMAN_APPROVAL → End
+      │
+      └──► End (direct response / clarifying question)
+```
+
+## 💬 Example Conversations
+
+**Destination Discovery:**
+> **User:** I want to go to Europe for a honeymoon, 5 days
+> **Tripzy:** Paris is classic for honeymooners — iconic landmarks and romantic ambiance. Venice offers serene gondola rides through picturesque canals. Which appeals to you?
+
+> **User:** What about cities in Portugal or Spain instead?
+> **Tripzy:** Lisbon offers charming cobblestone streets and beautiful river views. Seville has passionate flamenco culture and stunning Moorish architecture...
+
+**Full Trip Planning:**
+> **User:** Plan 7 days in Tokyo with $3000 budget for 2 people
+> **Tripzy:** *(searches flights, hotels, attractions → presents full itinerary for approval)*
+
+## 🎓 API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/execute` | POST | Execute agent request (sync) |
+| `/api/stream` | POST | Execute with SSE streaming |
+| `/api/team_info` | GET | Student details |
+| `/api/agent_info` | GET | Agent capabilities |
+| `/api/model_architecture` | GET | Live LangGraph PNG visualization |
