@@ -1308,6 +1308,7 @@ workflow.add_conditional_edges(
     {
         "Researcher": "Researcher",
         "Critique": "Critique",
+        "Human_Approval": "Human_Approval",
         "Supervisor": "Supervisor",
         "End": END,
     },
@@ -1331,7 +1332,9 @@ workflow.add_conditional_edges(
 
 # Human Approval Logic
 def route_human_approval(state: AgentState):
-    return state.get("next_step", "Supervisor")
+    if state.get("user_query") == "approve_trip_plan":
+        return "End"
+    return "Supervisor"
 
 workflow.add_conditional_edges(
     "Human_Approval",

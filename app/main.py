@@ -507,7 +507,7 @@ def approve_trip(request: ExecuteRequest):
         return {
             "status": "ok",
             "response": format_plan_to_markdown(plan) if plan else "Trip finalized.",
-            "steps": final_state.get("steps", [])
+            "steps": final_state_res.get("steps", [])
         }
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
