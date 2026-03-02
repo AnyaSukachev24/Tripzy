@@ -199,6 +199,15 @@ def execute_agent(request: ExecuteRequest):
         instruction = final_state.get("supervisor_instruction")
         budget_warning = final_state.get("budget_warning")
         steps = final_state.get("steps", [])
+        
+        # Extract metadata for UI sidebar
+        destination = final_state.get("destination") or None
+        budget = final_state.get("budget_limit") or None
+        if final_state.get("budget_currency") and budget:
+            budget = f"{budget} {final_state.get('budget_currency')}"
+        duration = final_state.get("duration_days") or None
+        user_profile = final_state.get("user_profile")
+        profile_dict = user_profile.dict() if user_profile and hasattr(user_profile, 'dict') else {}
 
         # Smart response selection: prefer real content over routing tags
         INTERNAL_TAGS = {"Plan Drafted", "Done", "None", ""}
@@ -222,6 +231,10 @@ def execute_agent(request: ExecuteRequest):
             "status": "ok",
             "response": final_text,
             "steps": steps,
+            "destination": destination,
+            "budget": budget,
+            "duration": duration,
+            "user_profile": profile_dict,
             "error": None
         }
     except Exception as e:
@@ -292,6 +305,15 @@ async def stream_agent(request: ExecuteRequest):
                     instruction = final_state.get("supervisor_instruction")
                     budget_warning = final_state.get("budget_warning")
                     steps = final_state.get("steps", [])
+                    
+                    # Extract metadata for UI sidebar
+                    destination = final_state.get("destination") or None
+                    budget = final_state.get("budget_limit") or None
+                    if final_state.get("budget_currency") and budget:
+                        budget = f"{budget} {final_state.get('budget_currency')}"
+                    duration = final_state.get("duration_days") or None
+                    user_profile = final_state.get("user_profile")
+                    profile_dict = user_profile.dict() if user_profile and hasattr(user_profile, 'dict') else {}
 
                     INTERNAL_TAGS = {"Plan Drafted", "Done", "None", "",
                                      "Plan Drafted (fallback - max research iterations reached)",
@@ -301,105 +323,8 @@ async def stream_agent(request: ExecuteRequest):
                     final_text = "Task completed."
 
                     def _format_destinations_if_json(text: str, trip_type: str = "", preferences: list = None) -> str:
-                        """Detect raw JSON destination arrays and format them as markdown."""
-                        if not text:
-                            return text
-                        
-                        raw = None
-                        if isinstance(text, (list, dict)):
-                            raw = text
-                        else:
-                            try:
-                                stripped = text.strip()
-                            except Exception:
-                                return text
-                            if not (stripped.startswith("[") or stripped.startswith("{")):
-                                return text
-                            try:
-                                raw = json.loads(stripped)
-                            except Exception:
-                                # Fallback for truncated JSON (Azure OpenAI sometimes cuts off at 1000 chars)
-                                import re
-                                dest_matches = re.findall(r'"destination"\s*:\s*"([^"]+)"', stripped)
-                                if dest_matches:
-                                    raw = [{"destination": d} for d in dest_matches]
-                                else:
-                                    return text
-
-                        # Only format if it looks like destination data
-                        if isinstance(raw, list):
-                            if not raw or not isinstance(raw[0], dict):
-                                return text
-                            if "destination" not in raw[0] and "title" not in raw[0]:
-                                return text
-                        elif isinstance(raw, dict):
-                            if "destination" not in raw and "suggestions" not in raw:
-                                return text
-                        else:
-                            return text
-
-                        preferences = preferences or []  # Guard against None
-                        trip_type = trip_type or ""      # Guard against None
-                        print(f"  [FORMAT] Formatting {len(raw) if isinstance(raw, list) else 1} destinations as markdown (trip_type={trip_type!r}, prefs={preferences})")
-
-
-
-                        # Emoji by trip type / preferences
-                        EMOJI_MAP = {
-                            "honeymoon": "💑", "romantic": "💑", "beach": "🏖️", "tropical": "🏖️",
-                            "adventure": "🧗", "hiking": "🏔️", "mountain": "🏔️",
-                            "cultural": "🏛️", "history": "🏛️", "temple": "🏯",
-                            "family": "👨‍👩‍👧‍👦", "luxury": "✨", "budget": "💰",
-                            "food": "🍜", "nature": "🌿", "wildlife": "🦁",
-                            "ski": "⛷️", "snow": "❄️", "wellness": "🧘",
-                        }
-                        pref_lower = (trip_type + " " + " ".join(preferences)).lower()
-                        icon = "✈️"
-                        for kw, em in EMOJI_MAP.items():
-                            if kw in pref_lower:
-                                icon = em
-                                break
-
-                        lines = [f"## {icon} Here are some destination suggestions for you:\n"]
-                        shown = []
-                        items = raw if isinstance(raw, list) else raw.get("suggestions", [raw])
-
-                        for item in items[:5]:
-                            if isinstance(item, str):
-                                continue
-                            name = item.get("destination", item.get("title", "Unknown"))
-                            if name in shown:
-                                continue
-                            shown.append(name)
-                            summary = item.get("summary", item.get("description", ""))
-                            summary = summary.replace("==", "").replace("===", "")
-                            parts_s = [s.strip() for s in summary.split(".") if len(s.strip()) > 20]
-                            blurb = ". ".join(parts_s[:2]).strip()
-                            if blurb and not blurb.endswith("."):
-                                blurb += "."
-                            lines.append(f"### 📍 {name}")
-                            if blurb:
-                                lines.append(blurb)
-                            source = item.get("source", "")
-                            if source:
-                                lines.append(f"*Source: {source}*")
-                            lines.append("")
-
-                        if not shown:
-                            return "I couldn't find specific destinations. Could you tell me more about what you're looking for?"
-
-                        if "honeymoon" in pref_lower or "romantic" in pref_lower:
-                            q = "Which of these romantic destinations appeals to you most? 💕"
-                        elif "adventure" in pref_lower or "hiking" in pref_lower:
-                            q = "Which adventure destination sounds exciting to you? 🏔️"
-                        elif "beach" in pref_lower or "tropical" in pref_lower:
-                            q = "Which beach destination catches your eye? 🌊"
-                        elif "cultural" in pref_lower or "history" in pref_lower:
-                            q = "Which cultural destination interests you? 🏛️"
-                        else:
-                            q = "Which of these interests you, or would you like different options?"
-                        lines.append(f"---\n{q}")
-                        return "\n".join(lines)
+                        """LLM natively formats now. Just return text."""
+                        return text
 
                     if plan and plan.get("itinerary"):
                         final_text = format_plan_to_markdown(plan)
@@ -424,7 +349,18 @@ async def stream_agent(request: ExecuteRequest):
                         final_text = "⚠️ The AI service is temporarily busy (rate limit). Please wait a moment and try again."
 
                     conversation_logger.log_message(thread_id, "agent", final_text)
-                    await queue.put({"type": "final_response", "content": final_text, "_saved": final_text})
+                    
+                    # Ensure we send the full structured state payload
+                    final_payload = {
+                        "type": "final_response",
+                        "content": final_text,
+                        "destination": destination,
+                        "budget": budget,
+                        "duration": duration,
+                        "user_profile": profile_dict,
+                        "_saved": final_text
+                    }
+                    await queue.put(final_payload)
 
 
             except Exception as e:
