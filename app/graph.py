@@ -1216,9 +1216,21 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
             ..., description="True if the flight is direct, False otherwise"
         )
 
+    class Hotel(BaseModel):
+        name: str = Field(..., description="The name of the hotel")
+        price_per_night: float = Field(
+            ..., description="The price per night of the hotel"
+        )
+        total_price: float = Field(..., description="The total price of the hotel")
+        rating: float = Field(..., description="The rating of the hotel")
+        location: str = Field(..., description="The location of the hotel")
+        amenities: List[str] = Field(..., description="The amenities of the hotel")
+        check_in_date: str = Field(..., description="The check-in date of the hotel")
+        check_out_date: str = Field(..., description="The check-out date of the hotel")
+
     base_fields = {
         "destination": (str, Field(default="", description="Destination city")),
-        "origin_city": (str, Field(default="", description="Origin city")),
+        "origin_city": (str, Field(default="unknown", description="Origin city")),
         "dates": (str, Field(default="", description="Date range")),
         "duration_days": (int, Field(default=0, description="Duration in days")),
         "budget_estimate": (
@@ -1248,11 +1260,13 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
             )
     if request_type in ["Planning", "HotelOnly"]:
         base_fields["hotels"] = (
-            List[Dict[str, Any]],
+            List[Hotel],
             Field(
-                ..., description="Selected hotels as a list of dictionaries. REQUIRED."
+                ...,
+                description="Selected hotels as a list of Hotel objects. REQUIRED.",
             ),
         )
+
     if request_type in ["Planning", "AttractionsOnly"]:
         base_fields["itinerary"] = (
             List[Dict[str, Any]],

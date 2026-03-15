@@ -71,8 +71,7 @@ Your goal is to find the best hotel options based on the user's request.
 ### OUTPUT FORMAT:
 - IF SEARCHING: Call the appropriate tool.
 - IF DONE: Call `SubmitPlan` and you MUST provide the `trip_plan` parameter.
-  - Inside `trip_plan`, put the found hotels in the `hotels` array.
-  - Leave `flights` and `itinerary` empty.
+  - Inside `trip_plan`, choose the best hotel options.
   - Set `trip_type` to "HotelOnly".
 """
 
