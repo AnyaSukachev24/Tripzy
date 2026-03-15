@@ -5,6 +5,7 @@ from langchain_core.tools import tool
 from langchain_community.tools import DuckDuckGoSearchRun
 from dotenv import load_dotenv
 import isodate
+import requests
 
 load_dotenv()
 
@@ -794,245 +795,314 @@ def search_hotels_tool(
     print(
         f"  [Tool] Searching Hotels: {city} ({check_in} to {check_out}) Budget={budget}, Sort={sort_by}"
     )
-
-    from app.amadeus_rate_limiter import get_amadeus_client, amadeus_call
-
-    amadeus = get_amadeus_client()
-
-    # --- Real Amadeus API ---
-    if amadeus:
-        try:
-            from amadeus import ResponseError
-
-            budget_map = {"budget": "0-150", "medium": "150-400", "luxury": "400-2000"}
-            price_range = budget_map.get(budget.lower(), "0-1000")
-
-            # STEP 1: Find Hotel IDs with amenities filtering
-            list_params = {"cityCode": city.upper()[-3:]}
-            if amenities:
-                list_params["amenities"] = ",".join(amenities).upper()
-
-            hotel_list = amadeus_call(
-                amadeus.reference_data.locations.hotels.by_city.get, **list_params
-            )
-
-            if not hotel_list.data:
-                return json.dumps(
-                    {
-                        "error": f"No hotels found in {city} matching amenities: {amenities}",
-                        "results": [],
-                    }
-                )
-
-            # Step 1.5: Store hotel details for later enrichment
-            hotel_details = {}
-            for h in hotel_list.data:
-                hotel_details[h["hotelId"]] = {
-                    "geoCode": h.get("geoCode", {}),
-                    "address": h.get("address", {}),
-                    "rating": h.get(
-                        "rating", None
-                    ),  # Some endpoints might return it here
-                }
-
-            # Get top 20 IDs (Amadeus allows up to 20-50 depending on endpoint, limit to 20 to be safe)
-            hotel_ids = [h["hotelId"] for h in hotel_list.data[:20]]
-
-            # STEP 2: Get offers/prices for those IDs
-            offers_response = amadeus_call(
-                amadeus.shopping.hotel_offers_search.get,
-                hotelIds=",".join(hotel_ids),
-                adults=adults,
-                checkInDate=check_in,
-                checkOutDate=check_out,
-                priceRange=price_range,
-                currency="USD",
-            )
-
-            # STEP 3: Clean results
-            results = []
-            for offer in offers_response.data[:15]:  # Process more to allow sorting
-                hid = offer["hotel"]["hotelId"]
-                details = hotel_details.get(hid, {})
-
-                # Try to get rating from offer or details
-                rating = offer["hotel"].get("rating") or details.get("rating") or "N/A"
-
-                # Format address
-                addr_obj = details.get("address", {})
-                address_str = ", ".join(
-                    [line for line in addr_obj.get("lines", []) if line]
-                    + [addr_obj.get("cityName", ""), addr_obj.get("countryCode", "")]
-                )
-
-                hotel_info = {
-                    "name": offer["hotel"]["name"],
-                    "hotelId": hid,
-                    "rating": rating,
-                    "location": {
-                        "latitude": details.get("geoCode", {}).get("latitude"),
-                        "longitude": details.get("geoCode", {}).get("longitude"),
-                        "address": address_str.strip(", "),
-                    },
-                    "check_in": check_in,
-                    "check_out": check_out,
-                    "total_price": f"{offer['offers'][0]['price']['total']} {offer['offers'][0]['price']['currency']}",
-                    "price_per_night": "N/A",
-                    "description": offer["offers"][0]["room"]
-                    .get("description", {})
-                    .get("text", "No description"),
-                    "amenities": offer["hotel"].get("amenities", []),
-                    "available": True,
-                }
-                # Calculate per-night price
-                try:
-                    from datetime import datetime
-
-                    d1 = datetime.strptime(check_in, "%Y-%m-%d")
-                    d2 = datetime.strptime(check_out, "%Y-%m-%d")
-                    nights = (d2 - d1).days
-                    total = float(offer["offers"][0]["price"]["total"])
-                    if nights > 0:
-                        hotel_info["price_per_night"] = f"{total / nights:.2f} USD"
-                        hotel_info["nights"] = nights
-                except Exception:
-                    pass
-                results.append(hotel_info)
-
-            # Enrich with Sentiments (Phase B2)
-            try:
-                found_ids = [h["hotelId"] for h in results if "hotelId" in h]
-                if found_ids:
-                    sentiments_data = _get_hotel_sentiments(found_ids)
-                    sentiments_map = {
-                        item["hotelId"]: item
-                        for item in sentiments_data.get("data", [])
-                    }
-
-                    for h in results:
-                        h_id = h.get("hotelId")
-                        if h_id and h_id in sentiments_map:
-                            s_info = sentiments_map[h_id]
-                            h["sentiment_rating"] = s_info.get("overallRating", "N/A")
-                            h["review_count"] = s_info.get("numberOfRatings", 0)
-                            h["sentiment_summary"] = s_info.get("sentiments", {})
-            except Exception as e:
-                print(f"  [Warning] Sentiment enrichment failed: {e}")
-
-            # Sorting behavior
-            if sort_by == "rating":
-
-                def get_rating_safe(h):
-                    r = h.get("sentiment_rating", "N/A")
-                    if isinstance(r, (int, float)):
-                        return float(r)
-                    return 0
-
-                results.sort(key=get_rating_safe, reverse=True)
-                print("  [Tool] Sorted results by Rating")
-            else:
-                # Default: Price ascending (usually default from API)
-                # But ensures numeric sort if prices are strings
-                def get_price_safe(h):
-                    try:
-                        return float(h["total_price"].split()[0])
-                    except:
-                        return float("inf")
-
-                results.sort(key=get_price_safe)
-                print("  [Tool] Sorted results by Price")
-
-            # Limit to top 5 after sorting
-            final_results = results[:5]
-
-            print(f"  [Tool] Amadeus returned {len(final_results)} hotel offers")
-            return json.dumps(final_results, indent=2)
-
-        except Exception as e:
-            print(f"  [Warning] Amadeus hotel API failed, using mock: {e}")
-
-    # --- Fallback: Realistic Mock Data ---
-    import random
-    from datetime import datetime
-
-    hotel_names = {
-        "budget": [
-            "Backpackers Inn",
-            "City Hostel",
-            "Budget Lodge",
-            "Traveler's Rest",
-            "Economy Stay",
-        ],
-        "medium": [
-            "Grand Hotel",
-            "City Suites",
-            "Park View Hotel",
-            "Harbor Inn",
-            "Central Plaza Hotel",
-        ],
-        "luxury": [
-            "The Ritz",
-            "Four Seasons",
-            "Waldorf Astoria",
-            "Mandarin Oriental",
-            "St. Regis",
-        ],
-    }
-
-    budget_key = "medium"
-    if budget.lower() in ["cheap", "low", "budget"]:
-        budget_key = "budget"
-    elif budget.lower() in ["luxury", "high", "premium", "5-star"]:
-        budget_key = "luxury"
-
-    base_prices = {"budget": 50, "medium": 150, "luxury": 400}
-
-    # Calculate nights
-    try:
-        d1 = datetime.strptime(check_in, "%Y-%m-%d")
-        d2 = datetime.strptime(check_out, "%Y-%m-%d")
-        nights = max((d2 - d1).days, 1)
-    except Exception:
-        nights = 1
-
-    mock_hotels = []
-    names = hotel_names.get(budget_key, hotel_names["medium"])
-    for i in range(3):
-        name = f"{city.title()} {names[i % len(names)]}"
-        price_per_night = base_prices[budget_key] + random.randint(-20, 80)
-        rating = round(random.uniform(3.5, 5.0), 1)
-        total_price = price_per_night * nights
-
-        available_amenities = [
-            "WiFi",
-            "Breakfast",
-            "Air Conditioning",
-            "Pool",
-            "Gym",
-            "Spa",
-            "Parking",
-            "Restaurant",
-        ]
-        hotel_amenities = random.sample(available_amenities, k=random.randint(2, 5))
-
-        mock_hotels.append(
-            {
-                "name": name,
-                "rating": rating,
-                "check_in": check_in,
-                "check_out": check_out,
-                "nights": nights,
-                "price_per_night": f"{price_per_night:.2f} USD",
-                "total_price": f"{total_price:.2f} USD",
-                "currency": "USD",
-                "amenities": hotel_amenities,
-                "available": True,
-                "booking_link": f"https://example.com/book/{name.replace(' ', '-').lower()}",
-            }
+    # Use SERPAPI_KEY from environment variables
+    api_key = os.environ.get("SERPAPI_KEY")
+    if not api_key:
+        return json.dumps(
+            {"error": "SERPAPI_KEY environment variable is missing.", "results": []}
         )
 
-    print(f"  [Tool] Mock returned {len(mock_hotels)} hotel offers")
-    return json.dumps(mock_hotels, indent=2)
+    # 1. Build the NLP Query
+    query = f"hotels in {city}"
+    if amenities:
+        query += " with " + " and ".join(amenities)
+
+    # 2. Setup the SerpApi parameters
+    params = {
+        "engine": "google_hotels",
+        "q": query,
+        "check_in_date": check_in,
+        "check_out_date": check_out,
+        "adults": adults,
+        "currency": "USD",
+        "gl": "us",  # Geolocation for search
+        "hl": "en",  # Language
+        "api_key": api_key,
+    }
+    print(f"  [Tool] SerpApi params: {params}")
+    # 3. Map budget limits for post-filtering
+    budget_map = {"budget": (0, 200), "medium": (200, 500), "luxury": (500, 2000)}
+    min_price_per_night, max_price_per_night = budget_map.get(budget.lower(), (0, 2000))
+
+    from datetime import datetime
+
+    try:
+        check_in_dt = datetime.strptime(check_in, "%Y-%m-%d")
+        check_out_dt = datetime.strptime(check_out, "%Y-%m-%d")
+        duration_days = max(1, (check_out_dt - check_in_dt).days)
+    except ValueError:
+        duration_days = 1
+
+    min_total_price = min_price_per_night * duration_days
+    max_total_price = max_price_per_night * duration_days
+    try:
+        # 4. Execute the API Call
+        response = requests.get("https://serpapi.com/search.json", params=params)
+        response.raise_for_status()
+        data = response.json()
+
+        properties = data.get("properties", [])
+        if not properties:
+            return json.dumps(
+                {
+                    "error": f"No available hotels found in {city} for these dates/amenities.",
+                    "results": [],
+                }
+            )
+        print(f"  [Tool] SerpApi returned {len(properties)} properties")
+        # 5. Clean and Filter Results
+        results = []
+        for prop in properties:
+            # Extract pricing safely
+            rate_info = prop.get("rate_per_night", {})
+            total_info = prop.get("total_rate", {})
+
+            price_per_night = rate_info.get("extracted_lowest", 0)
+            total_price = total_info.get("extracted_lowest", 0)
+            # Skip if no pricing is available for these dates
+            if not price_per_night or not total_price:
+                continue
+            # Apply the budget filter
+            if not (min_price_per_night <= price_per_night <= max_price_per_night):
+                continue
+            if not (min_total_price <= total_price <= max_total_price):
+                continue
+            # --- NEW: CALCULATE AMENITY SCORE ---
+            amenity_score = 0
+
+            # Dictionary to catch the different ways Google lists amenities
+            amenity_synonyms = {
+                "disabled_facilities": [
+                    "accessible",
+                    "disabled-facilities",
+                    "mobility",
+                    "ada-compliant",
+                    "handicap",
+                    "visual-aids",
+                    "auditory-guidance",
+                ],
+                "pets_allowed": [
+                    "pet-friendly",
+                    "pets-allowed",
+                    "dog-friendly",
+                    "cat-friendly",
+                    "pet-friendly",
+                    "dogs-welcome",
+                    "pets-welcome",
+                    "animal-friendly",
+                ],
+                "pets_not_allowed": [
+                    "no-pets",
+                    "pets-not-allowed",
+                    "service-animals-only",
+                    "no-pets-allowed",
+                ],
+                "wifi": [
+                    "wi-fi",
+                    "wifi",
+                    "wireless-internet",
+                    "free-wi-fi",
+                    "internet-access",
+                    "wlan",
+                    "high-speed-internet",
+                ],
+                "parking": [
+                    "parking",
+                    "garage",
+                    "valet",
+                    "car-park",
+                    "free-parking",
+                    "on-site-parking",
+                    "street-parking",
+                ],
+                "air_conditioning": [
+                    "air-conditioning",
+                    "a/c",
+                    "climate-control",
+                    "air-conditioned",
+                    "ac",
+                ],
+                "fitness_center": [
+                    "fitness-center",
+                    "gym",
+                    "workout",
+                    "fitness-centre",
+                    "health-club",
+                    "exercise-room",
+                    "fitness-facility",
+                ],
+                "restaurant": [
+                    "restaurant",
+                    "dining",
+                    "bar",
+                    "cafe",
+                    "room-service",
+                    "on-site-restaurant",
+                    "eatery",
+                    "lounge",
+                ],
+                "business_center": [
+                    "business-center",
+                    "meeting",
+                    "conference",
+                    "business-centre",
+                    "coworking",
+                    "work-desk",
+                    "fax",
+                    "photocopying",
+                ],
+                "babysitting": [
+                    "babysitting",
+                    "childcare",
+                    "kids-club",
+                    "child-services",
+                    "nanny",
+                    "family-friendly",
+                ],
+                "spa": [
+                    "spa",
+                    "massage",
+                    "wellness",
+                    "sauna",
+                    "hot-tub",
+                    "jacuzzi",
+                    "steam-room",
+                    "bathhouse",
+                ],
+                "kosher": [
+                    "kosher",
+                    "kosher-food",
+                    "kosher-breakfast",
+                    "kosher-meals",
+                    "glatt",
+                ],
+                "vegetarian": [
+                    "vegetarian",
+                    "veg-friendly",
+                    "meat-free",
+                    "vegetarian-meals",
+                ],
+                "vegan": ["vegan", "plant-based", "vegan-friendly", "vegan-options"],
+                "gluten_free": [
+                    "gluten-free",
+                    "gluten-free",
+                    "celiac",
+                    "gf-options",
+                    "gluten-allergy",
+                ],
+                "wheelchair_accessible": [
+                    "wheelchair-accessible",
+                    "wheelchair",
+                    "accessible-roll-in-shower",
+                    "roll-in-shower",
+                    "step-free-access",
+                    "ramps",
+                    "lower-bathroom-sink",
+                ],
+            }
+
+            if amenities:
+                # Convert all hotel amenities to lowercase once for efficiency
+                hotel_amenities_lower = [a.lower() for a in prop.get("amenities", [])]
+
+                for req_amenity in amenities:
+                    req_key = req_amenity.lower().strip()
+
+                    # Normalize the key (so "pets allowed" and "pets_allowed" both work)
+                    normalized_key = req_key.replace(" ", "_")
+
+                    # Fetch the list of synonyms, defaulting to the requested word if not in map
+                    accepted_terms = amenity_synonyms.get(normalized_key, [req_key])
+
+                    # If ANY synonym is inside ANY hotel amenity, it's a match!
+                    match_found = any(
+                        term in h_amen
+                        for h_amen in hotel_amenities_lower
+                        for term in accepted_terms
+                    )
+
+                    if match_found:
+                        amenity_score += 1
+            # -----------------------------------------------
+            hotel_info = {
+                "name": prop.get("name"),
+                "hotelId": prop.get("property_token"),  # Google's unique property ID
+                "rating": prop.get("overall_rating", "N/A"),
+                "review_count": prop.get("reviews", 0),
+                "location": {
+                    "latitude": prop.get("gps_coordinates", {}).get("latitude"),
+                    "longitude": prop.get("gps_coordinates", {}).get("longitude"),
+                    "address": prop.get("address", "Address not provided"),
+                },
+                "check_in": check_in,
+                "check_out": check_out,
+                "total_price": f"{total_price} USD",
+                "price_per_night": f"{price_per_night} USD",
+                "description": prop.get("description", "No description available"),
+                "amenities": prop.get("amenities", []),
+                "matched_amenities_count": amenity_score,
+                "available": True,
+            }
+            results.append(hotel_info)
+
+        # 6. Apply Multi-Level Sorting
+        if sort_by == "rating":
+            # Primary: Amenities (Descending) -> Secondary: Rating (Descending)
+            def get_rating_sort_keys(x):
+                rating = x["rating"]
+                # Safely convert rating to float, default to 0 if "N/A"
+                r_val = (
+                    float(rating)
+                    if isinstance(rating, (int, float))
+                    or (
+                        isinstance(rating, str) and rating.replace(".", "", 1).isdigit()
+                    )
+                    else 0.0
+                )
+                return (x["matched_amenities_count"], r_val)
+
+            results.sort(key=get_rating_sort_keys, reverse=True)
+            print("  [Tool] Sorted by Matched Amenities (Desc) then Rating (Desc)")
+
+        else:
+            # Primary: Amenities (Descending) -> Secondary: Price (Ascending)
+            def get_price_sort_keys(x):
+                try:
+                    price_val = float(x["total_price"].split()[0])
+                except Exception:
+                    price_val = float("inf")
+
+                # By returning a negative amenity score, we sort amenities descending
+                # while keeping the price sort ascending, avoiding the need for reverse=True
+                return (-x["matched_amenities_count"], price_val)
+
+            results.sort(key=get_price_sort_keys, reverse=False)
+            print("  [Tool] Sorted by Matched Amenities (Desc) then Price (Asc)")
+
+        # Limit to top 5 after sorting
+        final_results = results[:5]
+
+        print(f"  [Tool] SerpApi returned {len(final_results)} valid hotel offers")
+        if len(final_results) == 0:
+            return json.dumps(
+                {
+                    "error": f"No available hotels found in {city} for these dates/amenities.",
+                    "results": [],
+                }
+            )
+        return json.dumps(final_results, indent=2)
+
+    except requests.exceptions.RequestException as e:
+        print(f"  [Warning] SerpApi network error: {e}")
+        return json.dumps(
+            {
+                "error": f"Network error connecting to hotel search: {str(e)}",
+                "results": [],
+            }
+        )
+    except Exception as e:
+        print(f"  [Warning] Unexpected error parsing SerpApi data: {e}")
+        return json.dumps({"error": "Failed to parse hotel data.", "results": []})
 
 
 # =====================================================================
