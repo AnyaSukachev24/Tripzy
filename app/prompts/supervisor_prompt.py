@@ -83,8 +83,8 @@ Return a JSON object with:
 - "preferences": (Optional) Merge new preferences with listing in "CURRENT STATE".
 - "origin_city": (Optional) User's starting city. If not mentioned, USE VALUE FROM "CURRENT STATE".
 - "traveling_personas_number": (Optional) Extract number of travelers. Default: 1. If not mentioned, USE VALUE FROM "CURRENT STATE".
-- "amenities": (Optional) Extract list of amenities. Only use valid values from the list below.
-  - "DISABLED_FACILITIES", "PETS_ALLOWED", "WIFI", "KSML", "VGML", "WCHR", "PARKING", "AIR_CONDITIONING", "FITNESS_CENTER", "RESTAURANT", "BUSINESS_CENTER", "BABYSITTING", "SPA", "MOML", "GFML", "WCHC", "PETC"
+- "amenities": (Optional) Extract list of amenities, based on the user request. Only use valid values from the list below:
+  [DISABLED_FACILITIES, WIFI, PARKING, AIR_CONDITIONING, FITNESS_CENTER, RESTAURANT, BUSINESS_CENTER, BABYSITTING, SPA, PETS_ALLOWED, PETS_NOT_ALLOWED, KOSHER, VEGETARIAN, VEGAN, GLUTEN_FREE, WHEELCHAIR_ACCESSIBLE]
 - "request_type": (REQUIRED) One of:
   * "Planning": User wants a FULL itinerary including Flights AND Hotels.
   * "Discovery": User asking for suggestions/ideas, no destination set.
