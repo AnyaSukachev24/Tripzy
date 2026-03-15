@@ -1238,13 +1238,14 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
                 description="The outbound flight from origin to destination. REQUIRED.",
             ),
         )
-        base_fields["return_flight"] = (
-            Flight,
-            Field(
-                default=None,
-                description="The return flight from destination back to origin. Optional.",
-            ),
-        )
+        if duration_days is not None:
+            base_fields["return_flight"] = (
+                Flight,
+                Field(
+                    ...,
+                    description="The return flight from destination back to origin. REQUIRED.",
+                ),
+            )
     if request_type in ["Planning", "HotelOnly"]:
         base_fields["hotels"] = (
             List[Dict[str, Any]],
