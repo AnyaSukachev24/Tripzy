@@ -46,7 +46,7 @@ Your job is to review the hotel options suggested by the Planner.
 Your job is to review the activities and attractions suggested by the Planner.
 
 ### CHECKLIST:
-1. **Duration**: If an itinerary is provided, it should roughly align with the {duration_days} days requested.
+1. **Duration**: If an itinerary is provided, it should roughly align with the {{duration_days}} days requested.
 2. **Budget**: Is the total cost of activities within the user's budget?
 3. **Realism**: Are the activities feasible in the given time?
 4. **Constraints**: Did it respect user preferences (e.g. Kid-friendly, Dietary needs)?

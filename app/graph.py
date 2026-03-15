@@ -1552,6 +1552,7 @@ def critique_node(state: AgentState) -> Dict[str, Any]:
             f"Interests: {', '.join(user_profile.interests or [])}"
         )
 
+    critique_prompt_text = get_critique_prompt(request_type)
     prompt = ChatPromptTemplate.from_messages(
         [("system", critique_prompt_text), ("human", "Plan to Review: {trip_plan}")]
     )
