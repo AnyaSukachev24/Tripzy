@@ -14,75 +14,107 @@ from app.graph import graph
 from app.callbacks import CostCallbackHandler
 from app.conversation_logger import conversation_logger
 
+
 def format_plan_to_markdown(plan: Dict[str, Any]) -> str:
     """Converts the JSON trip plan into a readable Markdown string."""
     if not plan:
         return "No plan available."
-        
-    origin_city = plan.get('origin_city', '')
-    dates = plan.get('dates', '')
-    
+
+    origin_city = plan.get("origin_city", "")
+    dates = plan.get("dates", "")
+    duration = plan.get("duration_days", "")
+    budget_curr = plan.get("budget_currency", "USD")
+    trip_type = plan.get("trip_type", "")
+    travelers = plan.get("travelers", "")
+
     md = f"### Trip to {plan.get('destination', 'Unknown')}\n"
     if origin_city:
         md += f"**From:** {origin_city}\n"
     if dates:
         md += f"**Dates:** {dates}\n"
-        
-    md += f"**Budget Estimate:** ${plan.get('budget_estimate', 0)}\n\n"
-    
+    if duration:
+        md += f"**Duration:** {duration} days\n"
+    if travelers:
+        md += f"**Travelers:** {travelers}\n"
+    if trip_type:
+        md += f"**Trip Type:** {trip_type}\n"
+
+    md += f"**Budget Estimate:** {plan.get('budget_estimate', 0)} {budget_curr}\n\n"
+
     # --- FLIGHTS ---
-    flights = plan.get('flights', [])
+    flights = plan.get("flights", [])
+    if not flights:
+        # Fallback to the new strongly-typed Flight objects
+        if plan.get("outbound_flight"):
+            flights.append(plan["outbound_flight"])
+        if plan.get("return_flight"):
+            flights.append(plan["return_flight"])
+
     if flights:
         md += "#### ✈️ Flight Options\n"
         for flight in flights:
-            airline = flight.get('airline', 'Unknown Airline')
-            price = flight.get('price', 'N/A')
-            flight_num = flight.get('flight_number', '')
-            link = flight.get('link', '#')
-            
+            airline = flight.get("airline", flight.get("source", "Unknown Airline"))
+            orig = flight.get("origin", "")
+            dest = flight.get("destination", "")
+            price = flight.get("price", "N/A")
+            flight_num = flight.get("flight_number", "")
+            duration = flight.get("duration", "")
+            date = flight.get("date", "")
+            is_direct = flight.get("is_direct")
+            link = flight.get("link", "#")
+
             details = f"**{airline}**"
             if flight_num:
                 details += f" ({flight_num})"
-            details += f" - {price}"
-            
-            if link and link != '#':
+            if orig and dest:
+                details += f" | {orig} ➔ {dest}"
+            details += f" - ${price}"
+            if date:
+                details += f" on {date}"
+            if duration:
+                details += f" ({duration})"
+            if is_direct is not None:
+                details += f" {'(Direct)' if is_direct else '(1+ Stops)'}"
+
+            if link and link != "#":
                 md += f"- [{details}]({link})\n"
             else:
                 md += f"- {details}\n"
         md += "\n"
-        
+
     # --- HOTELS ---
-    hotels = plan.get('hotels', [])
+    hotels = plan.get("hotels", [])
     if hotels:
         md += "#### 🏨 Accommodation Options\n"
         for hotel in hotels:
-            name = hotel.get('name', 'Unknown Hotel')
-            price = hotel.get('price', 'N/A')
-            rating = hotel.get('rating', '')
-            link = hotel.get('booking_link', '#')
-            
+            name = hotel.get("name", "Unknown Hotel")
+            price = hotel.get("price", "N/A")
+            rating = hotel.get("rating", "")
+            link = hotel.get("booking_link", "#")
+
             details = f"**{name}**"
             if rating:
                 details += f" ({rating}★)"
             details += f" - {price}"
-            
-            if link and link != '#':
+
+            if link and link != "#":
                 md += f"- [{details}]({link})\n"
             else:
                 md += f"- {details}\n"
         md += "\n"
-    
+
     # --- ITINERARY ---
     md += "#### 📅 Itinerary\n"
-    itinerary = plan.get('itinerary', [])
+    itinerary = plan.get("itinerary", [])
     if isinstance(itinerary, list):
         for item in itinerary:
-            day = item.get('day', '?')
-            activity = item.get('activity', 'No activity')
-            cost = item.get('cost', 0)
+            day = item.get("day", "?")
+            activity = item.get("activity", "No activity")
+            cost = item.get("cost", 0)
             md += f"- **Day {day}**: {activity} (${cost})\n"
-    
+
     return md
+
 
 app = FastAPI(title="Tripzy Travel Agent (Course Project)")
 
@@ -98,20 +130,25 @@ app.add_middleware(
 # Serve Static Files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+
 @app.get("/")
 async def read_root():
-    return FileResponse('static/index.html')
+    return FileResponse("static/index.html")
+
 
 # --- MODELS ---
+
 
 class Student(BaseModel):
     name: str
     email: str
 
+
 class TeamInfoResponse(BaseModel):
     group_batch_order_number: str
     team_name: str
     students: List[Student]
+
 
 class AgentInfoResponse(BaseModel):
     description: str
@@ -119,9 +156,11 @@ class AgentInfoResponse(BaseModel):
     prompt_template: Dict[str, str]
     prompt_examples: List[Dict[str, Any]]
 
+
 class ExecuteRequest(BaseModel):
     prompt: str
     thread_id: Optional[str] = None
+
 
 class ExecuteResponse(BaseModel):
     status: str
@@ -129,19 +168,22 @@ class ExecuteResponse(BaseModel):
     steps: List[Dict[str, Any]]
     error: Optional[str] = None
 
+
 # --- ENDPOINTS ---
+
 
 @app.get("/api/team_info", response_model=TeamInfoResponse)
 def get_team_info():
     """Returns student details (Course Requirement)."""
     return {
-        "group_batch_order_number": "BATCH_XX_ORDER_XX", 
+        "group_batch_order_number": "BATCH_XX_ORDER_XX",
         "team_name": "Tripzy",
         "students": [
-            {"name": "Student 1", "email": "s1@example.com"}, 
+            {"name": "Student 1", "email": "s1@example.com"},
             {"name": "Student 2", "email": "s2@example.com"},
-        ]
+        ],
     }
+
 
 @app.get("/api/agent_info", response_model=AgentInfoResponse)
 def get_agent_info():
@@ -157,12 +199,17 @@ def get_agent_info():
                 "prompt": "Plan a 3-day trip to Paris for cheap.",
                 "full_response": "Here is a budget-friendly Paris itinerary...",
                 "steps": [
-                    {"module": "Supervisor", "prompt": "...", "response": "Routing to Planner"},
+                    {
+                        "module": "Supervisor",
+                        "prompt": "...",
+                        "response": "Routing to Planner",
+                    },
                     {"module": "Planner", "prompt": "...", "response": "Drafting plan"},
-                ]
+                ],
             }
-        ]
+        ],
     }
+
 
 @app.get("/api/model_architecture")
 def get_model_architecture():
@@ -173,20 +220,21 @@ def get_model_architecture():
         return Response(content=img_data, media_type="image/png")
     except Exception as e:
         return JSONResponse(
-            status_code=500, 
-            content={"error": f"Failed to generate graph image: {str(e)}"}
+            status_code=500,
+            content={"error": f"Failed to generate graph image: {str(e)}"},
         )
+
 
 @app.post("/api/execute", response_model=ExecuteResponse)
 def execute_agent(request: ExecuteRequest):
     """
-    Main Execution Endpoint. 
+    Main Execution Endpoint.
     Runs the LangGraph, captures steps, and returns the final response.
     """
     thread_id = request.thread_id or str(uuid.uuid4())
     config = {"configurable": {"thread_id": thread_id}}
     input_payload = {"user_query": request.prompt}
-    
+
     try:
         final_state = graph.invoke(input_payload, config=config)
         plan = final_state.get("trip_plan")
@@ -208,23 +256,22 @@ def execute_agent(request: ExecuteRequest):
             final_text = "Task completed."
             for step in reversed(steps):
                 resp = step.get("response", "")
-                if resp and not any(resp.startswith(tag) for tag in ["Routing to", "Need more", "Edge Case", "Error"]):
+                if resp and not any(
+                    resp.startswith(tag)
+                    for tag in ["Routing to", "Need more", "Edge Case", "Error"]
+                ):
                     final_text = resp
                     break
 
-        return {
-            "status": "ok",
-            "response": final_text,
-            "steps": steps,
-            "error": None
-        }
+        return {"status": "ok", "response": final_text, "steps": steps, "error": None}
     except Exception as e:
         return {
             "status": "error",
             "response": "An error occurred during execution.",
             "steps": [],
-            "error": str(e)
+            "error": str(e),
         }
+
 
 @app.post("/api/stream")
 async def stream_agent(request: ExecuteRequest):
@@ -235,16 +282,18 @@ async def stream_agent(request: ExecuteRequest):
     thread_id = request.thread_id or str(uuid.uuid4())
     config = {"configurable": {"thread_id": thread_id}}
     input_payload = {"user_query": request.prompt}
-    
+
     #  Log the user message
     conversation_logger.log_message(thread_id, "user", request.prompt)
 
     async def event_generator():
         final_response_content = None
         try:
-            async for event in graph.astream_events(input_payload, config, version="v2"):
+            async for event in graph.astream_events(
+                input_payload, config, version="v2"
+            ):
                 kind = event["event"]
-                
+
                 if kind == "on_chain_start" and event.get("name") == "LangGraph":
                     msg = {"type": "status", "content": "Starting Graph..."}
                     yield f"data: {json.dumps(msg)}\n\n"
@@ -252,8 +301,11 @@ async def stream_agent(request: ExecuteRequest):
                     # We could stream tokens here if we wanted fine-grained output
                     pass
                 elif kind == "on_tool_start":
-                    tool_name = event.get('name', 'Tool')
-                    msg = {"type": "status", "content": f"Executing Tool: {tool_name}..."}
+                    tool_name = event.get("name", "Tool")
+                    msg = {
+                        "type": "status",
+                        "content": f"Executing Tool: {tool_name}...",
+                    }
                     yield f"data: {json.dumps(msg)}\n\n"
                 elif kind == "on_chain_end" and "node" in event.get("metadata", {}):
                     node_name = event["metadata"]["node"]
@@ -262,11 +314,11 @@ async def stream_agent(request: ExecuteRequest):
 
             # CHECK FOR INTERRUPTS
             snapshot = graph.get_state(config)
-            
+
             # Log state snapshot
             conversation_logger.log_state_snapshot(thread_id, dict(snapshot.values))
-            
-            if snapshot.next: # If there are nodes pending (like Human_Approval)
+
+            if snapshot.next:  # If there are nodes pending (like Human_Approval)
                 # Send the draft plan for preview
                 draft_plan = snapshot.values.get("trip_plan")
                 yield f"data: {json.dumps({'type': 'waiting_for_approval', 'thread_id': thread_id, 'preview': draft_plan})}\n\n"
@@ -286,30 +338,43 @@ async def stream_agent(request: ExecuteRequest):
                 if plan:
                     final_text = format_plan_to_markdown(plan)
                     if budget_warning:
-                        final_text = f"⚠️ **Budget Note:** {budget_warning}\n\n{final_text}"
+                        final_text = (
+                            f"⚠️ **Budget Note:** {budget_warning}\n\n{final_text}"
+                        )
                 elif instruction and instruction not in INTERNAL_TAGS:
                     final_text = instruction
                 else:
                     # Fallback: last step with real user-facing content
                     for step in reversed(steps):
                         resp = step.get("response", "")
-                        if resp and not any(resp.startswith(tag) for tag in ["Routing to", "Need more", "Edge Case", "Error", "Executing"]):
+                        if resp and not any(
+                            resp.startswith(tag)
+                            for tag in [
+                                "Routing to",
+                                "Need more",
+                                "Edge Case",
+                                "Error",
+                                "Executing",
+                            ]
+                        ):
                             final_text = resp
                             break
 
                 # Log the agent response
                 conversation_logger.log_message(thread_id, "agent", final_text)
                 final_response_content = final_text
-                
+
                 msg = {"type": "final_response", "content": final_text}
                 yield f"data: {json.dumps(msg)}\n\n"
                 yield f"data: {json.dumps({'type': 'done'})}\n\n"
-            
+
             # Save conversation to file
-            saved_path = conversation_logger.save_conversation(thread_id, final_response_content)
+            saved_path = conversation_logger.save_conversation(
+                thread_id, final_response_content
+            )
             if saved_path:
                 print(f"[UI RUN SAVED] {saved_path}")
-            
+
         except Exception as e:
             error_msg = str(e)
             conversation_logger.log_message(thread_id, "error", error_msg)
@@ -318,28 +383,32 @@ async def stream_agent(request: ExecuteRequest):
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
+
 @app.post("/api/approve")
 def approve_trip(request: ExecuteRequest):
     """
     Resumes the graph after a human approval interrupt.
     """
     if not request.thread_id:
-        return JSONResponse(status_code=400, content={"error": "thread_id is required for approval."})
-    
+        return JSONResponse(
+            status_code=400, content={"error": "thread_id is required for approval."}
+        )
+
     config = {"configurable": {"thread_id": request.thread_id}}
-    
+
     try:
         # Resuming with None input since we are just triggering the next step
         final_state = graph.invoke(None, config=config)
         plan = final_state.get("trip_plan")
-        
+
         return {
             "status": "ok",
             "response": format_plan_to_markdown(plan) if plan else "Trip finalized.",
-            "steps": final_state.get("steps", [])
+            "steps": final_state.get("steps", []),
         }
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
