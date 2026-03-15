@@ -8,23 +8,23 @@ from enum import Enum
 
 
 class Amenity(str, Enum):
-    DISABLED_FACILITIES = "DISABLED_FACILITIES"
-    PETS_ALLOWED = "PETS_ALLOWED"
-    WIFI = "WIFI"
-    KSML = "KSML"
-    VGML = "VGML"
-    WCHR = "WCHR"
-    PARKING = "PARKING"
-    AIR_CONDITIONING = "AIR_CONDITIONING"
-    FITNESS_CENTER = "FITNESS_CENTER"
-    RESTAURANT = "RESTAURANT"
-    BUSINESS_CENTER = "BUSINESS_CENTER"
-    BABYSITTING = "BABYSITTING"
-    SPA = "SPA"
-    MOML = "MOML"
-    GFML = "GFML"
-    WCHC = "WCHC"
-    PETC = "PETC"
+    # Core Hotel Amenities
+    DISABLED_FACILITIES = "disabled_facilities"
+    WIFI = "wifi"
+    PARKING = "parking"
+    AIR_CONDITIONING = "air_conditioning"
+    FITNESS_CENTER = "fitness_center"
+    RESTAURANT = "restaurant"
+    BUSINESS_CENTER = "business_center"
+    BABYSITTING = "babysitting"
+    SPA = "spa"
+    PETS_ALLOWED = "pets_allowed"
+    PETS_NOT_ALLOWED = "pets_not_allowed"
+    KOSHER = "kosher"
+    VEGETARIAN = "vegetarian"
+    VEGAN = "vegan"
+    GLUTEN_FREE = "gluten_free"
+    WHEELCHAIR_ACCESSIBLE = "wheelchair_accessible"
 
 
 def reduce_amenities(
@@ -39,18 +39,33 @@ def reduce_amenities(
 # Data Models (Structured Content)
 # ==============================================================================
 
+
 class UserProfile(BaseModel):
     """
     Represents a user's travel preferences and constraints.
     """
+
     user_id: str = Field(description="Unique identifier for the user (e.g., email)")
     name: Optional[str] = Field(default=None, description="User's display name")
-    email: Optional[str] = Field(default=None, description="User's email address (may match user_id)")
-    travel_style: Optional[str] = Field(default=None, description="Travel style (e.g., luxury, budget, balanced, adventure)")
-    dietary_needs: List[str] = Field(default_factory=list, description="List of dietary restrictions")
-    accessibility_needs: List[str] = Field(default_factory=list, description="List of accessibility requirements")
-    interests: List[str] = Field(default_factory=list, description="List of improved travel interests")
-    home_city: Optional[str] = Field(default=None, description="User's home city for flight origins")
+    email: Optional[str] = Field(
+        default=None, description="User's email address (may match user_id)"
+    )
+    travel_style: Optional[str] = Field(
+        default=None,
+        description="Travel style (e.g., luxury, budget, balanced, adventure)",
+    )
+    dietary_needs: List[str] = Field(
+        default_factory=list, description="List of dietary restrictions"
+    )
+    accessibility_needs: List[str] = Field(
+        default_factory=list, description="List of accessibility requirements"
+    )
+    interests: List[str] = Field(
+        default_factory=list, description="List of improved travel interests"
+    )
+    home_city: Optional[str] = Field(
+        default=None, description="User's home city for flight origins"
+    )
 
 
 # =========================================================
@@ -87,18 +102,27 @@ class ItineraryDay(BaseModel):
 
 class TripPlan(BaseModel):
     """Structured trip plan — the canonical output of Trip_Planner."""
+
     destination: str = Field(default="", description="Trip destination")
     origin_city: str = Field(default="", description="Departure city")
-    dates: str = Field(default="", description="Trip date range e.g. '2026-06-01 to 2026-06-07'")
+    dates: str = Field(
+        default="", description="Trip date range e.g. '2026-06-01 to 2026-06-07'"
+    )
     duration_days: int = Field(default=0, description="Number of trip days")
     budget_estimate: float = Field(default=0.0, description="Total estimated cost")
     budget_currency: str = Field(default="USD", description="Currency code")
-    trip_type: str = Field(default="", description="Type: honeymoon, family, adventure, etc.")
+    trip_type: str = Field(
+        default="", description="Type: honeymoon, family, adventure, etc."
+    )
     travelers: int = Field(default=1, description="Number of travelers")
     flights: List[Dict[str, Any]] = Field(default=[], description="Flight options")
     hotels: List[Dict[str, Any]] = Field(default=[], description="Hotel options")
-    itinerary: List[Dict[str, Any]] = Field(default=[], description="Day-by-day itinerary")
-    special_notes: str = Field(default="", description="Any special requirements or notes")
+    itinerary: List[Dict[str, Any]] = Field(
+        default=[], description="Day-by-day itinerary"
+    )
+    special_notes: str = Field(
+        default="", description="Any special requirements or notes"
+    )
 
 
 class AgentState(TypedDict):
@@ -141,7 +165,9 @@ class AgentState(TypedDict):
     steps: Annotated[List[Dict[str, Any]], operator.add]  # REQUIRED: Grading Log
 
     # --- 4. ROUTING METADATA (new) ---
-    request_type: Optional[str]  # "Planning", "Discovery", "FlightOnly", "HotelOnly", "AttractionsOnly"
+    request_type: Optional[
+        str
+    ]  # "Planning", "Discovery", "FlightOnly", "HotelOnly", "AttractionsOnly"
     researcher_calls: Optional[int]  # Count of researcher node invocations (loop guard)
     user_profile: Optional[UserProfile]  # Retrieved user preferences
     budget_warning: Optional[str]  # Budget-aware warning from critique
