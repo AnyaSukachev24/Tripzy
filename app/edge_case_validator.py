@@ -125,6 +125,59 @@ def validate_conflicting_requirements(
     return True, None
 
 
+# Continents / major world regions that are too vague to plan a trip to
+_VAGUE_REGIONS = {
+    "europe": "Paris (France), Rome (Italy), Prague (Czech Republic), Santorini (Greece), Barcelona (Spain)",
+    "asia": "Bali (Indonesia), Tokyo (Japan), Bangkok (Thailand), Kyoto (Japan), Singapore",
+    "southeast asia": "Bali (Indonesia), Bangkok (Thailand), Hoi An (Vietnam), Chiang Mai (Thailand), Luang Prabang (Laos)",
+    "south america": "Rio de Janeiro (Brazil), Buenos Aires (Argentina), Cartagena (Colombia), Cusco (Peru), Medellin (Colombia)",
+    "latin america": "Cancun (Mexico), Cartagena (Colombia), Buenos Aires (Argentina), Lima (Peru)",
+    "north america": "New York (USA), Vancouver (Canada), Miami (USA), New Orleans (USA), Quebec City (Canada)",
+    "africa": "Cape Town (South Africa), Marrakech (Morocco), Zanzibar (Tanzania), Nairobi (Kenya)",
+    "middle east": "Dubai (UAE), Petra (Jordan), Istanbul (Turkey), Tel Aviv (Israel)",
+    "oceania": "Sydney (Australia), Auckland (New Zealand), Fiji, Bora Bora (French Polynesia)",
+    "caribbean": "Barbados, Aruba, Punta Cana (Dominican Republic), Turks and Caicos, Jamaica",
+    "scandinavia": "Copenhagen (Denmark), Stockholm (Sweden), Bergen (Norway), Reykjavik (Iceland)",
+    "balkans": "Dubrovnik (Croatia), Kotor (Montenegro), Sofia (Bulgaria), Ljubljana (Slovenia)",
+    "central america": "Costa Rica, Panama City (Panama), Antigua (Guatemala)",
+    "the world": None,
+    "everywhere": None,
+    "anywhere": None,
+}
+
+
+def validate_destination_specificity(destination: str) -> Tuple[bool, Optional[str]]:
+    """
+    Detect if the destination is a continent or major world region — too vague to plan a trip.
+
+    Returns:
+        (is_valid, error_message)  —  is_valid=False means we should block planning.
+    """
+    if not destination:
+        return True, None  # Empty is handled elsewhere
+
+    dest_lower = destination.strip().lower()
+
+    # Direct match or "the X" prefix
+    check_keys = {dest_lower, dest_lower.lstrip("the ").strip()}
+    for vague, examples in _VAGUE_REGIONS.items():
+        if vague in check_keys or dest_lower == vague:
+            if examples:
+                msg = (
+                    f'"{destination}" is a whole region — I need a specific city or country to plan your trip! '
+                    f"Some great options in {destination}: {examples}. "
+                    f"Which city or country would you like to visit?"
+                )
+            else:
+                msg = (
+                    "That destination is too broad for me to plan a trip — could you name "
+                    "a specific city or country? (e.g., Paris, Tokyo, Bali, Cape Town)"
+                )
+            return False, msg
+
+    return True, None
+
+
 def validate_group_size(trip_request: str) -> Tuple[bool, Optional[str]]:
     """
     Detect very large groups that need special handling.
@@ -201,18 +254,23 @@ def process_edge_cases(
     
     # Run validations
     validations = []
-    
+
+    # --- Destination specificity check (always runs when a destination is given) ---
+    # Check FIRST so the user immediately gets redirected to pick a city
+    if destination:
+        validations.append(validate_destination_specificity(destination))
+
     # Only validate duration strictly if we are trying to plan
     if is_planning:
         validations.append(validate_duration(duration_days))
     elif duration_days > 365:
          # Even if not planning, > 1 year is too long
          validations.append(validate_duration(duration_days))
-         
+
     # Only validate budget strictness if planning
     # If planning, budget MUST be > 0. If not planning (just chatting), ignore 0.
     if is_planning and budget_limit <= 0:
-        validations.append((False, "To plan your trip, I need a budget estimate 💰. How much are you looking to spend?"))
+        validations.append((False, "To plan your trip, I need a budget estimate. How much are you looking to spend? (e.g. $1000, $3000, $5000)"))
     elif budget_limit > 0:
         validations.append(validate_budget(budget_limit, duration_days, trip_type))
         validations.append(validate_conflicting_requirements(budget_limit, duration_days, trip_type, destination))

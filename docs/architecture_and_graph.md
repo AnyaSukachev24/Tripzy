@@ -1,151 +1,198 @@
-# Tripzy: Direct-to-Consumer AI Travel Agent Architecture
+# Tripzy: AI Travel Agent — Architecture & Graph
 
-## 1. Overview & Vision
-Tripzy is evolving from a B2B agent tool to a **Direct-to-Consumer (B2C) "Travel Companion"**. The user *is* the traveler. The goal is to provide a stress-free, end-to-end planning experience that feels like having a knowledgeable, budget-conscious friend plan your trip.
+## 1. Overview
 
-### Key Pain Points Addressed
-1.  **"Sticker Shock" (Budget Anxiety)**: Users often plan a dream trip only to realize it's 2x their budget at the end.
-    *   *Solution*: A dedicated **Budget Master** agent that continuously monitors costs against the user's hard limit *during* the planning phase, not just at the end.
-2.  **Decision Paralysis (Overwhelm)**: Too many flight/hotel options.
-    *   *Solution*: The **Planner** agent synthesizes options and presents only the top 3 recommendations based on *personal* history, not just generic "cheapest".
-3.  **Fragmentation**: Flights, hotels, and activities are usually planned in silos with disconnected context.
-    *   *Solution*: A **StateGraph** that maintains a unified "Trip Context" where flight arrival times directly influence hotel check-in and activity scheduling.
-    *   *Course Requirement*: The system supports **multi-turn interactions** and persistent history to handle iterative planning.
-4.  **Impersonal Service**: Generic AI doesn't remember you like aisle seats or vegan food.
-    *   *Solution*: A **User Profile RAG** module (Pinecone) that injects past preferences into every prompt.
+Tripzy is a **Direct-to-Consumer AI Travel Companion** built on LangGraph. The user talks to Tripzy naturally — describing where they want to go, their budget, travel style — and the agent coordinates a set of specialized sub-agents to produce a fully researched, validated itinerary.
+
+**Core design principles:**
+- **Deterministic routing guards** supplement LLM routing decisions to ensure correctness in multi-turn loops
+- **Stateful conversations**: all context accumulates across turns via LangGraph checkpoints
+- **RAG-powered personalization**: user profiles and travel knowledge are retrieved from Pinecone on every turn
 
 ---
 
-## 2. LangGraph Architecture (Optimized)
-We utilize **LangGraph** to model the travel planning process as a state machine. This allows for cyclic feedback and human-in-the-loop approval.
-*   **Optimization**: We minimize LLM calls by using "Router" nodes that only call searching agents when absolutely necessary, preventing wasted tokens.
+## 2. Technology Stack
 
-### 2.1 The Graph State
-The shared state object passed between nodes:
-```typescript
-interface TravelState {
-  // Chat History
-  messages: BaseMessage[];
-  
-  // User Context (Populated by RAG)
-  user_profile: {
-    id: string;
-    preferences: string[]; // e.g., "Aisle seat", "Vegan", "Boutique hotels"
-    past_trips: string[];
-    loyalty_programs: string[];
-  };
+| Layer | Technology |
+|-------|-----------|
+| LLM | Azure OpenAI GPT-4.1-mini |
+| Orchestration | LangGraph (StateGraph with checkpointing) |
+| Backend API | FastAPI + SSE (Server-Sent Events) |
+| Vector DB | Pinecone (user profiles + travel knowledge) |
+| Flight Data | Amadeus API |
+| Fallback Search | DuckDuckGo |
+| Frontend | Vanilla HTML/CSS/JS with glassmorphism design |
 
-  // The Active Trip Plan
-  trip_plan: {
-    destination: string;
-    dates: { start: string; end: string };
-    budget: { limit: number; current_total: number; currency: string };
-    travelers: number;
-    segments: any[]; // Flights, Hotels, Activities
-  };
+---
 
-  // Agent Coordination
-  next_step: string;
-  revision_count: number; // To prevent infinite loops
-  error: string | null;
-}
+## 3. LangGraph State
 
-### 2.2a State Management Strategy (Insight: *sergio11/langgraph_travel_planner*)
-*   **Reducers**: We will use "Reducers" to safely merge data when `FlightSearch` and `HotelSearch` run in parallel. This prevents race conditions where one agent overwrites the other's partial plan.
+The shared state object passed between all graph nodes:
+
+```python
+class AgentState(TypedDict):
+    messages: list[BaseMessage]      # Full LangGraph chat history
+    user_query: str                  # Current user message
+    next_step: str                   # "Researcher" | "Trip_Planner" | "End"
+    supervisor_instruction: str      # Response or routing instruction
+    request_type: str                # "Discovery" | "Planning" | "FlightOnly" | ...
+    destination: str
+    origin_city: str
+    duration_days: int
+    budget_limit: float
+    budget_currency: str
+    trip_type: str
+    preferences: list[str]
+    amenities: list[str]
+    traveling_personas_number: int
+    user_profile: UserProfile | None # Loaded from Pinecone
+    steps: list[dict]                # Full trace of every module called
+    researcher_calls: int            # Rate-limit guard
 ```
 
-### 2.2 The Nodes (Agents)
-The graph consists of specialized nodes.
+---
 
-#### 1. **User Input Analyzer & Profile Loader (The Context Manager)**
-*   **Role**: Understands intent ("I want to go to Tokyo") + Retrieves Context.
-*   **Action**: 
-    1. Parse user query.
-    2. Query Vector DB (Chroma/Pinecone) for user history.
-    3. **Destination Discovery (RAG)**: If the request is vague (e.g., "warm place in December"), querying the `travel_knowledge` index to retrieve matching destinations and attractions based on semantic similarity.
-    4. Output: Up-to-date `user_profile` in state and potential destination candidates.
+## 4. Graph Nodes
 
-#### 2. **The Planner (The Brain)**
-*   **Role**: Orchestrator. Breaks high-level goals into sub-tasks.
-*   **Logic**: 
-    *   "First, find flights to Tokyo for under $1000."
-    *   "Once flights are locked, find hotels in Shinjuku."
-*   **Pattern**: "Supervisor" architecture (inspired by *Azure-Samples*) that delegates to sub-agents but retains control of the overall state.
+### 4.1 Supervisor Node
+**Entry/re-entry point** after every sub-agent call. Responsible for:
 
-#### 3. **The Researcher (The Scout)**
-*   **Role**: Real-time data fetcher.
-*   **Sub-Agents**:
-    *   *Flight Scout*: Uses **Amadeus Test API** (Free) + **Kiwi MCP** (Live Search).
-    *   *Hotel Scout*: Uses **DuckDuckGo** (Search) + Amadeus (Free).
-    *   *Destination Analyst*: Uses **Pinecone Integrated Inference** (RAG) + **DuckDuckGo** for high-quality destination info.
-*   **Tools Standard**: MCP (Model Context Protocol) client integrated for Kiwi.com.
+1. **Profile loading**: Fetches the user's stored profile from Pinecone and injects it into context
+2. **Request classification**: Calls the LLM with the `SUPERVISOR_SYSTEM_PROMPT` to determine:
+   - `request_type`: Discovery / Planning / FlightOnly / HotelOnly / AttractionsOnly / GeneralQuestion
+   - `next_step`: Researcher / Trip_Planner / End
+3. **Vague destination guard**: Detects continent/region-level destinations ("Europe", "Asia", "somewhere warm") and automatically converts to Discovery flow
+4. **Discovery loop breaker**: Prevents infinite Researcher calls by checking if the same `user_query` was already routed (see Discovery Flow doc)
+5. **Edge case validation**: Checks for impossible requests (e.g., $100 budget for Maldives, 1-hour trips)
+6. **Multi-turn validation**: Before routing to Trip_Planner, verifies all required fields are present; asks clarifying questions if not
 
-#### 4. **The Critic (The Quality Control)**
-*   **Role**: Validates the plan *before* it reaches the user (Self-Correction).
-*   **Logic**:
-    *   Checks if the plan matches the user's constraints (e.g., "Is it really kid-friendly?").
-    *   Checks if the budget is realistic (using "Budget Master" logic).
-    *   **Action**: If flawed, sends back to `Planner` with specific feedback (`critique_feedback`).
+### 4.2 Researcher Node
+Executes tool calls delegated by the Supervisor. Has access to:
 
-#### 4. **The Budget Master (The CFO)**
-*   **Role**: Financial guardrail.
-*   **Logic**:
-    *   Receives proposed items from Researcher.
-    *   Calculates `current_total`.
-    *   *Critical Check*: If `current_total` > `budget.limit`, it **rejects** the path and routes back to `Planner` with feedback: "Flights too expensive ($1200 > $1000). Look for cheaper dates or airlines."
+| Tool | Purpose |
+|------|---------|
+| `suggest_destination_tool` | RAG-powered destination suggestions (Pinecone → Amadeus enrichment) |
+| `web_search_tool` | DuckDuckGo fallback for general questions |
+| `search_flights_tool` | Live flight search (Amadeus) |
+| `search_hotels_tool` | Hotel search with dates and amenities |
+| `create_user_profile_tool` | Save/update user preferences in Pinecone |
+| `resolve_airport_code_tool` | City name → IATA code |
+| `get_airline_info_tool` | Airline details from IATA code |
 
-#### 5. **The Concierge (The Presenter)**
-*   **Role**: UX & Formatting.
-*   **Action**: Compiles the final itinerary into a beautiful Markdown proposal with images, daily breakdowns, and booking links.
+### 4.3 Trip_Planner Node
+Generates complete itineraries. Has access to:
 
-### 2.3 The Graph Flow (Edges)
-1.  **Start** -> `Profile Loader`
-2.  `Profile Loader` -> `Planner`
-3.  `Planner` -> `Researcher` (or specific sub-researchers: `FlightSearch`, `HotelSearch`)
-4.  `Researcher` -> `Budget Master`
-5.  `Budget Master` --(Approved)--> `Concierge`
-6.  `Budget Master` --(Rejected)--> `Planner` (Loop back for revision)
-7.  `Concierge` -> **End**
+| Tool | Purpose |
+|------|---------|
+| `search_flights_tool` | Live flight search |
+| `search_hotels_tool` | Hotel search |
+| `suggest_attractions_tool` | RAG-powered attraction discovery |
+| `create_plan_tool` | Assemble structured trip plan |
+| `search_tours_activities_tool` | Viator/GetYourGuide bookable experiences |
+| `search_points_of_interest_tool` | Ranked POIs and restaurants |
+| `search_cheapest_dates_tool` | Flexible date optimization |
+
+### 4.4 Critique Node
+Self-correction loop that validates the generated plan:
+- Checks budget realism vs. actual found prices
+- Verifies itinerary coherence
+- Routes back to Trip_Planner with specific feedback if issues found
+- Max 3 revision cycles to prevent infinite loops
+
+### 4.5 Human_Approval Node
+Interrupt node — pauses execution and returns the plan to the user for confirmation before finalizing.
 
 ---
 
-## 4. Mandatory Course API Endpoints
-To comply with course requirements, the backend (FastAPI) will expose:
+## 5. Graph Flow
 
-### A. GET `/api/team_info`
-*   **Returns**: Student details (JSON).
-*   **Format**: `{ "group_batch_order_number": "...", "team_name": "Tripzy", "students": [...] }`
-
-### B. GET `/api/agent_info`
-*   **Returns**: Agent metadata, purpose, and prompt templates.
-*   **Purpose**: Explains how to use the agent.
-
-### C. GET `/api/model_architecture`
-*   **Returns**: `image/png` of the LangGraph structure.
-*   **Action**: We will auto-generate this using `graph.get_graph().draw_png()`.
-
-### D. POST `/api/execute` (Main Entry)
-*   **Input**: `{ "prompt": "User request..." }`
-*   **Output**: 
-    ```json
-    {
-      "status": "ok",
-      "response": "Final answer...",
-      "steps": [
-        { "module": "Planner", "prompt": "...", "response": "..." },
-        { "module": "Researcher", "prompt": "...", "response": "..." }
-      ]
-    }
-    ```
-*   **Traceability**: We must log every step (LLM call) to the `steps` array.
+```
+START
+  │
+  ▼
+SUPERVISOR
+  │
+  ├── request_type="Discovery" ──────────────────► RESEARCHER
+  │   (no specific destination)                        │
+  │                                                    ▼
+  │                                              SUPERVISOR ← (loop breaker guards here)
+  │                                                    │
+  │                                                    └── next_step="End" → END
+  │
+  ├── request_type="Planning/FlightOnly/..." ──► SUPERVISOR validates fields
+  │   (specific destination known)                     │
+  │                                            missing fields → END (ask question)
+  │                                            all fields present ↓
+  │                                                TRIP_PLANNER
+  │                                                    │
+  │                                                CRITIQUE ────────────────┐
+  │                                                    │                    │ issues found
+  │                                            approved ↓                   ↓
+  │                                           HUMAN_APPROVAL        TRIP_PLANNER (revision)
+  │                                                    │
+  │                                                   END
+  │
+  ├── request_type="GeneralQuestion" ──────────► RESEARCHER (web search)
+  │                                                    │
+  │                                              SUPERVISOR → END
+  │
+  └── next_step="End" ────────────────────────────────► END
+```
 
 ---
 
-## 5. Implementation Patterns (Agentic)
-*   **Human-in-the-Loop**: The `Planner` can interrupt the graph node to ask the user clarifying questions (e.g., "I found flights, but they are 5am. Is that okay?").
-*   **Supervisor Pattern**: A "Supervisor" node can route between `FlightExpert`, `HotelExpert`, and `ActivityExpert` if complexity grows (Inspiration: *aakar-mutha/agentic-travel-planner*).
+## 6. Request Type Classification
 
-## Reference Repositories
-*   **Azure AI Travel Agents**: Multi-agent delegation.
-*   **LangGraph Travel Planner**: State management & cycles.
-*   **n8n Travel Agent**: Synthesis of sub-agents.
+| Type | Trigger | Routing |
+|------|---------|---------|
+| `Discovery` | No specific destination; user wants suggestions | Researcher → `suggest_destination_tool` |
+| `Planning` | Full trip request with destination | Trip_Planner (requires destination + duration) |
+| `FlightOnly` | User explicitly wants only flights | Trip_Planner (requires origin + destination + date) |
+| `HotelOnly` | User explicitly wants only hotels | Trip_Planner (requires destination + dates) |
+| `AttractionsOnly` | "Things to do" / activities only | Trip_Planner (requires destination) |
+| `GeneralQuestion` | Geography/travel facts question | Researcher (web search) |
+
+---
+
+## 7. Multi-Turn Conversation Strategy
+
+State accumulates across turns via LangGraph's checkpointing:
+- Each conversation has a `thread_id` that maps to a persistent checkpoint
+- Fields like `destination`, `duration_days`, `budget_limit` accumulate progressively
+- The Supervisor always checks `CURRENT STATE` before asking for already-known information
+- Conversation history is injected into context on every turn
+
+**Example turn-by-turn state accumulation:**
+```
+Turn 1: "I want to plan a trip" → asks for destination
+Turn 2: "I'm thinking Tokyo"   → destination="Tokyo", asks for duration
+Turn 3: "For 5 days"           → duration_days=5, routes to Trip_Planner
+```
+
+---
+
+## 8. Destination Discovery Flow
+
+See **[DESTINATION_SUGGESTION.md](./DESTINATION_SUGGESTION.md)** for the complete detailed documentation.
+
+**Summary:**
+1. Vague destination (continent/region/phrase) → automatically triggers Discovery mode
+2. Researcher calls `suggest_destination_tool` with RAG query → returns ranked cities
+3. Deterministic loop breaker prevents repeated Researcher calls for the same query
+4. LLM generates warm, conversational summary of 2-3 best options
+5. User can refine (new query → new Researcher call) or confirm (→ Planning mode)
+
+---
+
+## 9. Key Design Decisions
+
+### Deterministic Guards + LLM Routing
+LLMs are non-deterministic. In multi-turn workflows, they sometimes ignore injected system instructions and route incorrectly. Tripzy uses **deterministic Python guards** as a safety net over the LLM's routing decisions:
+- LLM decides *what to say* (creative, natural)
+- Python code enforces routing *correctness* (loop detection, vague destination interception)
+
+### Research History Formatting
+RAG results are formatted as readable bullet points before being injected into the LLM context. Raw JSON degrades reasoning quality; structured prose significantly improves it.
+
+### Profile Updates (Background)
+User profile updates to Pinecone happen as **background async tasks** after each turn — they don't block the response, maintaining low latency while continuously personalizing future interactions.
