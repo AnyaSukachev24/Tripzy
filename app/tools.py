@@ -2272,6 +2272,19 @@ def resolve_airport_code_tool(keyword: str) -> str:
                 "bangkok": "BKK",
                 "dubai": "DXB",
                 "singapore": "SIN",
+                "athens": "ATH",
+                "larnaca": "LCA",
+                "new york": "JFK",
+                "london": "LHR",
+                "budapest": "BUD",
+                "vienna": "VIE",
+                "milan": "MXP",
+                "prague": "PRG",
+                "paphos": "PFO",
+                "bucharest": "OTP",
+                "tbilisi": "TBS",
+                "sofia": "SOF",
+                "warsaw": "WAW",
             }
 
             clean_kw = keyword.lower().strip()
