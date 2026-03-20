@@ -25,10 +25,11 @@ All travel data is stored securely in your Pinecone account:
 To maintain high context relevance during retrieval, the data is chunked and stored with semantic metadata.
 
 ### Data Volume & Coverage
-The database currently embeds **10,233 chunks** across **148 top global travel destinations**. 
-- **Breadth:** Covers major European cities, Asian hubs, the Americas, and popular island/beach destinations.
-- **Depth:** Averages ~69 data chunks per city (larger cities like Paris or Tokyo have 150+ chunks; smaller islands 30-40 chunks). 
-- **Content:** Information spans practical advice strictly derived from Wikivoyage such as "Understand", "Get In/Around", "See", "Do", "Eat", "Sleep", and "Stay Safe".
+After a full fetch+ingest run, the database will contain roughly:
+- **~400 top-level destination articles** (cities, regions, countries, islands) from the static `DESTINATIONS` list.
+- **+300–600 district/neighborhood sub-articles** when run with `--fetch-subpages` (e.g. `Paris/Marais`, `Tokyo/Shinjuku`, `London/Notting Hill`). These are the richest source for hyper-local attraction and dining data.
+- **+200–400 auto-discovered articles** when run with `--use-categories`.
+- **Total estimated chunks:** 30,000–60,000 (each article produces ~60–150 chunks).
 
 ### Chunking Strategy
 - **Size:** ~300 words per chunk.
@@ -70,25 +71,53 @@ When a user asks "What is there to do in Kyoto for nature lovers?":
 
 ## 5. How to Update the Data (Maintenance)
 
-If you need to add new cities, refresh existing data, or rebuild the index, follow these steps:
+If you need to add new cities, refresh existing data, or do a full rebuild, follow these steps.
 
-### Step 1: Update the Target Destinations
-Open `scripts/fetch_wikivoyage_data.py`. At the bottom of the script, there is a `DESTINATIONS` list containing ~150 global hubs. 
-- Add or remove city names in this list.
+### Step 1: Fetch the Raw Data
 
-### Step 2: Fetch the Raw Data
-Run the scraping script. This pulls the latest wikicode from the public Wikivoyage API and saves it locally.
+The fetch script supports several modes. **Run from the project root.**
+
 ```bash
+# --- Option A: Basic fetch (400+ destinations, ~25 min) ---
 python scripts/fetch_wikivoyage_data.py
+
+# --- Option B: Maximum coverage (recommended for first full build) ---
+# Adds district/neighborhood sub-articles for major cities (+300-600 pages)
+# AND auto-discovers articles via Wikivoyage categories
+python scripts/fetch_wikivoyage_data.py --fetch-subpages --use-categories
+
+# --- Option C: Resume an interrupted run ---
+# Safe to re-run; already-saved titles are skipped
+python scripts/fetch_wikivoyage_data.py --fetch-subpages --use-categories --resume
 ```
+
+**What `--fetch-subpages` gives you:**  
+For major cities like Paris, Tokyo, and London, Wikivoyage has district/neighborhood sub-articles
+(`Paris/Marais`, `Tokyo/Shinjuku`, `London/Notting Hill`, etc.).  
+These contain hyper-local information — specific restaurants, hidden attractions, exact transit tips —
+that the top-level city article doesn't have. This is the single biggest quality boost.
+
+**What `--use-categories` gives you:**  
+Auto-discovers additional articles from Wikivoyage category pages (`Category:Cities`,
+`Category:Islands`, `Category:Beach_destinations`, etc.) beyond the 400+ static list.
+
 *(Output is saved to `data/wikivoyage_dump.jsonl`)*
 
-### Step 3: Run the Ingestion Pipeline
-Execute the Pinecone ingestion script. This will parse the JSONL file, embed the text using `llama-text-embed-v2`, and upsert the vectors.
+### Step 2: Run the Ingestion Pipeline
+
 ```bash
-python app/ingest_wikivoyage.py
+python -m app.ingest_wikivoyage --data-path data/wikivoyage_dump.jsonl
 ```
-**Important:** The ingestion script has an automated **Exponential Backoff** mechanism. Pinecone Free-Tier restricts embedding to 250,000 tokens per minute. If the script hits a `429 Too Many Requests` error, it will naturally pause for 30 seconds and resume automatically without throwing a fatal crash. Let it run until completion.
+
+**Important:** The ingestion script has automated **Exponential Backoff**. Pinecone Free-Tier
+restricts embedding to 250,000 tokens per minute. If it hits a `429 Too Many Requests` error,
+it will pause automatically and resume. Let it run to completion.
+
+### Step 3: Verify
+
+```bash
+python tests/check_pinecone_stats.py
+```
 
 ---
 
