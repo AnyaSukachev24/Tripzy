@@ -3,13 +3,7 @@ from datetime import datetime
 from langgraph.checkpoint.memory import MemorySaver
 from app.state import AgentState, Amenity, TripPlan, UserProfile
 from langgraph.graph import StateGraph, START, END
-
-
-# ... imports ...
-
-
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_openai import AzureChatOpenAI
+from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -20,6 +14,7 @@ from pydantic import BaseModel, Field
 import os
 import json
 import logging
+import re
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -68,8 +63,6 @@ from app.tools import (
 
 
 # --- Retry Configuration ---
-
-
 def _is_rate_limit_error(exc: Exception) -> bool:
     """Return True if the exception is a rate-limit / quota error."""
     msg = str(exc).lower()
@@ -176,25 +169,22 @@ def safe_llm_invoke(chain, input_data: Dict[str, Any]):
         raise
 
 
-# LLM Selection: Azure OpenAI primary, Gemini fallback
-import os
+# LLM Selection: LLMOD only
+api_key = os.getenv("LLMOD_API_KEY")
 
-if os.getenv("AZURE_OPENAI_API_KEY"):
-    logger.info(
-        "[LLM] Using Azure OpenAI: %s",
-        os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4.1-mini"),
-    )
-    llm = AzureChatOpenAI(
-        azure_deployment=os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4.1-mini"),
-        api_version=os.environ.get("AZURE_OPENAI_API_VERSION", "2025-01-01-preview"),
-        temperature=0,
-    )
-else:
-    logger.info("[LLM] Falling back to Google Gemini")
-    from langchain_google_genai import ChatGoogleGenerativeAI
+if not api_key:
+    raise RuntimeError("LLMOD_API_KEY is not set. Cannot initialize LLM.")
 
-    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0)
+logger.info(
+    "[LLM] Using LLMOD model: %s",
+    os.environ.get("LLM_MODEL", "RPRTHPB-gpt-5-mini"),
+)
 
+llm = ChatOpenAI(
+    model=os.environ.get("LLM_MODEL", "RPRTHPB-gpt-5-mini"),
+    api_key=api_key,
+    base_url=os.environ.get("LLMOD_BASE_URL", "https://api.llmod.ai/v1"),
+)
 
 # --- Output Models ---
 class SupervisorOutput(BaseModel):

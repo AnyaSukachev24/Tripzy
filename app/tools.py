@@ -2285,8 +2285,7 @@ def resolve_airport_code_tool(keyword: str) -> str:
         # 2. If 0 results, fall back to LLM resolution (in case it is a country like "Turkey")
         if len(results) == 0:
             import os
-            from langchain_openai import AzureChatOpenAI
-            from langchain_community.chat_models import ChatOllama
+            from langchain_openai import ChatOpenAI
             from langchain_core.messages import SystemMessage, HumanMessage
 
             print(
@@ -2294,18 +2293,16 @@ def resolve_airport_code_tool(keyword: str) -> str:
             )
 
             try:
-                if os.getenv("AZURE_OPENAI_API_KEY"):
-                    llm = AzureChatOpenAI(
-                        azure_deployment=os.environ.get(
-                            "AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4.1-mini"
-                        ),
-                        api_version=os.environ.get(
-                            "AZURE_OPENAI_API_VERSION", "2025-01-01-preview"
-                        ),
-                        temperature=0,
-                    )
-                else:
-                    llm = ChatOllama(model="llama3", temperature=0)
+                api_key = os.getenv("LLMOD_API_KEY")
+                if not api_key:
+                    raise RuntimeError("LLMOD_API_KEY is not set. Cannot resolve with LLM.")
+
+                llm = ChatOpenAI(
+                    model=os.environ.get("LLM_MODEL", "RPRTHPB-gpt-5-mini"),
+                    api_key=api_key,
+                    base_url=os.environ.get("LLMOD_BASE_URL", "https://api.llmod.ai/v1"),
+                    temperature=1
+                )
 
                 system_msg = SystemMessage(
                     content="You are a geographic assistant. If the user provides a country name, reply ONLY with the name of its capital city. If the user provides a city or airport name, reply EXACTLY with that city or airport name. Do not include any punctuation, conversational text, or explanation."

@@ -7,22 +7,22 @@ import os
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import AzureChatOpenAI
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Initialize LLM for evaluation
-if os.getenv("AZURE_OPENAI_API_KEY"):
-    eval_llm = AzureChatOpenAI(
-        azure_deployment=os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4o-mini"),
-        api_version=os.environ.get("AZURE_OPENAI_API_VERSION", "2024-02-15-preview"),
-        temperature=0
-    )
-else:
-    eval_llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
+api_key = os.getenv("LLMOD_API_KEY")
 
+if not api_key:
+    raise RuntimeError("LLMOD_API_KEY is not set. Cannot initialize evaluation LLM.")
+
+# Initialize LLM for evaluation
+eval_llm = ChatOpenAI(
+    model=os.environ.get("LLM_MODEL", "RPRTHPB-gpt-5-mini"),
+    api_key=api_key,
+    base_url=os.environ.get("LLMOD_BASE_URL", "https://api.llmod.ai/v1")
+)
 
 # ==============================================================================
 # EVALUATION MODELS

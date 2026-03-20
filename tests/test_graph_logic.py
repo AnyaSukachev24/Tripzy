@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 sys.path.append(os.getcwd())
 
 # Mock the LLM before importing graph
-with patch('langchain_google_genai.ChatGoogleGenerativeAI.invoke') as mock_llm_invoke:
+with patch('langchain_openai.ChatOpenAI.invoke') as mock_llm_invoke:
     # Setup mock response for Supervisor
     # SupervisorOutput structure: next_step, reasoning, instruction
     class MockSupervisorOutput:
