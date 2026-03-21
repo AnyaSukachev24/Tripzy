@@ -18,3 +18,5 @@ httpx
 streamlit
 langchainhub
 isodate
+kagglehub
+pandas
