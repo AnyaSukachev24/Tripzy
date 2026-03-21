@@ -1,2 +1,1 @@
-Attempting with gemini-flash-latest...
-Success with gemini-flash-latest! Response: Hello! How can I help you today?
+Success! Response: Hi! How can I help you today?

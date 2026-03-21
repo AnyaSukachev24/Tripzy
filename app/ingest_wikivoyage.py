@@ -14,7 +14,9 @@ import json
 import os
 import re
 import sys
+import bz2
 import argparse
+import xml.etree.ElementTree as ET
 from typing import List, Optional
 from dotenv import load_dotenv
 
@@ -46,6 +48,60 @@ def load_wikivoyage_jsonl(data_path: str) -> List[dict]:
     return articles
 
 
+def load_wikivoyage_xml(data_path: str) -> List[dict]:
+    """
+    Load articles from a Wikimedia XML dump (.xml or .xml.bz2).
+    Stream-parsed so it works without loading the full file into memory.
+    """
+    MW_NS = "http://www.mediawiki.org/xml/export-0.11/"
+    SKIP_PREFIXES = (
+        "Wikivoyage:", "Template:", "User:", "User talk:", "Talk:",
+        "File:", "MediaWiki:", "Help:", "Category:",
+    )
+
+    articles: List[dict] = []
+    open_fn = bz2.open if data_path.endswith(".bz2") else open
+    open_kwargs = {"mode": "rt", "encoding": "utf-8"} if data_path.endswith(".bz2") else {"encoding": "utf-8"}
+
+    current_title = ""
+    current_ns = "0"
+    current_text = ""
+
+    with open_fn(data_path, **open_kwargs) as f:
+        context = ET.iterparse(f, events=("end",))
+        for event, elem in context:
+            tag = elem.tag.replace(f"{{{MW_NS}}}", "")
+            if tag == "title":
+                current_title = (elem.text or "").strip()
+            elif tag == "ns":
+                current_ns = (elem.text or "0").strip()
+            elif tag == "text":
+                current_text = (elem.text or "").strip()
+            elif tag == "page":
+                if (
+                    current_ns == "0"
+                    and current_text
+                    and len(current_text) > 200
+                    and not any(current_title.startswith(p) for p in SKIP_PREFIXES)
+                    and "#REDIRECT" not in current_text.upper()
+                ):
+                    articles.append({"title": current_title, "text": current_text})
+                    if len(articles) % 500 == 0:
+                        print(f"   Loaded {len(articles):,} articles from XML...", flush=True)
+                elem.clear()
+                current_title = current_ns = current_text = ""
+
+    return articles
+
+
+def load_articles(data_path: str) -> List[dict]:
+    """Auto-detect format and load articles from JSONL or XML/XML.bz2."""
+    if data_path.endswith(".xml") or data_path.endswith(".xml.bz2") or data_path.endswith(".bz2"):
+        print(f"   Detected XML/bz2 format.")
+        return load_wikivoyage_xml(data_path)
+    return load_wikivoyage_jsonl(data_path)
+
+
 def classify_article(title: str, text: str) -> str:
     """Classify a Wikivoyage article by type."""
     text_lower = text.lower()
@@ -55,6 +111,9 @@ def classify_article(title: str, text: str) -> str:
         return "phrasebook"
     if any(kw in title_lower for kw in ["travel topic", "travel tips"]):
         return "travel_topic"
+    # Sub-articles like "Paris/Marais" or "Tokyo/Shinjuku" are district pages
+    if "/" in title:
+        return "district"
     if any(kw in text_lower[:500] for kw in ["is a country", "is a nation"]):
         return "country"
     if any(kw in text_lower[:500] for kw in ["is a region", "is a province", "is a state"]):
@@ -117,7 +176,7 @@ def ingest_wikivoyage(data_path: str, batch_size: int = 50, max_articles: int = 
     """Main ingestion function."""
     # 1. Load Data
     print(f"1. Loading data from {data_path}...")
-    articles = load_wikivoyage_jsonl(data_path)
+    articles = load_articles(data_path)
     if not articles:
         print("No articles found. Exiting.")
         return
@@ -140,8 +199,10 @@ def ingest_wikivoyage(data_path: str, batch_size: int = 50, max_articles: int = 
         
         # Classify
         article_type = classify_article(title, text)
-        if article_type not in ["destination", "city", "region", "country", "island"]:
-            continue  # Skip phrasebooks, topics, etc. for now if strictly destination-focused
+        # Keep destinations, city districts, and travel topics; skip phrasebooks.
+        # "district" covers sub-articles like "Paris/Marais" or "Tokyo/Shinjuku".
+        if article_type == "phrasebook":
+            continue
 
         # Extract sections
         sections = extract_sections(text)
@@ -155,8 +216,12 @@ def ingest_wikivoyage(data_path: str, batch_size: int = 50, max_articles: int = 
             
             for i, chunk in enumerate(chunks):
                 # Create Document
+                # For district sub-articles (e.g. "Paris/Marais") store the parent
+                # city as `title` so RAG filters like `title == "Paris"` still match.
+                canonical_title = title.split("/")[0].strip() if "/" in title else title
                 metadata = {
-                    "title": title,
+                    "title": canonical_title,
+                    "sub_title": title if "/" in title else "",
                     "section": sec_name,
                     "type": article_type,
                     "chunk_index": i,
@@ -216,16 +281,21 @@ def ingest_wikivoyage(data_path: str, batch_size: int = 50, max_articles: int = 
                 vectors = []
                 for j, embedding_data in enumerate(embeddings_response):
                     doc = batch[j]
-                    # Create a unique ID
+                    # Create a unique ID — use the original (full) title so
+                    # "Paris/Marais" and "Paris" don't produce colliding IDs.
                     metadata = doc.metadata
                     # Clean metadata values to ensure they are primitives (str, int, float, bool) or list of strings
                     clean_metadata = {k: v for k, v in metadata.items() if v is not None}
                     # Add text to metadata for retrieval
                     clean_metadata["text"] = doc.page_content
-                    
-                    vector_id = f"{clean_metadata.get('title', 'doc')}_{clean_metadata.get('section', 'sec')}_{clean_metadata.get('chunk_index', j)}"
+
+                    raw_id = (
+                        f"{clean_metadata.get('sub_title') or clean_metadata.get('title', 'doc')}"
+                        f"_{clean_metadata.get('section', 'sec')}"
+                        f"_{clean_metadata.get('chunk_index', j)}"
+                    )
                     # Sanitize ID
-                    vector_id = re.sub(r'[^a-zA-Z0-9_\-]', '_', vector_id)
+                    vector_id = re.sub(r'[^a-zA-Z0-9_\-]', '_', raw_id)
                     
                     vectors.append({
                         "id": vector_id,

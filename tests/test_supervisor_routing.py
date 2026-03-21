@@ -8,7 +8,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI, AzureChatOpenAI
+from langchain_openai import ChatOpenAI
 from app.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
 from app.state import AgentState
 from typing import Literal, Optional
@@ -32,16 +32,18 @@ class SupervisorOutput(BaseModel):
     trip_type: str = Field(description="Type of trip", default="")
 
 # Setup LLM
-if os.getenv("AZURE_OPENAI_API_KEY"):
-    print("DEBUG: Using Azure OpenAI")
-    llm = AzureChatOpenAI(
-        azure_deployment=os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4.1-mini"),
-        api_version=os.environ.get("AZURE_OPENAI_API_VERSION", "2024-02-15-preview"),
-        temperature=0
-    )
-else:
-    print("DEBUG: Using Standard OpenAI")
-    llm = ChatOpenAI(model="gpt-4o", temperature=0)
+api_key = os.getenv("LLMOD_API_KEY")
+if not api_key:
+    raise RuntimeError("LLMOD_API_KEY is not set. Cannot initialize LLM.")
+
+print("DEBUG: Using LLMOD")
+
+llm = ChatOpenAI(
+    model=os.environ.get("LLM_MODEL", "RPRTHPB-gpt-5-mini"),
+    api_key=api_key,
+    base_url=os.environ.get("LLMOD_BASE_URL", "https://api.llmod.ai/v1"),
+    temperature=1
+)
 
 # Create Chain
 prompt = ChatPromptTemplate.from_messages([
