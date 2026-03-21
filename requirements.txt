@@ -21,3 +21,5 @@ isodate
 kagglehub
 kaggle
 pandas
+matplotlib
+networkx

@@ -221,15 +221,108 @@ def get_agent_info():
 
 @app.get("/api/model_architecture")
 def get_model_architecture():
-    """Returns the graph image (Course Requirement)."""
+    """Returns a PNG architecture diagram of the Tripzy agent graph."""
     try:
-        # Generate PNG from LangGraph
-        img_data = graph.get_graph().draw_mermaid_png()
-        return Response(content=img_data, media_type="image/png")
+        import io
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import matplotlib.patches as mpatches
+        import networkx as nx
+
+        # --- Build directed graph ---
+        G = nx.DiGraph()
+
+        nodes = ["START", "Supervisor", "Trip_Planner", "Researcher",
+                 "Attractions", "Critique", "Human_Approval", "END"]
+        edges = [
+            ("START",         "Supervisor"),
+            ("Supervisor",    "Trip_Planner"),
+            ("Supervisor",    "Researcher"),
+            ("Supervisor",    "Attractions"),
+            ("Supervisor",    "END"),
+            ("Trip_Planner",  "Researcher"),
+            ("Trip_Planner",  "Critique"),
+            ("Trip_Planner",  "Human_Approval"),
+            ("Trip_Planner",  "Supervisor"),
+            ("Trip_Planner",  "END"),
+            ("Researcher",    "Trip_Planner"),
+            ("Researcher",    "Supervisor"),
+            ("Critique",      "Trip_Planner"),
+            ("Critique",      "Human_Approval"),
+            ("Critique",      "Supervisor"),
+            ("Human_Approval","END"),
+            ("Human_Approval","Supervisor"),
+            ("Attractions",   "END"),
+        ]
+        G.add_nodes_from(nodes)
+        G.add_edges_from(edges)
+
+        # --- Fixed layout for clarity ---
+        pos = {
+            "START":         (0,  4),
+            "Supervisor":    (0,  3),
+            "Researcher":    (-2, 2),
+            "Trip_Planner":  (0,  2),
+            "Attractions":   (2,  2),
+            "Critique":      (-1, 1),
+            "Human_Approval":(1,  1),
+            "END":           (0,  0),
+        }
+
+        # --- Node colours by role ---
+        color_map = {
+            "START":          "#4CAF50",
+            "END":            "#F44336",
+            "Supervisor":     "#2196F3",
+            "Trip_Planner":   "#9C27B0",
+            "Researcher":     "#FF9800",
+            "Attractions":    "#00BCD4",
+            "Critique":       "#795548",
+            "Human_Approval": "#607D8B",
+        }
+        node_colors = [color_map[n] for n in G.nodes()]
+
+        fig, ax = plt.subplots(figsize=(14, 10))
+        fig.patch.set_facecolor("#1E1E2E")
+        ax.set_facecolor("#1E1E2E")
+
+        nx.draw_networkx_nodes(G, pos, ax=ax, node_size=8000,
+                               node_color=node_colors, alpha=0.95)
+        nx.draw_networkx_labels(G, pos, ax=ax,
+                                font_size=10, font_color="white", font_weight="bold")
+        nx.draw_networkx_edges(G, pos, ax=ax,
+                               edge_color="#AAAAAA", arrows=True,
+                               arrowsize=25, arrowstyle="-|>",
+                               connectionstyle="arc3,rad=0.08",
+                               width=1.5, min_source_margin=50, min_target_margin=50)
+
+        # --- Legend ---
+        legend_handles = [
+            mpatches.Patch(color=color_map[n], label=n) for n in nodes
+        ]
+        ax.legend(handles=legend_handles, loc="lower right",
+                  facecolor="#2E2E3E", edgecolor="gray",
+                  labelcolor="white", fontsize=8)
+
+        ax.set_title("Tripzy Agent Architecture", color="white",
+                     fontsize=14, fontweight="bold", pad=12)
+        ax.axis("off")
+        plt.tight_layout()
+
+        buf = io.BytesIO()
+        plt.savefig(buf, format="png", dpi=150, bbox_inches="tight",
+                    facecolor=fig.get_facecolor())
+        plt.close(fig)
+        buf.seek(0)
+        return Response(content=buf.read(), media_type="image/png")
+
     except Exception as e:
+        import traceback
         return JSONResponse(
             status_code=500,
-            content={"error": f"Failed to generate graph image: {str(e)}"},
+            content={"error": f"Failed to generate graph image: {str(e)}",
+                     "trace": traceback.format_exc()},
         )
 
 
