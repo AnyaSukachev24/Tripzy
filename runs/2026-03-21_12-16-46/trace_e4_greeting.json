@@ -1,0 +1,43 @@
+{
+  "messages": [
+    {
+      "role": "human",
+      "content": "Hi there! How are you?"
+    },
+    {
+      "role": "ai",
+      "content": "I'm great — here are two picks: Bali — dreamy beaches, temples and affordable stays; Lisbon — sunny, charming, and wallet-friendly. Which of these sounds exciting?"
+    }
+  ],
+  "duration_days": null,
+  "destination": null,
+  "origin_city": null,
+  "budget_limit": null,
+  "budget_currency": "USD",
+  "trip_type": null,
+  "traveling_personas_number": 1,
+  "amenities": [],
+  "preferences": [],
+  "next_step": "End",
+  "supervisor_instruction": "I'm great — here are two picks: Bali — dreamy beaches, temples and affordable stays; Lisbon — sunny, charming, and wallet-friendly. Which of these sounds exciting?",
+  "user_query": "Hi there! How are you?",
+  "steps": [
+    {
+      "module": "Supervisor",
+      "prompt": "Hi there! How are you?",
+      "response": "Routing to Researcher to answer general question."
+    },
+    {
+      "module": "Researcher",
+      "prompt": "Web Search: I'm great—thanks! Ready to help plan your next trip; where would you like to go or what can I help with today?",
+      "response": "Wondering how to plan a trip ? I've got you covered with 15 easy steps to planning a travel itinerary for the perfect vacation! This step-by-step travel checklist will take away the stress of planning and give you an easy to follow list to prepare your trip like a pro. As a travel agent, your day- to -day is filled with quote requests, itineraries, planning, customer service, and much more. Having email templates on hand is a great way to maximize your productivity while still ensuring you are taking care of your customers. Here are 18 free templates you can use for your travel agency. Planning a travel itinerary and not sure how to start? This complete guide will walk you through the itinerary planning process step-by-step. If you're getting ready for your first trip and wondering how to plan a travel itinerary, I've got you covered. I am a full-time traveler and travel blogger, so I'm always either planning a trip or traveling. I want to make the most of my time traveling, and I whol"
+    },
+    {
+      "module": "Supervisor",
+      "prompt": "Hi there! How are you?",
+      "response": "I'm great — here are two picks: Bali — dreamy beaches, temples and affordable stays; Lisbon — sunny, charming, and wallet-friendly. Which of these sounds exciting?"
+    }
+  ],
+  "request_type": "Discovery",
+  "researcher_calls": 1,
+  "user_profile": 

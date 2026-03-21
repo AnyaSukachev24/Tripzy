@@ -1,0 +1,52 @@
+{
+  "messages": [
+    {
+      "role": "human",
+      "content": "What are the best museums in Paris?"
+    },
+    {
+      "role": "human",
+      "content": "What are the best museums in Paris?"
+    },
+    {
+      "role": "ai",
+      "content": "Louvre — iconic museum with the Mona Lisa and sprawling collections from antiquity to modern art; use the Paris Museum Pass or prebook to skip long lines. Musée d'Orsay — world-class Impressionist and Post‑Impressionist masterpieces housed in a beautiful converted railway station. Centre Pompidou — the buzzy hub for modern and contemporary art with striking architecture and great city views from the upper levels."
+    }
+  ],
+  "duration_days": null,
+  "destination": "Paris",
+  "origin_city": null,
+  "budget_limit": null,
+  "budget_currency": "USD",
+  "trip_type": null,
+  "traveling_personas_number": 1,
+  "amenities": [],
+  "preferences": [
+    "museums",
+    "art",
+    "culture",
+    "vegan"
+  ],
+  "next_step": "End",
+  "supervisor_instruction": "Louvre — iconic museum with the Mona Lisa and sprawling collections from antiquity to modern art; use the Paris Museum Pass or prebook to skip long lines. Musée d'Orsay — world-class Impressionist and Post‑Impressionist masterpieces housed in a beautiful converted railway station. Centre Pompidou — the buzzy hub for modern and contemporary art with striking architecture and great city views from the upper levels.",
+  "user_query": "What are the best museums in Paris?",
+  "steps": [
+    {
+      "module": "Supervisor",
+      "prompt": "What are the best museums in Paris?",
+      "response": "Routing to Attractions: User asked for the best museums in Paris; Attractions is best for local sights and details."
+    },
+    {
+      "module": "Attractions",
+      "prompt": "What are the best museums in Paris?",
+      "response": "Louvre — iconic museum with the Mona Lisa and sprawling collections from antiquity to modern art; use the Paris Museum Pass or prebook to skip long lines. Musée d'Orsay — world-class Impressionist and Post‑Impressionist masterpieces housed in a beautiful converted railway station. Centre Pompidou — the buzzy hub for modern and contemporary art with striking architecture and great city views from the upper levels.",
+      "attractions_found": [
+        "Louvre — iconic museum with the Mona Lisa and sprawling collections from antiquity to modern art; use the Paris Museum Pass or prebook to skip long lines.",
+        "Musée d'Orsay — world-class Impressionist and Post‑Impressionist masterpieces housed in a beautiful converted railway station.",
+        "Centre Pompidou — the buzzy hub for modern and contemporary art with striking architecture and great city views from the upper levels."
+      ]
+    }
+  ],
+  "request_type": "AttractionsOnly",
+  "researcher_calls": 0,
+  "user_profile": 

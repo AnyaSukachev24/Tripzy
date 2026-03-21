@@ -1,0 +1,54 @@
+{
+  "messages": [
+    {
+      "role": "human",
+      "content": "I'm vegan and love luxury hotels. Plan 4 days in Lisbon."
+    },
+    {
+      "role": "ai",
+      "content": "To plan your trip, I need a budget estimate. How much are you looking to spend? (e.g. $1000, $3000, $5000)"
+    },
+    {
+      "role": "human",
+      "content": "I also need wheelchair accessible venues."
+    },
+    {
+      "role": "ai",
+      "content": "To plan your trip, I need a budget estimate. How much are you looking to spend? (e.g. $1000, $3000, $5000)"
+    }
+  ],
+  "duration_days": 4,
+  "destination": "Lisbon",
+  "origin_city": null,
+  "budget_limit": null,
+  "budget_currency": "USD",
+  "trip_type": "luxury",
+  "traveling_personas_number": 1,
+  "amenities": [
+    "vegan",
+    "wheelchair_accessible"
+  ],
+  "preferences": [
+    "vegan",
+    "luxury hotels",
+    "vegan",
+    "luxury hotels",
+    "wheelchair accessible"
+  ],
+  "next_step": "End",
+  "supervisor_instruction": "To plan your trip, I need a budget estimate. How much are you looking to spend? (e.g. $1000, $3000, $5000)",
+  "user_query": "I also need wheelchair accessible venues.",
+  "steps": [
+    {
+      "module": "Supervisor",
+      "prompt": "I'm vegan and love luxury hotels. Plan 4 days in Lisbon.",
+      "response": "Edge Case Detected: To plan your trip, I need a budget estimate. How much are you looking to spend? (e.g. $1000, $3000, $5000)"
+    },
+    {
+      "module": "Supervisor",
+      "prompt": "I also need wheelchair accessible venues.",
+      "response": "Edge Case Detected: To plan your trip, I need a budget estimate. How much are you looking to spend? (e.g. $1000, $3000, $5000)"
+    }
+  ],
+  "researcher_calls": 0,
+  "user_profile": 

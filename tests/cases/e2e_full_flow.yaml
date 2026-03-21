@@ -1,0 +1,50 @@
+# e2e_full_flow.yaml — Full end-to-end conversation
+# Discovery → pick destination → flights → hotels → attractions & restaurants
+
+- id: "e2e-001"
+  name: "Full flow: discovery → destination → flights → hotels → attractions"
+  tags: [e2e, full_flow]
+  turns:
+    # Turn 1: Discovery — vague request
+    - user: "I'm looking for a warm destination with beaches and good food, around $2000 budget"
+      expected:
+        next_step: "Researcher"
+        request_type: "Discovery"
+        response_excludes: ["```json", "{\""]
+
+    # Turn 2: User picks destination from suggestions
+    - user: "Let's go to Bali!"
+      expected:
+        next_step: "End"
+        state_after:
+          destination: "Bali"
+        response_contains: ["bali"]
+        response_excludes: ["```json", "{\""]
+
+    # Turn 3: User asks for flights
+    - user: "Find me flights from Tel Aviv to Bali on July 1st"
+      expected:
+        next_step: "Trip_Planner"
+        request_type: "FlightOnly"
+        state_after:
+          destination: "Bali"
+          origin_city: "Tel Aviv"
+        response_excludes: ["```json", "{\""]
+
+    # Turn 4: User asks for hotels (same destination, different request type)
+    - user: "Now find me a hotel in Bali for July 1-8"
+      expected:
+        next_step: "Trip_Planner"
+        request_type: "HotelOnly"
+        state_after:
+          destination: "Bali"
+        response_excludes: ["```json", "{\""]
+
+    # Turn 5: User asks for things to do
+    - user: "What are the best things to do and vegan restaurants in Bali?"
+      expected:
+        next_step: "Attractions"
+        request_type: "AttractionsOnly"
+        state_after:
+          destination: "Bali"
+        response_excludes: ["```json", "{\""]

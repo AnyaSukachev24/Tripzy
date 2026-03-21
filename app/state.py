@@ -172,3 +172,13 @@ class AgentState(TypedDict):
     budget_warning: Optional[str]  # Budget-aware warning from critique
     last_hotel_results: Optional[List[Dict[str, Any]]]  # Cached hotel search results
     last_flight_results: Optional[List[Dict[str, Any]]]  # Cached flight search results
+    last_attraction_results: Optional[List[Dict[str, Any]]]  # Cached attractions search results
+
+    # --- 4. MULTI-TURN MEMORY ---
+    # Active high-level intent being served across turns.
+    # Set by Supervisor and persisted until the user changes topic.
+    # Values: "Discovery", "Booking", "Attractions", None
+    active_intent: Optional[str]
+
+    # Placeholder for the Attractions capability output (implemented by another team member).
+    attractions_result: Optional[Dict[str, Any]]

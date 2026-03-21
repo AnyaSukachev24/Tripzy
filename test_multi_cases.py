@@ -56,6 +56,18 @@ TEST_CASES = [
         "query": "Hello!",
         "expected": "Should route to End immediately without calling LLM",
     },
+    {
+        "id": "TC-07",
+        "name": "Attractions query (Paris museums + landmarks)",
+        "query": "What attractions should I visit in Paris? I like museums and landmarks.",
+        "expected": "Should call suggest_attractions_tool and return grounded city suggestions",
+    },
+    {
+        "id": "TC-08",
+        "name": "Restaurant intent in destination",
+        "query": "I am going to Tokyo. Suggest great local food and restaurant spots.",
+        "expected": "Should prioritize dining-style attraction matches, then fallback if sparse",
+    },
 ]
 
 

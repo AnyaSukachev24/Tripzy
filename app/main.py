@@ -238,7 +238,11 @@ def execute_agent(request: ExecuteRequest):
     Runs the LangGraph, captures steps, and returns the final response.
     """
     thread_id = request.thread_id or str(uuid.uuid4())
-    config = {"configurable": {"thread_id": thread_id}}
+    config = {
+        "configurable": {"thread_id": thread_id},
+        "run_name": f"tripzy | {request.prompt[:60]}",
+        "metadata": {"thread_id": thread_id, "user_message": request.prompt[:120]},
+    }
     input_payload = {"user_query": request.prompt}
 
     try:
@@ -309,7 +313,11 @@ async def stream_agent(request: ExecuteRequest):
     Includes heartbeat pings so the browser never drops the connection.
     """
     thread_id = request.thread_id or str(uuid.uuid4())
-    config = {"configurable": {"thread_id": thread_id}}
+    config = {
+        "configurable": {"thread_id": thread_id},
+        "run_name": f"tripzy | {request.prompt[:60]}",
+        "metadata": {"thread_id": thread_id, "user_message": request.prompt[:120]},
+    }
     input_payload = {"user_query": request.prompt}
 
     #  Log the user message

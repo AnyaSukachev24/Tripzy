@@ -1,0 +1,46 @@
+# feature_general_questions.yaml — Phase 2: General travel questions
+
+- id: "g-001"
+  name: "Language question"
+  tags: [general]
+  turns:
+    - user: "What language do they speak in Brazil?"
+      expected:
+        next_step: "Researcher"
+        request_type: "GeneralQuestion"
+        response_contains: ["portuguese", "brazil"]
+        response_excludes: ["```json", "{\""]
+
+- id: "g-002"
+  name: "Visa requirements question"
+  tags: [general, visa]
+  turns:
+    - user: "Do I need a visa to visit Japan from the US?"
+      expected:
+        next_step: "Researcher"
+        request_type: "GeneralQuestion"
+        response_contains: ["japan", "visa"]
+        response_excludes: ["```json", "{\""]
+
+- id: "g-003"
+  name: "Currency question"
+  tags: [general, currency]
+  turns:
+    - user: "What currency is used in Thailand?"
+      expected:
+        next_step: "Researcher"
+        request_type: "GeneralQuestion"
+        response_contains: ["thai baht", "baht", "thailand"]
+        response_excludes: ["```json", "{\""]
+
+- id: "g-004"
+  name: "Best time to visit question"
+  tags: [general, timing]
+  turns:
+    - user: "When is the best time to visit Iceland?"
+      expected:
+        next_step: "Researcher"
+        request_type: "GeneralQuestion"
+        response_contains: ["iceland"]
+        response_excludes: ["```json", "{\""]
+        max_response_chars: 600

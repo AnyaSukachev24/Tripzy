@@ -1,0 +1,50 @@
+{
+  "messages": [
+    {
+      "role": "human",
+      "content": "I want to go on a street food tour in Bangkok."
+    },
+    {
+      "role": "human",
+      "content": "I want to go on a street food tour in Bangkok."
+    },
+    {
+      "role": "ai",
+      "content": "Top picks for a street-food day in Bangkok: try the Old Town audio tour, add the temple walking tour for culture + snacks, and finish with an evening crawl through Yaowarat (Chinatown) for the best bites."
+    }
+  ],
+  "duration_days": null,
+  "destination": "Bangkok",
+  "origin_city": null,
+  "budget_limit": null,
+  "budget_currency": "USD",
+  "trip_type": null,
+  "traveling_personas_number": 1,
+  "amenities": [],
+  "preferences": [
+    "street food",
+    "vegan"
+  ],
+  "next_step": "End",
+  "supervisor_instruction": "Top picks for a street-food day in Bangkok: try the Old Town audio tour, add the temple walking tour for culture + snacks, and finish with an evening crawl through Yaowarat (Chinatown) for the best bites.",
+  "user_query": "I want to go on a street food tour in Bangkok.",
+  "steps": [
+    {
+      "module": "Supervisor",
+      "prompt": "I want to go on a street food tour in Bangkok.",
+      "response": "Routing to Attractions: User explicitly asked for a street food tour in Bangkok; we need local tours and vegan-friendly street food options."
+    },
+    {
+      "module": "Attractions",
+      "prompt": "I want to go on a street food tour in Bangkok.",
+      "response": "Top picks for a street-food day in Bangkok: try the Old Town audio tour, add the temple walking tour for culture + snacks, and finish with an evening crawl through Yaowarat (Chinatown) for the best bites.",
+      "attractions_found": [
+        "Bangkok's Old Town: A Self-Guided Audio Tour — €6 self-guided route through Rattanakosin/Old Town that’s perfect to pair with nearby street-food stalls and markets.",
+        "Temple Walking Tour - Grand Palace, Wat Pho, Wat Arun (Small Group Tour) — guided half-day tour (≈€78) hitting top temples and passing classic street-snack vendors for tasty breaks.",
+        "Yaowarat (Chinatown) street-food crawl — evening must-do for legendary noodle stalls, seafood woks and sweet treats; go hungry and roam the side sois."
+      ]
+    }
+  ],
+  "request_type": "AttractionsOnly",
+  "researcher_calls": 0,
+  "user_profile": 

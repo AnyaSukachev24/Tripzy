@@ -1,0 +1,52 @@
+{
+  "messages": [
+    {
+      "role": "human",
+      "content": "Find me a top-rated vegan restaurant in Tokyo."
+    },
+    {
+      "role": "human",
+      "content": "Find me a top-rated vegan restaurant in Tokyo."
+    },
+    {
+      "role": "ai",
+      "content": "Live POI search returned mock results, so here are four top-rated vegan spots in Tokyo I recommend. Want me to pull live hours or make a booking?"
+    }
+  ],
+  "duration_days": null,
+  "destination": "Tokyo",
+  "origin_city": null,
+  "budget_limit": null,
+  "budget_currency": "USD",
+  "trip_type": null,
+  "traveling_personas_number": 1,
+  "amenities": [
+    "vegan"
+  ],
+  "preferences": [
+    "vegan"
+  ],
+  "next_step": "End",
+  "supervisor_instruction": "Live POI search returned mock results, so here are four top-rated vegan spots in Tokyo I recommend. Want me to pull live hours or make a booking?",
+  "user_query": "Find me a top-rated vegan restaurant in Tokyo.",
+  "steps": [
+    {
+      "module": "Supervisor",
+      "prompt": "Find me a top-rated vegan restaurant in Tokyo.",
+      "response": "Routing to Attractions: User asked specifically for a top-rated vegan restaurant in Tokyo; Attractions handles local restaurants and details."
+    },
+    {
+      "module": "Attractions",
+      "prompt": "Find me a top-rated vegan restaurant in Tokyo.",
+      "response": "Live POI search returned mock results, so here are four top-rated vegan spots in Tokyo I recommend. Want me to pull live hours or make a booking?",
+      "attractions_found": [
+        "T's Tantan — Famous vegan ramen counter at Tokyo Station (and other spots) serving rich, creamy plant-based bowls loved by locals and travelers.",
+        "Ain Soph. Journey (Shinjuku) — Upscale, cozy vegan spot known for creative multi-course meals and legendary fluffy pancakes.",
+        "Saido (Jiyugaoka) — Refined vegan Japanese cuisine with kaiseki-style touches and beautiful plating; a local favorite for special meals.",
+        "Nagi Shokudo (Shibuya) — Laid-back, homestyle vegan cafe offering Japanese-Western fusion dishes and rotating daily specials at wallet-friendly prices."
+      ]
+    }
+  ],
+  "request_type": "AttractionsOnly",
+  "researcher_calls": 0,
+  "user_profile": 

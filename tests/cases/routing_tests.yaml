@@ -1,0 +1,84 @@
+# routing_tests.yaml — Phase 1: Pure supervisor routing tests
+# These test ONLY that the supervisor routes to the correct node.
+# Fastest & cheapest — ~8 LLM calls total.
+# On ANY failure → stop entire run.
+
+- id: "r-001"
+  name: "Flights routing — full info"
+  tags: [routing, flights]
+  turns:
+    - user: "Find flights from TLV to LHR on June 15"
+      expected:
+        next_step: "Trip_Planner"
+        request_type: "FlightOnly"
+        response_excludes: ["```json", "{\""]
+
+- id: "r-002"
+  name: "Hotels routing — with dates"
+  tags: [routing, hotels]
+  turns:
+    - user: "Hotel in Barcelona July 5-10"
+      expected:
+        next_step: "Trip_Planner"
+        request_type: "HotelOnly"
+        response_excludes: ["```json", "{\""]
+
+- id: "r-003"
+  name: "Attractions routing"
+  tags: [routing, attractions]
+  turns:
+    - user: "Things to do in Tokyo for a family"
+      expected:
+        next_step: "Attractions"
+        request_type: "AttractionsOnly"
+        response_excludes: ["```json", "{\""]
+
+- id: "r-004"
+  name: "Discovery routing — vague destination"
+  tags: [routing, discovery]
+  turns:
+    - user: "Where should I go for warm beaches?"
+      expected:
+        next_step: "Researcher"
+        request_type: "Discovery"
+        response_excludes: ["```json", "{\""]
+
+- id: "r-005"
+  name: "General question routing"
+  tags: [routing, general]
+  turns:
+    - user: "What language do they speak in Brazil?"
+      expected:
+        next_step: "Researcher"
+        request_type: "GeneralQuestion"
+        response_excludes: ["```json", "{\""]
+
+- id: "r-006"
+  name: "Greeting — no LLM needed"
+  tags: [routing, greeting]
+  turns:
+    - user: "Hi there!"
+      expected:
+        next_step: "End"
+        response_excludes: ["```json", "{\""]
+        max_response_chars: 200
+
+- id: "r-007"
+  name: "Full trip planning — disabled feature"
+  tags: [routing, disabled]
+  turns:
+    - user: "Plan a full trip to Paris for 7 days"
+      expected:
+        next_step: "End"
+        response_contains: ["flight", "hotel", "attraction"]
+        response_excludes: ["```json", "{\""]
+
+- id: "r-008"
+  name: "Vague continent input — Discovery guard"
+  tags: [routing, discovery, vague]
+  turns:
+    - user: "I want to go to Europe"
+      expected:
+        next_step: "Researcher"
+        request_type: "Discovery"
+        response_excludes: ["```json", "{\""]

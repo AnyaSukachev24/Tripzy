@@ -12,6 +12,7 @@ import hashlib
 import os
 import sys
 import time
+import zipfile
 from pathlib import Path
 
 import pandas as pd
@@ -30,6 +31,7 @@ NAMESPACE        = "attractions"
 EMBED_MODEL      = "llama-text-embed-v2"
 EMBED_DIMENSIONS = 1024
 CSV_FILENAME     = "16_rag_data.csv"
+KAGGLE_DATASET   = "mrsimple07/rag-data3"
 
 # Columns we keep from the raw CSV (everything else is dropped)
 KEEP_COLS = ["name", "latitude", "longitude", "address", "description",
@@ -178,6 +180,74 @@ def upsert_in_batches(index, records: list[dict], batch_size: int) -> int:
     return total
 
 
+def resolve_dataset_csv(root_dir: Path) -> Path:
+    """
+    Download or locate the dataset CSV and return a local path to CSV_FILENAME.
+    Strategy:
+      1) Try kagglehub first (fast path).
+      2) If kagglehub fails with checksum/corruption, fallback to official Kaggle API.
+    """
+    print(f"Downloading Kaggle dataset {KAGGLE_DATASET} ...")
+
+    try:
+        import kagglehub  # noqa: PLC0415 — intentional lazy import
+
+        dataset_path = Path(kagglehub.dataset_download(KAGGLE_DATASET))
+        print(f"  Dataset cached at: {dataset_path}")
+        csv_candidates = list(dataset_path.rglob(CSV_FILENAME))
+        if csv_candidates:
+            return csv_candidates[0]
+        print(f"  WARN: {CSV_FILENAME} not found in kagglehub cache, trying Kaggle API fallback.")
+    except Exception as exc:
+        msg = str(exc)
+        # Most common failure we observed in this environment.
+        if "DataCorruptionError" in msg or "checksum" in msg.lower() or "md5" in msg.lower():
+            print("  WARN: kagglehub checksum mismatch. Falling back to Kaggle API.")
+        else:
+            print(f"  WARN: kagglehub failed ({type(exc).__name__}): {exc}")
+            print("  Falling back to Kaggle API.")
+
+    # Fallback path via official Kaggle package/API
+    try:
+        from kaggle.api.kaggle_api_extended import KaggleApi  # noqa: PLC0415
+    except ImportError:
+        print("ERROR: Kaggle API package is missing. Install with: pip install kaggle")
+        sys.exit(1)
+
+    out_dir = root_dir / "data" / "kaggle"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    print("  Authenticating with Kaggle API ...")
+    api = KaggleApi()
+    api.authenticate()
+
+    print(f"  Downloading file '{CSV_FILENAME}' via Kaggle API ...")
+    archive_path = out_dir / f"{CSV_FILENAME}.zip"
+    api.dataset_download_file(
+        dataset=KAGGLE_DATASET,
+        file_name=CSV_FILENAME,
+        path=str(out_dir),
+        force=True,
+        quiet=False,
+    )
+
+    if not archive_path.exists():
+        print(f"ERROR: Expected archive not found after Kaggle API download: {archive_path}")
+        sys.exit(1)
+
+    print(f"  Extracting {archive_path.name} ...")
+    with zipfile.ZipFile(archive_path, "r") as zf:
+        zf.extractall(out_dir)
+
+    csv_path = out_dir / CSV_FILENAME
+    if not csv_path.exists():
+        print(f"ERROR: Expected CSV not found after extraction: {csv_path}")
+        sys.exit(1)
+
+    print(f"  CSV ready at: {csv_path}")
+    return csv_path
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -195,22 +265,7 @@ def main():
     # ------------------------------------------------------------------
     # 1. Download dataset via kagglehub
     # ------------------------------------------------------------------
-    print("Downloading Kaggle dataset mrsimple07/rag-data3 …")
-    try:
-        import kagglehub  # noqa: PLC0415 — intentional lazy import
-    except ImportError:
-        print("ERROR: kagglehub not installed. Run: pip install kagglehub")
-        sys.exit(1)
-
-    dataset_path = Path(kagglehub.dataset_download("mrsimple07/rag-data3"))
-    print(f"  Dataset cached at: {dataset_path}")
-
-    # Find the CSV (handles nested sub-dirs kagglehub may create)
-    csv_candidates = list(dataset_path.rglob(CSV_FILENAME))
-    if not csv_candidates:
-        print(f"ERROR: Could not find {CSV_FILENAME} under {dataset_path}")
-        sys.exit(1)
-    csv_path = csv_candidates[0]
+    csv_path = resolve_dataset_csv(ROOT)
     print(f"  Loading CSV: {csv_path}")
 
     # ------------------------------------------------------------------

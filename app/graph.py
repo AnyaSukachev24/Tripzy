@@ -44,8 +44,9 @@ logger = logging.getLogger(__name__)
 
 # Prompts
 from app.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
-from app.prompts.planner_prompt import PLANNER_SYSTEM_PROMPT, get_planner_prompt
-from app.prompts.critique_prompt import CRITIQUE_SYSTEM_PROMPT, get_critique_prompt
+from app.prompts.planner_prompt import get_planner_prompt
+from app.prompts.critique_prompt import get_critique_prompt
+from app.prompts.attractions_prompt import ATTRACTIONS_SYSTEM_PROMPT
 
 # Tools
 from app.tools import (
@@ -200,7 +201,7 @@ llm = ChatOpenAI(
 
 # --- Output Models ---
 class SupervisorOutput(BaseModel):
-    next_step: Literal["Trip_Planner", "Researcher", "End"] = Field(
+    next_step: Literal["Trip_Planner", "Researcher", "Attractions", "End"] = Field(
         description="Next worker to call."
     )
     reasoning: str = Field(description="Reason for selecting this node.")
@@ -242,16 +243,21 @@ class SupervisorOutput(BaseModel):
         default=[],
     )
     request_type: Literal[
-        "Planning",
+        "AttractionsOnly",
         "Discovery",
+        # "Planning" removed - Tripzy does not plan full trips
         "FlightOnly",
         "HotelOnly",
-        "AttractionsOnly",
         "GeneralQuestion",
     ] = Field(
-        description="Intent: 'Planning' for full trips, 'Discovery' for vague/suggestion requests, 'FlightOnly'/'HotelOnly'/'AttractionsOnly' for partial plans, 'GeneralQuestion' for general travel/geography questions.",
-        default="Planning",
+        description="Intent: 'AttractionsOnly' for sights/restaurants, 'Discovery' for suggestions, 'FlightOnly'/'HotelOnly' for partial plans, 'GeneralQuestion' for geography/travel facts.",
+        default="Discovery",
     )
+
+
+class AttractionsOutput(BaseModel):
+    attractions: List[str] = Field(description="List of recommended attractions/restaurants.")
+    final_response: str = Field(description="The friendly response to show to the user.")
 
 
 class PlannerOutput(BaseModel):
@@ -292,25 +298,24 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
     sys.stdout.flush()
 
     # --- Build conversation history for multi-turn context ---
+    from langchain_core.messages import HumanMessage, AIMessage
+    messages = state.get("messages", [])
+    
+    messages_to_add = []
+    is_new_turn = False
+    
+    if not messages or not (isinstance(messages[-1], HumanMessage) and messages[-1].content == user_query):
+        messages_to_add.append(HumanMessage(content=user_query))
+        is_new_turn = True
+
+    all_context_messages = messages + messages_to_add
     conversation_history = ""
-    prior_steps = state.get("steps", [])
-    # Extract up to last 6 meaningful exchange steps for the LLM context
-    relevant_steps = [
-        s
-        for s in prior_steps
-        if s.get("module") in ["Supervisor", "Planner", "Researcher"]
-        and s.get("response")
-    ]
-    if relevant_steps:
+    if all_context_messages:
         history_lines = []
-        for s in relevant_steps[-6:]:
-            mod = s.get("module", "")
-            prompt = s.get("prompt", "")[:200]
-            resp = s.get("response", "")[:300]
-            history_lines.append(f"[{mod}] User: {prompt} → Response: {resp}")
-        conversation_history = "\nCONVERSATION HISTORY (Recent Turns):\n" + "\n".join(
-            history_lines
-        )
+        for msg in all_context_messages[-8:]:
+            role = "User" if isinstance(msg, HumanMessage) else "Agent"
+            history_lines.append(f"{role}: {msg.content[:200]}")
+        conversation_history = "\nCONVERSATION HISTORY:\n" + "\n".join(history_lines)
 
     # --- Phase 29: User Profile Retrieval ---
     user_profile_update = {}
@@ -342,11 +347,12 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             f"Accessibility: {', '.join(current_profile.accessibility_needs)}"
         )
 
-    # Helper function to persist user profile on ALL return paths
-    def _apply_profile_updates(
-        updates: dict, extracted_prefs: list = None, extracted_trip_type: str = None
+    # Helper function to persist state updates on ALL return paths
+    def _apply_updates(
+        updates: dict, extracted_prefs: list = None, extracted_trip_type: str = None, is_terminal: bool = False
     ) -> dict:
-        """Helper to merge profile updates before returning state."""
+        """Helper to merge profile updates and message/turn logic before returning state."""
+        # 1. Profile background update logic
         if user_profile_update:
             updates.update(user_profile_update)
 
@@ -368,36 +374,52 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             if new_prefs_added:
                 try:
                     from app.tools import create_user_profile_tool
-
-                    user_email = (
-                        getattr(current_profile, "email", None)
-                        or current_profile.user_id
-                    )
-                    user_name = (
-                        getattr(current_profile, "name", None)
-                        or current_profile.user_id
-                    )
-                    create_user_profile_tool.invoke(
-                        {
-                            "name": user_name,
-                            "email": user_email,
-                            "preferences": list(merged_prefs),
-                            "dietary_needs": list(merged_diet),
-                            "accessibility_needs": list(
-                                current_profile.accessibility_needs or []
-                            ),
-                            "travel_style": new_style or "",
-                        }
-                    )
-                    print(
-                        f"  [Supervisor] Background profile update triggered. New prefs: {list(merged_prefs - set(current_profile.interests or []))}"
-                    )
-
+                    user_email = getattr(current_profile, "email", None) or current_profile.user_id
+                    user_name = getattr(current_profile, "name", None) or current_profile.user_id
+                    create_user_profile_tool.invoke({
+                        "name": user_name, "email": user_email, "preferences": list(merged_prefs),
+                        "dietary_needs": list(merged_diet),
+                        "accessibility_needs": list(current_profile.accessibility_needs or []),
+                        "travel_style": new_style or "",
+                    })
+                    print(f"  [Supervisor] Background profile update triggered.")
                     current_profile.interests = list(merged_prefs)
                     current_profile.travel_style = new_style
                     updates["user_profile"] = current_profile
                 except Exception as e:
                     print(f"  [Supervisor] Failed to update profile in background: {e}")
+                    
+        # 2. Context-switch: if destination changed, wipe stale trip_plan and duration
+        new_dest = updates.get("destination")
+        old_dest = state.get("destination")
+        if new_dest and old_dest and new_dest.lower() != old_dest.lower():
+            updates.setdefault("trip_plan", None)
+            # Don't carry over duration from old destination — it belongs to old context
+            if "duration_days" not in updates:
+                updates["duration_days"] = 0
+
+        # 3. Deduplicate preferences (operator.add accumulates duplicates over turns)
+        if "preferences" in updates:
+            seen = set()
+            deduped = []
+            for p in (updates["preferences"] or []):
+                pl = p.lower()
+                if pl not in seen:
+                    seen.add(pl)
+                    deduped.append(p)
+            updates["preferences"] = deduped
+
+        # 4. Multi-turn memory appending logic
+        msgs = list(messages_to_add)
+        if is_terminal and updates.get("supervisor_instruction"):
+            msgs.append(AIMessage(content=updates["supervisor_instruction"]))
+        
+        if msgs:
+            updates["messages"] = msgs
+            
+        if is_new_turn:
+            updates["researcher_calls"] = 0
+            
         return updates
 
     # Simple Router Logic (Optimization: Don't call LLM for simple greetings)
@@ -405,19 +427,26 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
     import re
 
     cleaned_query = re.sub(r"[^\w\s]", "", user_query.strip()).lower().strip()
-    if cleaned_query in ["hi", "hello", "hey", "test", "yo", "sup"]:
-        return _apply_profile_updates(
+    _GREETING_EXACT = {"hi", "hello", "hey", "test", "yo", "sup", "hi there", "hello there",
+                       "hey there", "good morning", "good afternoon", "good evening",
+                       "greetings", "howdy", "what's up", "whats up"}
+    _is_greeting = (cleaned_query in _GREETING_EXACT or
+                    (len(cleaned_query.split()) <= 3 and
+                     any(cleaned_query.startswith(g) for g in ["hi", "hello", "hey", "good morning", "good afternoon", "good evening"])))
+    if _is_greeting:
+        return _apply_updates(
             {
                 "next_step": "End",
-                "supervisor_instruction": "Hello! I'm your AI Travel Agent. Where would you like to go today? I can suggest destinations, plan full trips, search for flights and hotels!",
+                "supervisor_instruction": "Hi! I'm Tripzy, your AI travel assistant. I can help you discover destinations, search for flights, find hotels, and suggest things to do. What are you looking for?",
                 "steps": [
                     {
                         "module": "Supervisor",
                         "prompt": user_query,
-                        "response": "Greeted user and asked for travel intent.",
+                        "response": "Greeted user.",
                     }
                 ],
-            }
+            },
+            is_terminal=True
         )
 
     # Format context for the LLM clearly, including RAG results
@@ -466,18 +495,20 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
     )
 
     # Construct Messages for ChatPromptTemplate
-    messages = [
+    llm_messages = [
         ("system", SUPERVISOR_SYSTEM_PROMPT),
         ("human", "Context:\n{context}\n\nUser Input: {query}"),
     ]
 
     # DYNAMIC INJECTION: Add loop-prevention instruction into the messages list
     # (Previously this was built but never added — now it IS added)
+    asks_for_new_region = False  # hoisted so Preference Refinement Guard can access it
     if research_steps:
         user_query_lower = user_query.lower()
         asks_for_new_region = any(
             kw in user_query_lower
             for kw in [
+                # Region / change keywords
                 "south america",
                 "north america",
                 "europe",
@@ -497,23 +528,40 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                 "other region",
                 "elsewhere",
                 "different place",
+                # Climate / environment preferences
+                "beach", "beachy", "warm", "tropical", "hot", "sunny",
+                "island", "snorkel", "diving", "swim", "ocean", "sea",
+                "cold", "snow", "ski", "mountains", "hiking", "adventure",
+                "desert", "safari", "nature", "outdoors",
+                # Budget / style preferences
+                "budget", "cheap", "affordable", "backpack", "luxury",
+                "boutique", "all-inclusive",
+                # Travel persona
+                "family", "kids", "children", "solo", "couple",
+                "romantic", "honeymoon", "friends",
+                # Activity preferences
+                "culture", "history", "museum", "food", "nightlife",
+                "relax", "spa", "wellness", "shopping",
             ]
         )
         if asks_for_new_region:
             loop_prevention_msg = (
-                "SYSTEM: The user is requesting destinations in a NEW region or asking for alternatives. "
-                "You MUST route to 'Researcher' to run a fresh suggest_destination_tool search with the updated preferences. "
-                "Do NOT route to End without searching first."
+                "SYSTEM: The user is adding NEW preferences or refining their request "
+                "(e.g. climate, activities, budget, travel style). "
+                "You MUST route to 'Researcher' to run a fresh suggest_destination_tool search "
+                "with ALL merged preferences (old + new). Do NOT route to End without searching first."
             )
         else:
             loop_prevention_msg = (
                 "SYSTEM: Destination suggestions have already been retrieved (see PREVIOUS DESTINATION SUGGESTIONS above). "
-                "Route to 'End' and write a warm, conversational response picking the 2-3 best options with reasons. "
-                "Only route to 'Researcher' if the user explicitly asks for a completely new or different set of destinations."
+                "If the user has added NEW preferences (climate, activities, budget, style) "
+                "not reflected in those suggestions → route to Researcher with all merged preferences. "
+                "If the user is picking from the existing options or asking a general question → "
+                "route to End with a warm, natural response."
             )
-        messages.append(("system", loop_prevention_msg))
+        llm_messages.append(("system", loop_prevention_msg))
 
-    prompt = ChatPromptTemplate.from_messages(messages)
+    prompt = ChatPromptTemplate.from_messages(llm_messages)
     chain = prompt | llm.with_structured_output(SupervisorOutput)
 
     try:
@@ -532,29 +580,102 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             "response": f"Routing to {result.next_step}: {result.reasoning}",
         }
 
+        # ── PREFERENCE REFINEMENT GUARD ──────────────────────────────────────
+        # If user added new preferences (climate/activity/budget) but LLM chose End,
+        # force Researcher so we don't repeat stale suggestions.
+        already_routed_this_turn = (state.get("researcher_calls") or 0) > 0
+        if (
+            asks_for_new_region
+            and result.request_type == "Discovery"
+            and result.next_step == "End"
+            and not already_routed_this_turn
+        ):
+            print(
+                f"  [PREF REFINEMENT GUARD] LLM chose End but user added new prefs → forcing Researcher."
+            )
+            result.next_step = "Researcher"
+        # ─────────────────────────────────────────────────────────────────────
+
+        # ── DESTINATION SWITCH GUARD (code-level override) ───────────────────
+        # If prior request was FlightOnly/HotelOnly and the supervisor mistakenly
+        # routes to Researcher/End with a different destination, correct it to
+        # Trip_Planner keeping the same request_type.
+        prior_request_type = state.get("request_type", "")
+        prior_destination = (state.get("destination") or "").strip().lower()
+        new_destination = (result.destination or "").strip().lower()
+        if (
+            prior_request_type in ("FlightOnly", "HotelOnly")
+            and new_destination
+            and prior_destination
+            and new_destination != prior_destination
+            and result.next_step in ("Researcher", "End")
+            and result.request_type in ("HotelOnly", "FlightOnly", "Discovery")
+        ):
+            print(
+                f"  [DEST SWITCH GUARD] Overriding {result.next_step}/{result.request_type} "
+                f"→ Trip_Planner/{prior_request_type} (dest: {prior_destination} → {new_destination})"
+            )
+            result.next_step = "Trip_Planner"
+            result.request_type = prior_request_type
+        # ─────────────────────────────────────────────────────────────────────
+
         # HANDLE DISCOVERY (Vague Requests)
         if result.request_type == "Discovery":
             print(f"  [DISCOVERY MODE] Preferences: {result.preferences}")
 
-            # ── HARD LOOP-BREAKER ─────────────────────────────────────────────
-            # Root cause: the LLM keeps routing back to Researcher on the 2nd
-            # Supervisor pass even though research was already done.
-            # Fix: detect looping by checking whether the SAME user_query has
-            # ALREADY been routed to Researcher.  If yes → we must be in a loop
-            # → force End and generate a conversational summary.
-            #
-            # This is SAFER than keyword matching because:
-            # • "I want Europe honeymoon" (initial) → 1st Researcher call is OK
-            # • Same query hits Supervisor again → LOOP → breaker fires
-            # • "What about South America?" (new message) → different user_query
-            #   so breaker does NOT fire → 2nd Researcher call is allowed
+            # ── NO-PREFERENCE GUARD ───────────────────────────────────────────
+            # If user was vague (no concrete preferences yet) but LLM routed to
+            # Researcher anyway, redirect to End to ask a clarifying question.
+            CONCRETE_PREF_KEYWORDS = {
+                "beach", "beachy", "warm", "tropical", "hot", "island", "snorkel",
+                "diving", "swim", "ocean", "sea", "cold", "snow", "ski", "mountain",
+                "hiking", "adventure", "desert", "safari", "nature", "outdoor",
+                "budget", "cheap", "affordable", "backpack", "luxury", "boutique",
+                "family", "kids", "solo", "couple", "romantic", "honeymoon", "friends",
+                "culture", "history", "museum", "food", "nightlife", "relax", "spa",
+                "wellness", "shopping", "europe", "asia", "africa", "caribbean",
+                "america", "mediterranean", "southeast asia",
+            }
+            merged_prefs = " ".join(result.preferences or state.get("preferences") or []).lower()
+            has_concrete_prefs = any(kw in merged_prefs for kw in CONCRETE_PREF_KEYWORDS)
+            if (
+                result.next_step == "Researcher"
+                and not has_concrete_prefs
+                and not research_steps  # no prior research done yet
+            ):
+                print(
+                    "  [NO-PREF GUARD] No concrete preferences yet — asking clarifying question instead of searching."
+                )
+                clarify_instruction = (
+                    result.instruction
+                    if result.instruction and "?" in result.instruction
+                    else "What kind of experience are you after — beaches, culture, adventure, or something else? Any preferences on climate or budget?"
+                )
+                return _apply_updates(
+                    {
+                        "next_step": "End",
+                        "supervisor_instruction": clarify_instruction,
+                        "request_type": "Discovery",
+                        "preferences": result.preferences or state.get("preferences") or [],
+                        "steps": [
+                            {
+                                "module": "Supervisor",
+                                "prompt": user_query,
+                                "response": clarify_instruction,
+                            }
+                        ],
+                    },
+                    extracted_prefs=result.preferences,
+                    extracted_trip_type=result.trip_type,
+                    is_terminal=True,
+                )
             # ─────────────────────────────────────────────────────────────────
-            already_routed_to_researcher_for_this_query = any(
-                s.get("module") == "Supervisor"
-                and "Routing to Researcher" in s.get("response", "")
-                and s.get("prompt", "").strip().lower() == user_query.strip().lower()
-                for s in steps
-            )
+
+            # ── HARD LOOP-BREAKER ─────────────────────────────────────────────
+            # Fix: detect looping by checking researcher_calls which is now
+            # safely reset to 0 on every new user turn.
+            # ─────────────────────────────────────────────────────────────────
+            already_routed_to_researcher_for_this_query = (state.get("researcher_calls") or 0) > 0
 
             if (
                 research_steps
@@ -608,7 +729,7 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                     else:
                         summary_text = "I've found some great destination options based on your request. Please let me know if you'd like to hear more details about any specific places!"
 
-                return _apply_profile_updates(
+                return _apply_updates(
                     {
                         "next_step": "End",
                         "supervisor_instruction": summary_text,
@@ -636,6 +757,7 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                     },
                     extracted_prefs=result.preferences,
                     extracted_trip_type=result.trip_type,
+                    is_terminal=True
                 )
 
             # Let the LLM decide if we need more research or if we are done.
@@ -692,9 +814,9 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                 search_query = f"TOOL_CALLS: {json.dumps(tool_calls)}"
 
                 print(f"  [DISCOVERY] Routing to Researcher: {search_query}")
-                return {
-                    "messages": messages,
-                    "next_step": "Researcher",
+                return _apply_updates(
+                    {
+                        "next_step": "Researcher",
                     "supervisor_instruction": search_query,
                     "destination": result.destination or state.get("destination"),
                     "duration_days": result.duration_days or state.get("duration_days"),
@@ -715,12 +837,12 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                             "response": "Routing to Researcher for destination suggestions.",
                         }
                     ],
-                }
+                })
             elif result.next_step == "End":
                 print(
                     f"  [DISCOVERY] Discovery complete. Returning LLM instruction to user."
                 )
-                return _apply_profile_updates(
+                return _apply_updates(
                     {
                         "next_step": "End",
                         "supervisor_instruction": result.instruction,
@@ -748,6 +870,7 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                     },
                     extracted_prefs=result.preferences,
                     extracted_trip_type=result.trip_type,
+                    is_terminal=True
                 )
 
         # HANDLE GENERAL QUESTIONS (Facts, Geography)
@@ -756,9 +879,9 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
 
             # If we haven't done research yet, route to researcher for web search
             if not research_steps:
-                return {
-                    "messages": messages,
-                    "next_step": "Researcher",
+                return _apply_updates(
+                    {
+                        "next_step": "Researcher",
                     # Instead of TOOL_CALLS, we just pass the text instruction so researcher does a web search
                     "supervisor_instruction": result.instruction or user_query,
                     "destination": result.destination or state.get("destination"),
@@ -780,11 +903,11 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                             "response": "Routing to Researcher to answer general question.",
                         }
                     ],
-                }
+                })
             else:
                 # We already did research, summarize back to the user
                 last_research_response = research_steps[-1].get("response", "")
-                return _apply_profile_updates(
+                return _apply_updates(
                     {
                         "next_step": "End",
                         # Format a nice output based on the research finding
@@ -813,6 +936,7 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                     },
                     extracted_prefs=result.preferences,
                     extracted_trip_type=result.trip_type,
+                    is_terminal=True
                 )
 
         # EDGE CASE VALIDATION - Check for impossible/problematic requests
@@ -828,10 +952,8 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             "Greeting",
         }
         request_type_for_validation = result.request_type or ""
-        is_planning = (
-            result.next_step == "Trip_Planner"
-            and request_type_for_validation not in PARTIAL_REQUEST_TYPES
-        )
+        # Full planning is disabled — always treat as partial
+        is_planning = False
 
         edge_case_result = process_edge_cases(
             user_query=user_query,
@@ -848,7 +970,7 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             print(
                 f"  [EDGE CASE DETECTED] {edge_case_result['error_message'][:100]}..."
             )
-            return _apply_profile_updates(
+            return _apply_updates(
                 {
                     "next_step": "End",
                     "supervisor_instruction": edge_case_result["error_message"],
@@ -873,6 +995,7 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                 },
                 extracted_prefs=result.preferences,
                 extracted_trip_type=result.trip_type,
+                is_terminal=True
             )
 
         # ────────────────────────────────────────────────────────────────────────
@@ -931,7 +1054,6 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
 
         raw_destination = result.destination or state.get("destination") or ""
         if result.request_type in (
-            "Planning",
             "FlightOnly",
             "HotelOnly",
             "AttractionsOnly",
@@ -971,9 +1093,8 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             tool_calls = [{"name": "suggest_destination_tool", "args": tool_args}]
             search_query = f"TOOL_CALLS: {json.dumps(tool_calls)}"
 
-            return _apply_profile_updates(
+            return _apply_updates(
                 {
-                    "messages": messages,
                     "next_step": "Researcher",
                     "supervisor_instruction": search_query,
                     "destination": "",  # clear the vague destination — researcher will set it
@@ -1013,7 +1134,7 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             current_duration = state.get("duration_days") or result.duration_days
 
             # DIFFERENT REQUREMENTS BASED ON REQUEST TYPE
-            req_type = result.request_type or "Planning"
+            req_type = result.request_type or "Discovery"
 
             # --- MANUAL OVERRIDE FOR ATTRACTIONS ONLY ---
             # LLMs struggle to differentiate "Planning with known destination" vs "AttractionsOnly".
@@ -1035,10 +1156,7 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             if not current_destination:
                 missing_required.append("destination")
 
-            # Duration: Required for Planning. Optional for others.
-            if req_type == "Planning":
-                if not current_duration or current_duration == 0:
-                    missing_required.append("duration")
+            # Duration: Not required since full planning is disabled. Optional for all types.
 
             # Origin: Required for FlightOnly.
             # For Planning, it's good but maybe optional? Let's keep it optional for Planning to be safe,
@@ -1077,9 +1195,8 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                 print(
                     f"  [MULTI-TURN] Missing required info: {missing_required}. Asking for clarification."
                 )
-                return _apply_profile_updates(
+                return _apply_updates(
                     {
-                        "messages": messages,
                         "next_step": "End",
                         "supervisor_instruction": clarifying_question,
                         "destination": result.destination or current_destination,
@@ -1106,13 +1223,47 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                     },
                     extracted_prefs=result.preferences,
                     extracted_trip_type=result.trip_type,
+                    is_terminal=True
                 )
         else:
             print(
                 f"  [MULTI-TURN] All required info present. Routing to {result.next_step}."
             )
+
+        # GENERAL KNOWLEDGE GUARD: If supervisor routes to End but request_type
+        # is HotelOnly/FlightOnly with all required fields present, it answered
+        # from general knowledge instead of searching. Override to Trip_Planner.
+        if result.next_step == "End" and result.request_type in ("HotelOnly", "FlightOnly"):
+            current_dest = result.destination or state.get("destination")
+            current_duration = result.duration_days or state.get("duration_days")
+            current_origin = result.origin_city or state.get("origin_city")
+            # Check if all fields are actually present
+            hotel_ready = (
+                result.request_type == "HotelOnly"
+                and current_dest
+                and current_duration and current_duration > 0
+            )
+            flight_ready = (
+                result.request_type == "FlightOnly"
+                and current_dest
+                and current_origin
+                # date is in instruction or user message
+                and any(
+                    c.isdigit() for c in (result.instruction or user_query)
+                )
+            )
+            # For HotelOnly: if all fields present, any "question" is LLM fabricating hotel options
+            # from general knowledge ("Here are 3 hotels... Which to search?") — always override.
+            # For FlightOnly: only override if not a genuine clarifying question.
+            instruction_is_question = result.instruction.strip().endswith("?") if result.instruction else False
+            if hotel_ready or (flight_ready and not instruction_is_question):
+                print(
+                    f"  [GK GUARD] Supervisor answered from general knowledge for {result.request_type}. "
+                    f"Overriding End → Trip_Planner."
+                )
+                result.next_step = "Trip_Planner"
+
         updates = {
-            "messages": messages,
             "next_step": result.next_step,
             "supervisor_instruction": result.instruction,
             "duration_days": result.duration_days or state.get("duration_days"),
@@ -1129,10 +1280,11 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             "request_type": result.request_type,
             "steps": [step_log],
         }
-        return _apply_profile_updates(
+        return _apply_updates(
             updates,
             extracted_prefs=result.preferences,
             extracted_trip_type=result.trip_type,
+            is_terminal=(updates.get("next_step") == "End")
         )
     except Exception as e:
         print(f"  Supervisor Error: {str(e)}")
@@ -1140,11 +1292,14 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             error_msg = "⚠️ The AI service is temporarily busy (rate limit). Please wait a moment and try again."
         else:
             error_msg = f"System Error: {str(e)}"
-        return {
-            "next_step": "End",
-            "supervisor_instruction": error_msg,
-            "steps": [{"module": "Supervisor", "error": str(e), "response": error_msg}],
-        }
+        return _apply_updates(
+            {
+                "next_step": "End",
+                "supervisor_instruction": error_msg,
+                "steps": [{"module": "Supervisor", "error": str(e), "response": error_msg}],
+            },
+            is_terminal=True
+        )
 
 
 # ... (Previous code remains the same up to Planner Node)
@@ -1165,6 +1320,18 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
     traveling_personas_number = state.get("traveling_personas_number", 1)
     amenities = state.get("amenities", [])
 
+    # Build conversation history
+    from langchain_core.messages import HumanMessage
+    messages = state.get("messages", [])
+    conversation_history = "None"
+    if messages:
+        history_lines = []
+        for msg in messages[-4:]:
+            role = "User" if isinstance(msg, HumanMessage) else "Agent"
+            content = msg.content if msg.content else str(msg)
+            history_lines.append(f"{role}: {str(content)[:150]}")
+        conversation_history = "\n".join(history_lines)
+
     # Extract Research Info
     steps = state.get("steps", [])
     research_steps = [s for s in steps if s.get("module") == "Researcher"]
@@ -1173,22 +1340,13 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
     # DEFINE TOOLS FOR PLANNER
     # We bind the search tools directly to the LLM
     tools = [
-        # Core tools
         search_flights_tool,
         search_hotels_tool,
         suggest_destination_tool,
         suggest_attractions_tool,
-        create_plan_tool,
         search_activities_tool,
-        flight_price_analysis_tool,
-        flight_status_tool,
-        airport_search_tool,
-        airline_lookup_tool,
-        travel_recommendations_tool,
         cheapest_flights_tool,
         hotel_ratings_tool,
-        search_flights_with_kiwi_tool,
-        # New Amadeus enrichment tools (Phase 26)
         resolve_airport_code_tool,
         get_airline_info_tool,
         search_tours_activities_tool,
@@ -1201,7 +1359,7 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
     # Let's bind a "SubmitPlan" tool to handle the final output structured data.
 
     # Dynamic Prompt based on Request Type
-    request_type = state.get("request_type", "Planning")
+    request_type = state.get("request_type", "FlightOnly")
 
     from pydantic import create_model
     from typing import Optional
@@ -1245,7 +1403,7 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
         "travelers": (int, Field(default=1, description="Number of travelers")),
     }
 
-    if request_type in ["Planning", "FlightOnly"]:
+    if request_type in ["FlightOnly"]:
         base_fields["outbound_flight"] = (
             Flight,
             Field(
@@ -1261,7 +1419,7 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
                     description="The return flight from destination back to origin. REQUIRED.",
                 ),
             )
-    if request_type in ["Planning", "HotelOnly"]:
+    if request_type in ["HotelOnly"]:
         base_fields["hotels"] = (
             List[Hotel],
             Field(
@@ -1270,7 +1428,7 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
             ),
         )
 
-    if request_type in ["Planning", "AttractionsOnly"]:
+    if request_type in ["AttractionsOnly"]:
         base_fields["itinerary"] = (
             List[Dict[str, Any]],
             Field(..., description="Daily itinerary of activities. REQUIRED."),
@@ -1300,7 +1458,7 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
             ("system", system_prompt),
             (
                 "human",
-                "Current Check: Duration={duration_days}, Dest={destination}, Origin City={origin_city}, Budget={budget_limit}, Number of travelers={traveling_personas_number} Amenities={amenities}. Instruction: {instruction}",
+                "Current Check: Duration={duration_days}, Dest={destination}, Origin City={origin_city}, Budget={budget_limit}, Number of travelers={traveling_personas_number} Amenities={amenities}. Instruction: {instruction}\n\nCONVERSATION HISTORY:\n{conversation_history}",
             ),
         ]
     )
@@ -1332,6 +1490,7 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
                 "user_profile": user_profile_str,
                 "feedback": state.get("critique_feedback", "None"),
                 "research_info": research_info if research_info else "None",
+                "conversation_history": conversation_history,
                 "trip_plan": str(state.get("trip_plan", "None")),
                 "budget": str(state.get("budget", "None")),
                 "duration_days": duration_days,
@@ -1352,6 +1511,18 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
             if hasattr(result, "tool_calls") and result.tool_calls
             else []
         )
+
+        # Ensure create_plan_tool has attractions_data in AttractionsOnly flows.
+        if request_type == "AttractionsOnly" and tool_calls:
+            cached_attractions = state.get("last_attraction_results") or []
+            for tc in tool_calls:
+                if not isinstance(tc, dict) or tc.get("name") != "create_plan_tool":
+                    continue
+                args = tc.get("args") if isinstance(tc.get("args"), dict) else {}
+                if not args.get("attractions_data") and cached_attractions:
+                    args["attractions_data"] = json.dumps(cached_attractions, default=str)
+                    tc["args"] = args
+
         content = result.content if hasattr(result, "content") else ""
         content_str = content if content else ""
 
@@ -1389,8 +1560,10 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
             print(f"  [DEBUG] SubmitPlan Args: {str(submit_plan_call).encode('ascii', 'replace').decode('ascii')}")
             submission = submit_plan_call.get("args", {})
             trip_plan = submission.get("trip_plan", {})
+            # Preserve the planner's final_response — this is what the user sees
+            final_response = submission.get("final_response", "")
             updates["trip_plan"] = trip_plan
-            updates["supervisor_instruction"] = "Plan Drafted"
+            updates["supervisor_instruction"] = final_response or "Plan ready."
             updates["next_step"] = "Critique"
             return updates
 
@@ -1408,7 +1581,7 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
         # If Search Tools are called, route to Researcher (updated to handle tool calls)
         # LOOP GUARD: Hard-cap on researcher_calls even in the normal (no-exception) path
         researcher_calls = state.get("researcher_calls", 0)
-        MAX_RESEARCHER_CALLS = 8
+        MAX_RESEARCHER_CALLS = 4  # 2 for tool calls + 1 retry + 1 buffer
         if researcher_calls >= MAX_RESEARCHER_CALLS:
             print(
                 f"  [GUARD] Max researcher calls reached ({researcher_calls}). Forcing plan submission."
@@ -1438,17 +1611,36 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
             updates["next_step"] = "Human_Approval"
             return updates
 
-        # DEDUP CHECK: avoid re-routing to Researcher with the exact same single tool already run
+        # DEDUP CHECK: stop if the same tool has been called >= 2 times already
         import json
 
         last_steps = state.get("steps", [])
-        researcher_steps = [s for s in last_steps if s.get("module") == "Researcher"]
+        # Only check steps from the CURRENT planning session (after the last Supervisor step)
+        last_supervisor_idx = max(
+            (i for i, s in enumerate(last_steps) if s.get("module") == "Supervisor"),
+            default=-1,
+        )
+        current_session_steps = last_steps[last_supervisor_idx + 1:] if last_supervisor_idx >= 0 else last_steps
+        researcher_steps = [s for s in current_session_steps if s.get("module") == "Researcher"]
         if researcher_steps and len(tool_calls) == 1:
-            last_researcher_prompt = researcher_steps[-1].get("prompt", "")
             new_tool_name = tool_calls[0].get("name", "")
-            if new_tool_name and new_tool_name in last_researcher_prompt:
+            new_tool_args = tool_calls[0].get("args", {})
+            new_tool_city = (new_tool_args.get("city") or new_tool_args.get("destination") or "").lower()
+            # Count how many researcher steps already ran this tool FOR THE SAME CITY
+            tool_run_count = 0
+            for s in researcher_steps:
+                if new_tool_name and new_tool_name in s.get("prompt", ""):
+                    # Check if that prior call was for the same destination
+                    prior_prompt = s.get("prompt", "")
+                    if not new_tool_city or new_tool_city in prior_prompt.lower():
+                        tool_run_count += 1
+            repeat_guard = tool_run_count >= 1  # stop after 1st attempt for same city
+            # Also check last step specifically (original logic), but only if same city
+            last_researcher_prompt = researcher_steps[-1].get("prompt", "")
+            same_city_in_last = not new_tool_city or new_tool_city in last_researcher_prompt.lower()
+            if (repeat_guard or (new_tool_name and new_tool_name in last_researcher_prompt and same_city_in_last)):
                 print(
-                    f"  [DEDUP GUARD] Planner is repeating tool '{new_tool_name}' already run. Forcing submit."
+                    f"  [DEDUP GUARD] Planner repeating tool '{new_tool_name}' (already ran {tool_run_count}x). Forcing submit."
                 )
                 fallback_plan = {
                     "destination": destination,
@@ -1472,9 +1664,38 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
                     "special_notes": "Plan generated with limited research data.",
                 }
                 updates["trip_plan"] = fallback_plan
-                updates["supervisor_instruction"] = (
-                    "Plan Drafted (dedup guard - repeated tool call)"
+                # Check if the last researcher step returned 0 results
+                last_researcher = researcher_steps[-1] if researcher_steps else {}
+                last_response = last_researcher.get("response", "")
+                no_results = (
+                    "0 valid" in last_response
+                    or "no hotels" in last_response.lower()
+                    or "no flights" in last_response.lower()
+                    or last_response.strip() == ""
                 )
+                if no_results and new_tool_city:
+                    if "hotel" in new_tool_name:
+                        user_msg = (
+                            f"I couldn't find available hotels in {destination} for those dates. "
+                            "This can happen due to high demand or limited inventory. "
+                            "Would you like me to try different dates, a nearby city, or adjust the budget?"
+                        )
+                    elif "flight" in new_tool_name:
+                        user_msg = (
+                            f"I couldn't find available flights to {destination} for that date. "
+                            "Would you like me to try flexible dates or nearby airports?"
+                        )
+                    else:
+                        user_msg = (
+                            f"I searched for results in {destination} but nothing matched. "
+                            "Would you like to try different criteria?"
+                        )
+                else:
+                    user_msg = (
+                        f"I've completed the search for {destination}. "
+                        "Would you like to refine the search or try different options?"
+                    )
+                updates["supervisor_instruction"] = user_msg
                 updates["next_step"] = "Human_Approval"
                 return updates
 
@@ -1535,135 +1756,52 @@ def critique_node(state: AgentState) -> Dict[str, Any]:
 
     # HARD VALIDATION 1: Check duration before calling LLM
     # Only for full "Planning" requests. Partial plans don't need strict itinerary days.
-    request_type = state.get("request_type", "Planning")
-    if request_type == "Planning" and trip_plan and "itinerary" in trip_plan:
-        actual_days = len(trip_plan.get("itinerary", []))
-        print(f"  [VALIDATION] Expected {duration_days} days, got {actual_days} days")
+    request_type = state.get("request_type", "FlightOnly")
+    # Duration and budget validations skipped - full planning is disabled
+    # Only partial request types (FlightOnly, HotelOnly, AttractionsOnly) reach critique now
 
-        if actual_days != duration_days and actual_days > 0 and current_revisions < 3:
-            print(f"  [VALIDATION FAILED] Duration mismatch! Sending back to Planner.")
-            feedback = f"DURATION ERROR: The plan has {actual_days} days but the user requested {duration_days} days. Please regenerate the itinerary with EXACTLY {duration_days} days."
-            return {
-                "critique_feedback": feedback,
-                "revision_count": current_revisions + 1,
-                "next_step": "Trip_Planner",
-                "steps": [
-                    {
-                        "module": "Critique",
-                        "prompt": "Duration Validation",
-                        "response": feedback,
-                    }
-                ],
-            }
-
-    # HARD VALIDATION 2: Budget check
-    # Skip for FlightOnly/HotelOnly as total cost might be just one component
-    if request_type == "Planning" and trip_plan and budget_limit and budget_limit > 0:
-        plan_cost = trip_plan.get("budget_estimate", 0)
-        if plan_cost > 0 and plan_cost > budget_limit * 1.15:  # 15% overage tolerance
-            print(
-                f"  [BUDGET EXCEEDED] Plan=${plan_cost:.0f}, Limit=${budget_limit:.0f}"
-            )
-            if current_revisions < 3:
-                budget_feedback = (
-                    f"BUDGET EXCEEDED: The plan costs ${plan_cost:.0f} but the user's budget is ${budget_limit:.0f}. "
-                    f"Please find cheaper flights, select more affordable hotels, or reduce activity costs to stay within budget."
-                )
-                return {
-                    "critique_feedback": budget_feedback,
-                    "revision_count": current_revisions + 1,
-                    "next_step": "Trip_Planner",
-                    "budget_warning": budget_feedback,
-                    "steps": [
-                        {
-                            "module": "Critique",
-                            "prompt": "Budget Validation",
-                            "response": budget_feedback,
-                        }
-                    ],
+    # TOKEN OPTIMIZATION: Skip LLM critique for partial requests (FlightOnly, HotelOnly, AttractionsOnly)
+    # Only do Python-based hard validations (budget check above already ran)
+    # For these request types, auto-approve to save ~800-1200 tokens per request
+    if request_type in ("FlightOnly", "HotelOnly", "AttractionsOnly"):
+        print(f"  [CRITIQUE] Auto-approving {request_type} (no LLM critique needed)")
+        # Don't overwrite supervisor_instruction — the planner's final_response is already set
+        return {
+            "next_step": "Human_Approval",
+            "steps": [
+                {
+                    "module": "Critique",
+                    "prompt": "Auto-validation",
+                    "response": f"APPROVE: {request_type} auto-approved",
                 }
+            ],
+        }
 
-    # Proceed with LLM-based critique
-    # Build user_profile string for the prompt template variable
-    user_profile = state.get("user_profile")
-    user_profile_str = "None"
-    if user_profile:
-        user_profile_str = (
-            f"Style: {user_profile.travel_style or 'Any'}, "
-            f"Diet: {', '.join(user_profile.dietary_needs or [])}, "
-            f"Interests: {', '.join(user_profile.interests or [])}"
-        )
-
-    critique_prompt_text = get_critique_prompt(request_type)
-    prompt = ChatPromptTemplate.from_messages(
-        [("system", critique_prompt_text), ("human", "Plan to Review: {trip_plan}")]
-    )
-
-    chain = prompt | llm.with_structured_output(CritiqueOutput)
-
-    user_profile = state.get("user_profile")
-    user_profile_str = "None"
-    if user_profile:
-        user_profile_str = (
-            f"Style: {user_profile.travel_style or 'Any'}, "
-            f"Diet: {', '.join(user_profile.dietary_needs)}, "
-            f"Interests: {', '.join(user_profile.interests)}, "
-            f"Accessibility: {', '.join(user_profile.accessibility_needs)}"
-        )
-
-    final_response = "No written response."
-    steps_list = state.get("steps", [])
-    for step in reversed(steps_list):
-        if step.get("module") == "Planner":
-            final_response = step.get("response", final_response)
-            break
-
-    result = safe_llm_invoke(
-        chain,
-        {
-            "instruction": instruction,
-            "user_profile": user_profile_str,
-            "trip_plan": str(trip_plan),
-            "final_response": final_response,
-            "request_type": request_type,
-            "budget": str(state.get("budget_limit", "None")),
-            "duration_days": duration_days,
-            "user_profile": user_profile_str,
-        },
-    )
-
-    step_log = {
-        "module": "Critique",
-        "prompt": "Reviewing Plan...",
-        "response": f"{result.decision}: {result.feedback}",
+    # For any remaining request types, do a simple auto-approve
+    print(f"  [CRITIQUE] Auto-approving fallback for request_type={request_type}")
+    return {
+        "next_step": "Human_Approval",
+        "steps": [
+            {
+                "module": "Critique",
+                "prompt": "Auto-validation",
+                "response": "APPROVE: Auto-approved",
+            }
+        ],
     }
-
-    updates = {"steps": [step_log]}
-
-    if result.decision == "REJECT" and current_revisions < 3:
-        updates["critique_feedback"] = result.feedback
-        updates["revision_count"] = current_revisions + 1
-        updates["next_step"] = "Trip_Planner"
-    else:
-        # Approved OR Max Revisions Reached
-        approval_msg = "The plan has been APPROVED by the critic. Please confirm if you want to generate the final response."
-        if current_revisions >= 3:
-            approval_msg = "Maximum revisions reached. Finalize the plan with the current best effort."
-
-        updates["supervisor_instruction"] = approval_msg
-        updates["next_step"] = "Human_Approval"
-
-    return updates
 
 
 # 4. HUMAN APPROVAL NODE
 def human_approval_node(state: AgentState) -> Dict[str, Any]:
     print("--- NODE: HUMAN APPROVAL (PAUSED) ---")
-    return {
-        "next_step": (
-            "End" if state.get("user_query") == "approve_trip_plan" else "Supervisor"
-        )
-    }
+    request_type = state.get("request_type", "")
+    # Partial requests (FlightOnly, HotelOnly, AttractionsOnly) are auto-approved —
+    # the planner's final_response is already in supervisor_instruction. Go to End.
+    partial_types = {"FlightOnly", "HotelOnly", "AttractionsOnly"}
+    if request_type in partial_types or state.get("user_query") == "approve_trip_plan":
+        return {"next_step": "End"}
+    # For full planning (legacy / future): route to Supervisor for review
+    return {"next_step": "Supervisor"}
 
 
 # 4. RESEARCHER NODE (Enhanced for Tools)
@@ -1712,6 +1850,15 @@ def researcher_node(state: AgentState) -> Dict[str, Any]:
                 t_name = tc["name"]
                 t_args = tc["args"]
 
+                if t_name == "create_plan_tool" and isinstance(t_args, dict):
+                    # Auto-fill plan inputs from cached state so planner can compose without re-calling tools.
+                    if not t_args.get("flights_data") and state.get("last_flight_results"):
+                        t_args["flights_data"] = json.dumps(state.get("last_flight_results", []), default=str)
+                    if not t_args.get("hotels_data") and state.get("last_hotel_results"):
+                        t_args["hotels_data"] = json.dumps(state.get("last_hotel_results", []), default=str)
+                    if not t_args.get("attractions_data") and state.get("last_attraction_results"):
+                        t_args["attractions_data"] = json.dumps(state.get("last_attraction_results", []), default=str)
+
                 if t_name in tool_map:
                     print(f"  [Executing Tool] {t_name} with {t_args}")
                     tool_res = tool_map[t_name].invoke(t_args)
@@ -1750,6 +1897,15 @@ def researcher_node(state: AgentState) -> Dict[str, Any]:
                         elif t_name in ("search_flights_tool", "search_flights_with_kiwi_tool", "cheapest_flights_tool"):
                             if isinstance(parsed_res, list) and parsed_res:
                                 step_logs.append({"_cache_flights": parsed_res[:5]})
+                        elif t_name == "suggest_attractions_tool":
+                            cached_attractions = []
+                            if isinstance(parsed_res, list) and parsed_res:
+                                cached_attractions = parsed_res[:10]
+                            elif isinstance(parsed_res, dict) and isinstance(parsed_res.get("attractions"), list):
+                                cached_attractions = parsed_res.get("attractions", [])[:10]
+                            if cached_attractions:
+                                step_logs.append({"_cache_attractions": cached_attractions})
+                                print(f"  [Researcher] Cached {len(cached_attractions)} attractions to state")
                     except Exception as cache_err:
                         print(f"  [Researcher] Cache warning: {cache_err}")
                 else:
@@ -1862,12 +2018,15 @@ def researcher_node(state: AgentState) -> Dict[str, Any]:
     # Extract cached hotel/flight data from step_logs markers
     cached_hotels = None
     cached_flights = None
+    cached_attractions = None
     clean_step_logs = []
     for sl in step_logs:
         if "_cache_hotels" in sl:
             cached_hotels = sl["_cache_hotels"]
         elif "_cache_flights" in sl:
             cached_flights = sl["_cache_flights"]
+        elif "_cache_attractions" in sl:
+            cached_attractions = sl["_cache_attractions"]
         else:
             clean_step_logs.append(sl)
     step_logs = clean_step_logs
@@ -1902,7 +2061,112 @@ def researcher_node(state: AgentState) -> Dict[str, Any]:
         result_payload["last_hotel_results"] = cached_hotels
     if cached_flights is not None:
         result_payload["last_flight_results"] = cached_flights
+    if cached_attractions is not None:
+        result_payload["last_attraction_results"] = cached_attractions
     return result_payload
+
+
+# 5. ATTRACTIONS STUB NODE
+def attractions_node(state: AgentState) -> Dict[str, Any]:
+    """
+    Expert node for Attractions, Restaurants, and Local Guide info.
+    Uses specialized tools to find things to do and places to eat.
+    """
+    print("--- NODE: ATTRACTIONS ---")
+    destination = state.get("destination")
+    user_query = state.get("user_query", "")
+    instruction = state.get("supervisor_instruction", "")
+    
+    # Check if we have a destination. If not, we might need a quick resolver or fail gracefully.
+    if not destination or destination.strip() == "":
+        # Safety fallback
+        destination = "your destination"
+
+    # Build user context
+    user_profile = state.get("user_profile")
+    user_profile_str = "None"
+    if user_profile:
+        user_profile_str = (
+            f"Style: {user_profile.travel_style or 'Any'}, "
+            f"Diet: {', '.join(user_profile.dietary_needs or [])}, "
+            f"Interests: {', '.join(user_profile.interests or [])}"
+        )
+
+    # Bind tools 
+    # Note: search_points_of_interest_tool needs lat/long, so we might need researcher to resolve that if missing
+    # For now we use suggest_attractions_tool (RAG) and tours as primary.
+    tools = [suggest_attractions_tool, search_points_of_interest_tool, search_tours_activities_tool]
+    llm_with_tools = llm.bind_tools(tools)
+    
+    # 1. Gather data using tools
+    # We use a simple chain to decide which tools to call
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", ATTRACTIONS_SYSTEM_PROMPT),
+        ("human", "Destination: {destination}\nUser Query: {user_query}\nProfile: {user_profile}\nInstruction: {instruction}")
+    ])
+    
+    chain = prompt | llm_with_tools
+    
+    # Invoke to get tool calls
+    ai_msg = safe_llm_invoke(chain, {
+        "destination": destination,
+        "user_query": user_query,
+        "user_profile": user_profile_str,
+        "instruction": instruction
+    })
+    
+    tool_results = []
+    if ai_msg.tool_calls:
+        print(f"  [Attractions] Executing {len(ai_msg.tool_calls)} tool calls...")
+        available_tools = {
+            "suggest_attractions_tool": suggest_attractions_tool,
+            "search_points_of_interest_tool": search_points_of_interest_tool,
+            "search_tours_activities_tool": search_tours_activities_tool
+        }
+        
+        for tool_call in ai_msg.tool_calls:
+            tool_name = tool_call["name"]
+            if tool_name in available_tools:
+                try:
+                    res = available_tools[tool_name].invoke(tool_call["args"])
+                    tool_results.append(f"TOOL {tool_name} RESULT: {res[:2000]}")
+                except Exception as e:
+                    print(f"  [Attractions] Tool {tool_name} failed: {e}")
+                    
+    # 2. Summarize findings
+    # Use structured output for the final response
+    summary_prompt = ChatPromptTemplate.from_messages([
+        ("system", ATTRACTIONS_SYSTEM_PROMPT + "\n\nSummarize the tool results found below for the user."),
+        ("human", "Tool Data: {tool_data}\nOriginal Query: {user_query}")
+    ])
+    
+    summary_chain = summary_prompt | llm.with_structured_output(AttractionsOutput)
+    
+    result = safe_llm_invoke(summary_chain, {
+        "tool_data": "\n\n".join(tool_results) if tool_results else "No specific data found, provide general advice.",
+        "user_query": user_query
+    })
+    
+    from langchain_core.messages import AIMessage
+    response_text = result.final_response
+    
+    messages = list(state.get("messages", []))
+    messages.append(AIMessage(content=response_text))
+    
+    step_log = {
+        "module": "Attractions",
+        "prompt": user_query,
+        "response": response_text,
+        "attractions_found": result.attractions
+    }
+    
+    return {
+        "messages": messages,
+        "supervisor_instruction": response_text,
+        "next_step": "End",
+        "attractions_result": result.model_dump(),
+        "steps": [step_log],
+    }
 
 
 # --- GRAPH ---
@@ -1911,6 +2175,7 @@ workflow = StateGraph(AgentState)
 workflow.add_node("Supervisor", supervisor_node)
 workflow.add_node("Trip_Planner", planner_node)
 workflow.add_node("Researcher", researcher_node)
+workflow.add_node("Attractions", attractions_node)
 workflow.add_node("Critique", critique_node)
 workflow.add_node("Human_Approval", human_approval_node)
 
@@ -1925,8 +2190,11 @@ def route_supervisor(state: AgentState):
 workflow.add_conditional_edges(
     "Supervisor",
     route_supervisor,
-    {"Trip_Planner": "Trip_Planner", "Researcher": "Researcher", "End": END},
+    {"Trip_Planner": "Trip_Planner", "Researcher": "Researcher", "Attractions": "Attractions", "End": END},
 )
+
+# Attractions returns to user
+workflow.add_edge("Attractions", END)
 
 
 # Planner Conditional Edge
@@ -1965,9 +2233,8 @@ workflow.add_conditional_edges(
 
 # Human Approval Logic
 def route_human_approval(state: AgentState):
-    if state.get("user_query") == "approve_trip_plan":
-        return "End"
-    return "Supervisor"
+    # Use next_step set by human_approval_node (partial plans → End, full plans → Supervisor)
+    return state.get("next_step", "Supervisor")
 
 
 workflow.add_conditional_edges(

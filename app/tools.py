@@ -1,6 +1,7 @@
 from typing import List, Dict, Any, Optional
 import json
 import os
+import re
 from langchain_core.tools import tool
 from langchain_community.tools import DuckDuckGoSearchRun
 from dotenv import load_dotenv
@@ -13,6 +14,22 @@ load_dotenv()
 # --- Shared: Pinecone Vector Store for RAG ---
 _pinecone_index = None
 _pinecone_client = None
+_pinecone_attractions_index = None
+_pinecone_attractions_client = None
+_tools_llm = None
+
+
+def _get_tools_llm():
+    global _tools_llm
+    if _tools_llm is None:
+        from langchain_openai import ChatOpenAI
+        api_key = os.getenv("OPENAI_API_KEY") or os.getenv("LLMOD_API_KEY")
+        _tools_llm = ChatOpenAI(
+            model=os.getenv("LLM_MODEL", "RPRTHPB-gpt-5-mini"),
+            api_key=api_key,
+            base_url=os.getenv("LLMOD_BASE_URL", "https://api.llmod.ai/v1"),
+        )
+    return _tools_llm
 
 
 def _get_pinecone_client_and_index():
@@ -61,6 +78,161 @@ def _query_pinecone_inference(
         return results["matches"]
     except Exception as e:
         print(f"  [Warning] Pinecone Inference Query failed: {e}")
+        return []
+
+
+def _get_pinecone_attractions_client_and_index():
+    """Lazy-load a dedicated Pinecone client/index for the attractions project."""
+    global _pinecone_attractions_index, _pinecone_attractions_client
+    if _pinecone_attractions_index is None:
+        try:
+            from pinecone import Pinecone
+
+            api_key = os.getenv("PINECONE_API_KEY_ATTRACTIONS")
+            index_host = os.getenv("PINECONE_INDEX_HOST_ATTRACTIONS")
+            if not api_key or not index_host:
+                return None, None
+
+            _pinecone_attractions_client = Pinecone(api_key=api_key)
+            _pinecone_attractions_index = _pinecone_attractions_client.Index(host=index_host)
+        except Exception as e:
+            print(f"  [Warning] Failed to init Attractions Pinecone: {e}")
+            return None, None
+    return _pinecone_attractions_client, _pinecone_attractions_index
+
+
+def _clean_location_token(value: str) -> str:
+    if not value:
+        return ""
+    # Remove common leading prepositions for better metadata matching.
+    return re.sub(r"^(in|to|at)\s+", "", value.strip(), flags=re.IGNORECASE)
+
+
+def _extract_city_country(destination: str) -> tuple[str, str]:
+    """Extract city/country hints from a destination string.
+
+    Examples:
+    - "Paris, France" -> ("Paris", "France")
+    - "in Tokyo" -> ("Tokyo", "")
+    """
+    value = _clean_location_token(destination)
+    if not value:
+        return "", ""
+
+    parts = [p.strip() for p in value.split(",") if p.strip()]
+    if not parts:
+        return "", ""
+    if len(parts) == 1:
+        return parts[0], ""
+    return parts[0], parts[-1]
+
+
+def _normalize_attractions_hits(raw_hits: Any, source: str = "Pinecone-Attractions") -> List[Dict[str, Any]]:
+    """Normalize Pinecone search/query hits into a consistent attractions schema."""
+    normalized: List[Dict[str, Any]] = []
+    seen_keys = set()
+
+    if not isinstance(raw_hits, list):
+        return normalized
+
+    for hit in raw_hits:
+        if not isinstance(hit, dict):
+            continue
+
+        fields = hit.get("fields") or hit.get("metadata") or {}
+        if not isinstance(fields, dict):
+            fields = {}
+
+        name = (fields.get("name") or hit.get("id") or hit.get("_id") or "Unknown").strip()
+        category = str(fields.get("category", "")).strip()
+        city = str(fields.get("city", "")).strip()
+        country = str(fields.get("country", "")).strip()
+        score = hit.get("_score", hit.get("score", 0.0))
+        try:
+            score = float(score)
+        except (TypeError, ValueError):
+            score = 0.0
+
+        dedup_key = f"{name}|{city}|{fields.get('address', '')}"
+        if dedup_key in seen_keys:
+            continue
+        seen_keys.add(dedup_key)
+
+        normalized.append(
+            {
+                "name": name,
+                "category": category,
+                "description": str(fields.get("description") or fields.get("text") or "")[:500],
+                "address": str(fields.get("address", "")).strip(),
+                "city": city,
+                "country": country,
+                "latitude": fields.get("latitude"),
+                "longitude": fields.get("longitude"),
+                "source": source,
+                "score": round(score, 4),
+                "type": "dining" if any(t in category.lower() for t in ["food", "dining", "restaurant", "cafe"]) else "attraction",
+            }
+        )
+
+    return normalized
+
+
+def _query_attractions_index(
+    query: str,
+    k: int = 8,
+    city: str = "",
+    country: str = "",
+    category_terms: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    """Query attractions namespace with optional metadata filters.
+
+    Tries the integrated `index.search` path first; falls back to embedding+query.
+    """
+    pc, index = _get_pinecone_attractions_client_and_index()
+    if not pc or not index:
+        return []
+
+    filters: Dict[str, Any] = {}
+    if city:
+        filters["city"] = {"$eq": city}
+    if country:
+        filters["country"] = {"$eq": country}
+    if category_terms:
+        filters["category"] = {"$in": category_terms}
+
+    # Attempt integrated text search first (works with upsert_records text fields).
+    try:
+        search_query: Dict[str, Any] = {"inputs": {"text": query}, "top_k": k}
+        if filters:
+            search_query["filter"] = filters
+        results = index.search(namespace="attractions", query=search_query)
+        hits = (((results or {}).get("result") or {}).get("hits") or [])
+        normalized = _normalize_attractions_hits(hits)
+        if normalized:
+            return normalized
+    except Exception as e:
+        print(f"  [Warning] Attractions index.search failed: {e}")
+
+    # Fallback: embed query and use vector query.
+    try:
+        embedding_response = pc.inference.embed(
+            model="llama-text-embed-v2",
+            inputs=[query],
+            parameters={"input_type": "query", "truncate": "END"},
+        )
+        query_values = embedding_response[0]["values"]
+        query_kwargs: Dict[str, Any] = {
+            "vector": query_values,
+            "top_k": k,
+            "include_metadata": True,
+            "namespace": "attractions",
+        }
+        if filters:
+            query_kwargs["filter"] = filters
+        matches = index.query(**query_kwargs).get("matches", [])
+        return _normalize_attractions_hits(matches)
+    except Exception as e:
+        print(f"  [Warning] Attractions vector query failed: {e}")
         return []
 
 
@@ -1166,8 +1338,7 @@ def suggest_destination_tool(
     user_profile: Optional[str] = None,
 ) -> str:
     """
-    Suggests travel destinations based on user preferences using the Wikivoyage knowledge base.
-    Uses semantic search over curated travel articles to find matching destinations.
+    Suggests travel destinations based on user preferences using LLM knowledge.
     Inputs:
     - preferences: Natural language description of what the user wants (e.g., "beach, relaxation, good food")
     - budget_tier: "budget", "medium", or "luxury"
@@ -1178,164 +1349,60 @@ def suggest_destination_tool(
     """
     print(f"  [Tool] Suggesting destinations for: {preferences}")
 
-    # ── Build a rich, specific RAG query ─────────────────────────────────────
-    # Expand trip_type into semantic keywords for better Pinecone matching
-    TRIP_TYPE_KEYWORDS = {
-        "honeymoon": "romantic couples honeymoon intimate sunset luxury resort",
-        "romantic": "romantic couples intimate dinner candlelit views",
-        "family": "family kids children activities",
-        "adventure": "adventure outdoor extreme sports",
-        "solo": "solo backpacker independent travel meeting people",
-        "budget": "budget cheap affordable low-cost",
-        "luxury": "luxury 5-star resort exclusive premium fine dining",
-        "cultural": "culture history museums temples ruins heritage art",
-        "food": "food gastronomy cuisine local markets restaurants",
-        "beach": "beach tropical sea water waves",
-        "skiing": "skiing snowboarding winter snow slopes",
-        "business": "business conference networking city",
-        "wellness": "wellness spa yoga meditation retreat relaxation",
-        "wildlife": "wildlife safari nature animals national park",
-    }
+    from langchain_core.messages import SystemMessage, HumanMessage
 
-    CLIMATE_KEYWORDS = {
-        "tropical": "tropical warm humid year-round sunshine beach islands",
-        "warm": "warm sunny Mediterranean subtropical pleasant temperatures",
-        "cold": "cold winter snow ice Nordic Scandinavian cosy",
-        "temperate": "temperate mild four-seasons spring autumn",
-        "desert": "desert dry arid hot sandy dunes",
-        "alpine": "alpine mountain cold crisp fresh air",
-    }
-
-    BUDGET_KEYWORDS = {
-        "budget": "affordable cheap inexpensive budget-friendly low-cost",
-        "medium": "mid-range value good deal comfortable",
-        "luxury": "luxury premium high-end exclusive 5-star upscale",
-    }
-
-    parts = [preferences]
-
-    # Add trip_type expansion
+    parts = [f"Preferences: {preferences}"]
+    if budget_tier:
+        parts.append(f"Budget tier: {budget_tier}")
     if trip_type:
-        expanded = TRIP_TYPE_KEYWORDS.get(trip_type.lower(), trip_type)
-        parts.append(expanded)
-
-    # Add climate expansion
+        parts.append(f"Trip type: {trip_type}")
     if climate:
-        expanded_climate = CLIMATE_KEYWORDS.get(
-            climate.lower(), climate + " climate weather"
-        )
-        parts.append(expanded_climate)
-    elif trip_type and any(
-        kw in trip_type.lower() for kw in ["beach", "tropical", "warm"]
-    ):
-        parts.append("warm tropical beach")
-
-    # Add budget tier keywords
-    parts.append(BUDGET_KEYWORDS.get(budget_tier, ""))
-
-    # Add duration-specific context
+        parts.append(f"Climate: {climate}")
     if duration_days:
-        if duration_days <= 4:
-            parts.append("short city break weekend getaway")
-        elif duration_days <= 7:
-            parts.append("week-long trip popular destination")
-        else:
-            parts.append("extended stay multiple regions diverse experiences")
-
-    # Add user profile hints
+        parts.append(f"Duration: {duration_days} days")
     if user_profile and user_profile.strip() and user_profile.strip() != "None":
-        parts.append(f"Personalized for: {user_profile}")
+        parts.append(f"User profile: {user_profile}")
 
-    query = " ".join(p for p in parts if p)
-    print(f"  [Tool] RAG query: {query[:200]}...")
+    prompt = [
+        SystemMessage(content=(
+            "You are a travel expert. Suggest 4 specific travel destinations that best match the user's request. "
+            "Return ONLY a valid JSON array with no markdown, no code fences, no extra text. "
+            'Format: [{"destination": "City, Country", "summary": "2-sentence explanation of why it fits", "score": 0.9}]. '
+            "Score each 0.7-1.0 based on fit. Be specific — use real cities, not regions."
+        )),
+        HumanMessage(content="\n".join(parts)),
+    ]
 
-    # Try RAG first
     try:
-        matches = _query_pinecone_inference(query, k=8, namespace="wikivoyage")
-        if matches:
-            destinations = []
-            seen_names = set()
-            for match in matches:
-                # If similarity is too low, the query is outside the mock DB's knowledge base.
-                if match.get("score", 0) < 0.35:
-                    continue
+        llm = _get_tools_llm()
+        resp = llm.invoke(prompt)
+        content = resp.content if hasattr(resp, "content") else str(resp)
+        # Strip markdown code fences if present
+        content = re.sub(r"^```(?:json)?\n?", "", content.strip())
+        content = re.sub(r"\n?```$", "", content)
+        destinations = json.loads(content)
 
-                metadata = match.get("metadata", {})
-                title = metadata.get("title", "Unknown")
-                # Deduplicate by normalized title
-                norm_title = title.lower().strip()
-                if norm_title in seen_names:
-                    continue
-                seen_names.add(norm_title)
-
-                snippet = metadata.get("text", "")[:400]
-                destinations.append(
-                    {
-                        "destination": title,
-                        "summary": snippet,
-                        "source": "Wikivoyage",
-                        "score": round(match.get("score", 0), 3),
-                    }
-                )
-
-            # Sort by score descending and take top 4
-            destinations = sorted(
-                destinations, key=lambda x: x.get("score", 0), reverse=True
-            )[:4]
-
-            # Enrich with Amadeus Recommendations for top destination
-            try:
-                if destinations:
-                    top_dest = destinations[0].get("destination", "")
-                    iata = _resolve_city_to_iata(top_dest)
-                    if iata:
-                        similar = _get_similar_destinations(iata)
-                        if similar:
-                            print(
-                                f"  [Tool] Amadeus enriched with {len(similar)} similar destinations to {top_dest}"
-                            )
-                            # Add only if not already suggested
-                            existing = {d["destination"].lower() for d in destinations}
-                            for s in similar:
-                                if s.get("destination", "").lower() not in existing:
-                                    destinations.append(s)
-            except Exception as e:
-                print(f"  [Warning] Amadeus enrich failed: {e}")
-
+        # Amadeus enrichment for top destination
+        try:
             if destinations:
-                print(
-                    f"  [Tool] Returned {len(destinations)} destination suggestions (RAG + Amadeus)"
-                )
-                return json.dumps(destinations, indent=2)
-            else:
-                print(
-                    "  [Tool] RAG matches below similarity threshold or none found. Falling back."
-                )
-    except Exception as e:
-        print(f"  [Warning] Wikivoyage RAG failed: {e}")
+                top_dest = destinations[0].get("destination", "").split(",")[0].strip()
+                iata = _resolve_city_to_iata(top_dest)
+                if iata:
+                    similar = _get_similar_destinations(iata)
+                    if similar:
+                        print(f"  [Tool] Amadeus enriched with {len(similar)} similar destinations to {top_dest}")
+                        existing = {d["destination"].lower() for d in destinations}
+                        for s in similar:
+                            if s.get("destination", "").lower() not in existing:
+                                destinations.append(s)
+        except Exception as e:
+            print(f"  [Warning] Amadeus enrich failed: {e}")
 
-    # Fallback: Use DuckDuckGo search targeting Wikivoyage
-    print("  [Tool] Falling back to DuckDuckGo for destination suggestions")
-    try:
-        search = DuckDuckGoSearchRun()
-        search_query = f"site:wikivoyage.org best destinations {preferences}"
-        if trip_type:
-            search_query += f" {trip_type}"
-        if climate:
-            search_query += f" {climate}"
-        if user_profile and user_profile.strip() and user_profile.strip() != "None":
-            search_query += f" {user_profile}"
-        results = search.invoke(search_query)
-        return json.dumps(
-            {
-                "suggestions": results,
-                "source": "Wikivoyage (web search)",
-                "note": "For better results, ingest Wikivoyage data into the RAG system.",
-            },
-            indent=2,
-        )
+        print(f"  [Tool] LLM suggested {len(destinations)} destinations")
+        return json.dumps(destinations, indent=2)
     except Exception as e:
-        return json.dumps({"error": f"Destination suggestion failed: {str(e)}"})
+        print(f"  [Warning] LLM destination suggestion failed: {e}")
+        return json.dumps([])
 
 
 # =====================================================================
@@ -1365,7 +1432,60 @@ def suggest_attractions_tool(
         parts.append(f"{trip_type} activities")
     query = " ".join(parts)
 
-    # Try RAG first
+    city, country = _extract_city_country(destination)
+    interest_text = " ".join(interests or []).lower()
+    restaurant_intent = any(
+        token in f"{interest_text} {trip_type.lower()}"
+        for token in ["restaurant", "food", "dining", "cafe", "gastronomy"]
+    )
+
+    category_terms = None
+    if restaurant_intent:
+        category_terms = [
+            "Restaurant",
+            "Restaurants",
+            "Dining",
+            "Food",
+            "Cafe",
+            "Market",
+            "Street Food",
+        ]
+
+    # IMPORTANT: For restaurant/dining queries, skip attractions index (built for landmarks)
+    # and go straight to wikivoyage RAG (best source for restaurant coverage).
+    attractions = []
+    if not restaurant_intent:
+        # Try dedicated Attractions index first (strict city-first, then relaxed).
+        attractions = _query_attractions_index(
+            query,
+            k=10,
+            city=city,
+            country=country,
+            category_terms=category_terms,
+        )
+        if len(attractions) < 4:
+            relaxed = _query_attractions_index(
+                query,
+                k=10,
+                city="",
+                country=country,
+                category_terms=category_terms,
+            )
+            if relaxed:
+                attractions = attractions + [
+                    item
+                    for item in relaxed
+                    if item.get("name") not in {a.get("name") for a in attractions}
+                ]
+
+    if attractions:
+        print(
+            f"  [Tool] Attractions index returned {len(attractions)} matches "
+            f"(city_filter={'on' if city else 'off'}, dining_intent={'yes' if restaurant_intent else 'no'})"
+        )
+        return json.dumps(attractions[:8], indent=2)
+
+    # Try RAG first (for restaurant queries, this is the primary source)
     try:
         matches = _query_pinecone_inference(query, k=8, namespace="wikivoyage")
         if matches:
@@ -1396,10 +1516,16 @@ def suggest_attractions_tool(
                     attractions.append(
                         {
                             "name": title,
-                            "section": section,
+                            "category": section,
                             "description": snippet,
+                            "address": "",
+                            "city": city,
+                            "country": country,
+                            "latitude": None,
+                            "longitude": None,
                             "source": "Wikivoyage",
-                            "score": match.get("score", 0),
+                            "score": round(float(match.get("score", 0) or 0), 4),
+                            "type": "attraction",
                         }
                     )
 
@@ -1423,11 +1549,21 @@ def suggest_attractions_tool(
             search_query += " " + " ".join(interests)
         results = search.invoke(search_query)
         return json.dumps(
-            {
-                "attractions": results,
-                "destination": destination,
-                "source": "Wikivoyage (web search)",
-            },
+            [
+                {
+                    "name": f"Top picks in {destination}",
+                    "category": "General",
+                    "description": str(results)[:1000],
+                    "address": "",
+                    "city": city,
+                    "country": country,
+                    "latitude": None,
+                    "longitude": None,
+                    "source": "Wikivoyage (web search)",
+                    "score": 0.0,
+                    "type": "attraction",
+                }
+            ],
             indent=2,
         )
     except Exception as e:
@@ -1670,11 +1806,15 @@ def create_plan_tool(
         else:
             day_plan["theme"] = f"Exploration Day {day - 1}"
             # Add attractions if available
-            if attractions and day - 2 < len(attractions):
-                attr = attractions[day - 2]
+            if attractions:
+                attr = attractions[(day - 2) % len(attractions)]
                 if isinstance(attr, dict):
                     name = attr.get("name", attr.get("destination", "Local attraction"))
-                    day_plan["activities"].append(f"Visit: {name}")
+                    category = str(attr.get("category", "")).lower()
+                    if any(t in category for t in ["food", "dining", "restaurant", "cafe"]):
+                        day_plan["activities"].append(f"Dine at: {name}")
+                    else:
+                        day_plan["activities"].append(f"Visit: {name}")
                 else:
                     day_plan["activities"].append(f"Visit: {attr}")
             day_plan["activities"].append("Lunch at local restaurant")

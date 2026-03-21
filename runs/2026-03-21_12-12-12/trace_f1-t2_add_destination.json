@@ -1,0 +1,46 @@
+{
+  "messages": [
+    {
+      "role": "human",
+      "content": "I want to plan a trip."
+    },
+    {
+      "role": "ai",
+      "content": "Great — where would you like to go (city or country)?"
+    },
+    {
+      "role": "human",
+      "content": "I'm thinking about Tokyo."
+    },
+    {
+      "role": "ai",
+      "content": "Great — how many days would you like to spend in Tokyo?"
+    }
+  ],
+  "duration_days": null,
+  "destination": "Tokyo",
+  "origin_city": null,
+  "budget_limit": null,
+  "budget_currency": "USD",
+  "trip_type": null,
+  "traveling_personas_number": 1,
+  "amenities": [],
+  "preferences": [],
+  "next_step": "End",
+  "supervisor_instruction": "Great — how many days would you like to spend in Tokyo?",
+  "user_query": "I'm thinking about Tokyo.",
+  "steps": [
+    {
+      "module": "Supervisor",
+      "prompt": "I want to plan a trip.",
+      "response": "Routing to End: User requested a trip plan but gave no destination; destination is required for Planning so we must ask a single clarifying question."
+    },
+    {
+      "module": "Supervisor",
+      "prompt": "I'm thinking about Tokyo.",
+      "response": "Routing to End: User picked Tokyo (destination set) but planning needs a trip duration to proceed."
+    }
+  ],
+  "request_type": "Planning",
+  "researcher_calls": 0,
+  "user_profile": 

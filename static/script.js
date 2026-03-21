@@ -7,6 +7,12 @@ const statStatus = document.getElementById('stat-status');
 const profileSummary = document.getElementById('profile-summary');
 const agentThought = document.getElementById('agent-thought');
 
+// API base URL: same-origin by default.
+// If the file is opened directly (file://), fallback to local FastAPI server.
+const API_BASE = window.location.protocol === 'file:'
+    ? 'http://127.0.0.1:8000'
+    : window.location.origin;
+
 // PERSISTENT SESSION ID - Maintains state across multiple messages
 let sessionId = sessionStorage.getItem('tripzy_session_id');
 if (!sessionId) {
@@ -58,7 +64,7 @@ runBtn.addEventListener('click', async () => {
     agentThought.textContent = 'Connecting to the Tripzy Engine...';
 
     try {
-        const response = await fetch('/api/stream', {
+        const response = await fetch(`${API_BASE}/api/stream`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -66,6 +72,13 @@ runBtn.addEventListener('click', async () => {
                 thread_id: sessionId  // Pass persistent session ID
             })
         });
+
+        if (!response.ok) {
+            throw new Error(`API error ${response.status}: ${response.statusText}`);
+        }
+        if (!response.body) {
+            throw new Error('Stream response has no body. Check server logs and proxy settings.');
+        }
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -92,7 +105,7 @@ runBtn.addEventListener('click', async () => {
         console.error('Error type:', e.name);
         console.error('Error message:', e.message);
         console.error('Error stack:', e.stack);
-        appendMessage('system', `Connection failed: ${e.message}. Please check the console for details.`);
+        appendMessage('system', `Connection failed: ${e.message}. API base: ${API_BASE}. Please check the console for details.`);
         statStatus.textContent = 'Offline';
     } finally {
         runBtn.disabled = false;
@@ -154,11 +167,17 @@ approveBtn.addEventListener('click', async () => {
     statStatus.textContent = 'Finalizing...';
     agentThought.textContent = 'Generating your final itinerary...';
 
-    const response = await fetch('/api/approve', {
+    const response = await fetch(`${API_BASE}/api/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ thread_id: currentThreadId, prompt: '' })
     });
+
+    if (!response.ok) {
+        appendMessage('system', `Approval failed: API error ${response.status}: ${response.statusText}`);
+        statStatus.textContent = 'Error';
+        return;
+    }
 
     const data = await response.json();
     if (data.status === 'ok') {

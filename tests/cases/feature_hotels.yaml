@@ -1,0 +1,49 @@
+# feature_hotels.yaml — Phase 2: HotelOnly feature tests
+
+- id: "h-001"
+  name: "Full hotel info — routes directly"
+  tags: [hotels]
+  turns:
+    - user: "Hotel in Paris July 5-10 max $150 per night"
+      expected:
+        next_step: "Trip_Planner"
+        request_type: "HotelOnly"
+        state_after:
+          destination: "Paris"
+        response_excludes: ["```json", "{\""]
+
+- id: "h-002"
+  name: "Missing dates — asks for check-in"
+  tags: [hotels, missing_info]
+  turns:
+    - user: "Hotel in Rome"
+      expected:
+        next_step: "End"
+        request_type: "HotelOnly"
+        response_contains: ["date"]
+        response_excludes: ["```json", "{\""]
+        question_count_max: 2
+
+- id: "h-003"
+  name: "Hotel with amenities — extracted correctly"
+  tags: [hotels, amenities]
+  turns:
+    - user: "Hotel with spa and pool in Bali for July 10-15"
+      expected:
+        next_step: "Trip_Planner"
+        request_type: "HotelOnly"
+        state_after:
+          destination: "Bali"
+        response_excludes: ["```json", "{\""]
+
+- id: "h-004"
+  name: "Budget hotel search"
+  tags: [hotels, budget]
+  turns:
+    - user: "Cheapest hotel in Bangkok for 3 nights next week"
+      expected:
+        next_step: "Trip_Planner"
+        request_type: "HotelOnly"
+        state_after:
+          destination: "Bangkok"
+        response_excludes: ["```json", "{\""]

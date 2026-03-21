@@ -1,0 +1,125 @@
+# edge_cases.yaml — Phase 3: Edge cases and robustness tests
+# Run only if Phase 2 has >= 80% pass rate.
+
+- id: "e-001"
+  name: "Unrealistic budget — validator blocks"
+  tags: [edge, budget]
+  turns:
+    - user: "I need a 7 day trip to Bali with a $100 budget"
+      expected:
+        next_step: "End"
+        response_contains: ["budget", "low", "realistic", "alternative", "suggest"]
+        response_excludes: ["```json", "{\""]
+
+- id: "e-002"
+  name: "Full trip planning — politely disabled"
+  tags: [edge, disabled_feature]
+  turns:
+    - user: "Plan a full trip to Tokyo for 10 days"
+      expected:
+        next_step: "End"
+        response_contains: ["flight", "hotel", "attraction"]
+        response_excludes: ["```json", "{\"", "itinerary", "day 1", "day 2"]
+        max_response_chars: 500
+
+- id: "e-003"
+  name: "Mid-conversation destination switch"
+  tags: [edge, context_switch]
+  turns:
+    - user: "Find me a hotel in Rome for July 5-10"
+      expected:
+        next_step: "Trip_Planner"
+        request_type: "HotelOnly"
+        state_after:
+          destination: "Rome"
+    - user: "Actually, Paris instead"
+      expected:
+        next_step: "Trip_Planner"
+        request_type: "HotelOnly"
+        state_after:
+          destination: "Paris"
+        response_contains: ["paris"]
+        response_excludes: ["rome", "```json", "{\""]
+
+- id: "e-004"
+  name: "Already booked — attractions override"
+  tags: [edge, attractions]
+  turns:
+    - user: "I already have flights and hotel booked for Bali, what should I do there?"
+      expected:
+        next_step: "Attractions"
+        request_type: "AttractionsOnly"
+        state_after:
+          destination: "Bali"
+        response_excludes: ["```json", "{\""]
+
+- id: "e-005a"
+  name: "Rephrasing flights — variant 1"
+  tags: [edge, rephrasing, flights]
+  turns:
+    - user: "Find flights from Paris to New York on July 20"
+      expected:
+        next_step: "Trip_Planner"
+        request_type: "FlightOnly"
+
+- id: "e-005b"
+  name: "Rephrasing flights — variant 2"
+  tags: [edge, rephrasing, flights]
+  turns:
+    - user: "Search for a flight from Paris to New York on July 20"
+      expected:
+        next_step: "Trip_Planner"
+        request_type: "FlightOnly"
+
+- id: "e-005c"
+  name: "Rephrasing flights — variant 3"
+  tags: [edge, rephrasing, flights]
+  turns:
+    - user: "I need to fly from Paris to New York on July 20"
+      expected:
+        next_step: "Trip_Planner"
+        request_type: "FlightOnly"
+
+- id: "e-006"
+  name: "Info gathered across multiple turns"
+  tags: [edge, multi_turn, state_accumulation]
+  turns:
+    - user: "I want to go to Barcelona"
+      expected:
+        state_after:
+          destination: "Barcelona"
+    - user: "For 5 days"
+      expected:
+        state_after:
+          destination: "Barcelona"
+          duration_days: "5"
+    - user: "Flying from London"
+      expected:
+        state_after:
+          destination: "Barcelona"
+          origin_city: "London"
+
+- id: "e-007"
+  name: "Greeting after active session — not a data dump"
+  tags: [edge, greeting]
+  turns:
+    - user: "Find hotels in Tokyo for next week"
+      expected:
+        next_step: "Trip_Planner"
+        request_type: "HotelOnly"
+    - user: "Hi"
+      expected:
+        next_step: "End"
+        max_response_chars: 200
+        response_excludes: ["tokyo", "hotel", "```json", "{\""]
+
+- id: "e-008"
+  name: "Fully ambiguous intent — asks clarifying question"
+  tags: [edge, ambiguous]
+  turns:
+    - user: "I want to go somewhere"
+      expected:
+        next_step: "Researcher"
+        response_contains: ["?"]
+        response_excludes: ["```json", "{\""]
+        question_count_max: 3

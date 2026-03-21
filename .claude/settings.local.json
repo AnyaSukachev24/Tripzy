@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find C:UsersidofeTripzy -type f -name .env* -o -name *.config.* -o -name config.*)"
+    ]
+  }
+}

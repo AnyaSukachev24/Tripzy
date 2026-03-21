@@ -1,0 +1,222 @@
+{
+  "messages": [
+    {
+      "role": "human",
+      "content": "I want to go on a street food tour in Bangkok."
+    },
+    {
+      "role": "human",
+      "content": "I want to go on a street food tour in Bangkok."
+    },
+    {
+      "role": "ai",
+      "content": "Top picks for a street-food day in Bangkok: try the Old Town audio tour, add the temple walking tour for culture + snacks, and finish with an evening crawl through Yaowarat (Chinatown) for the best bites."
+    },
+    {
+      "role": "human",
+      "content": "Let's go to Bali! 7 days."
+    }
+  ],
+  "trip_plan": {
+    "destination": "Bali, Indonesia",
+    "origin_city": "unknown",
+    "dates": "",
+    "duration_days": 7,
+    "budget_estimate": 0,
+    "budget_currency": "EUR",
+    "trip_type": "AttractionsOnly",
+    "travelers": 1,
+    "itinerary": [
+      {
+        "day": 1,
+        "name": "Arrival & Vegan Street-Food Crawl (Seminyak / Canggu)",
+        "description": "Get settled, then explore Seminyak or Canggu in the evening for vegan-friendly street-food, warungs and plant-based cafés. Try tempeh/tahu skewers, gado-gado (ask for no shrimp paste/anchovy), fresh fruit stalls, and several dedicated vegan cafés.",
+        "approx_duration": "Evening (2-4 hrs)",
+        "price": {
+          "amount": 0,
+          "currency": "EUR"
+        },
+        "booking_link": null,
+        "vegan_notes": "Many vendors use fish/shrimp paste—ask for no shrimp paste/omit dressings. Use HappyCow to find strictly vegan options.",
+        "accessibility": "Mostly walkable; streets can be uneven and crowded at night."
+      },
+      {
+        "day": 2,
+        "name": "Best of Ubud: Monkey Forest, Rice Terraces, Tegenungan Waterfall & Temples",
+        "description": "Guided highlights around Ubud covering the Sacred Monkey Forest, iconic rice terraces and Tegenungan Waterfall plus cultural temples.",
+        "approx_duration": "Full day",
+        "price": {
+          "amount": 47.5,
+          "currency": "EUR"
+        },
+        "booking_link": "https://www.tiqets.com/en/checkout/tickets-for-best-of-ubud-monkey-forest-rice-terraces-tegenungan-waterfall-temples-p1000416/booking_details/?partner=amadeus",
+        "vegan_notes": "Ubud has the best concentration of vegan cafés; plan lunch at a vegan café (many guides can recommend one).",
+        "accessibility": "Moderate — Monkey Forest paths and terraces have steps; waterfall area involves uneven surfaces."
+      },
+      {
+        "day": 3,
+        "name": "Full-Day Private and Guided Tour Around Ubud (culture + markets)",
+        "description": "Private guided day covering Ubud’s temples, artisan villages and the central market — great for finding vegan snacks and souvenirs.",
+        "approx_duration": "Full day",
+        "price": {
+          "amount": 60,
+          "currency": "EUR"
+        },
+        "booking_link": "https://amadeus.booking.holibob.tech/product/46b0b2b2-af62-4a92-94ac-0701696c2e9e",
+        "vegan_notes": "Ask your guide to stop at local vegetarian warungs and fruit sellers. Ubud Market has fresh juices and vegan-friendly stalls.",
+        "accessibility": "Mostly vehicle-based with walking breaks; market areas are crowded and have uneven flooring."
+      },
+      {
+        "day": 4,
+        "name": "Mt. Batur Sunrise Trek + Hot Springs + Coffee Plantation",
+        "description": "Early morning hike to watch sunrise over Mount Batur, followed by a soak in hot springs and a coffee plantation visit.",
+        "approx_duration": "Very early start; 6-8 hours total",
+        "price": {
+          "amount": 25,
+          "currency": "EUR"
+        },
+        "booking_link": "https://amadeus.booking.holibob.tech/product/e5dfb1f6-0f02-4769-a325-b0c96449afe0",
+        "vegan_notes": "Breakfast is often provided after the hike—request a vegan breakfast in advance. Coffee plantation visits can usually accommodate plant-based milks.",
+        "accessibility": "Strenuous — steep, rocky trails. Not suitable for limited mobility."
+      },
+      {
+        "day": 5,
+        "name": "Bali Cycling Tour with Private Hotel Transfer (rural roads & rice paddies)",
+        "description": "Half-day cycling through quiet village roads, local life and rice fields — a relaxed active morning.",
+        "approx_duration": "Half day (3-5 hrs)",
+        "price": {
+          "amount": 105,
+          "currency": "EUR"
+        },
+        "booking_link": "https://amadeus.booking.holibob.tech/product/fe63c2a1-ff10-4569-b7bf-f3c22906a51b",
+        "vegan_notes": "Bring snacks or ask operator to arrange vegan options; small warungs along the route may be flexible if notified in advance.",
+        "accessibility": "Moderate fitness required; road surfaces can be bumpy. Not wheelchair accessible."
+      },
+      {
+        "day": 6,
+        "name": "Adventure or Relax: Zipline & Jungle Swing OR Hanging Gardens / Spa Day (choose one)",
+        "description": "Option A: Ubud Half Day Zipline and Jungle Swing for adrenaline and jungle views. Option B (luxury): Ubud Hanging Garden Day Tour with private transport for a pool/spa / resort day.",
+        "approx_duration": "Half day (zipline) or Full day (hanging garden/resort)",
+        "price": {
+          "amount": 59,
+          "currency": "EUR"
+        },
+        "alternate_price": {
+          "amount": 326,
+          "currency": "EUR",
+          "note": "Hanging Garden Day Tour — optional luxury splurge"
+        },
+        "booking_link": "https://amadeus.booking.holibob.tech/product/7e055ebe-0320-4659-8b1a-0fce40e996b7",
+        "alternate_booking_link": "https://amadeus.booking.holibob.tech/product/fe69f9e0-8c1c-4f6d-a8ca-ec286394e87a",
+        "vegan_notes": "Zipline operators may have basic snacks; Hanging Gardens/resort restaurants usually accommodate vegans if informed ahead.",
+        "accessibility": "Zipline requires able-bodied participants; Hanging Gardens/resort day is the more accessible/luxury option but check transfer steps."
+      },
+      {
+        "day": 7,
+        "name": "Relaxed Beach/Sunset & Instagram Scenic Spots (Tanah Lot / Bukit Peninsula) + Final Vegan Dinner",
+        "description": "Choose a relaxed beach afternoon (Seminyak/Kuta) or scenic sunset at Tanah Lot / Bukit Peninsula. Finish with a vegan farewell dinner and a short street-food stroll.",
+        "approx_duration": "Afternoon to evening",
+        "price": {
+          "amount": 0,
+          "currency": "EUR"
+        },
+        "booking_link": "https://amadeus.booking.holibob.tech/product/8e412e3a-0571-4024-a343-a9fd838d6b48",
+        "vegan_notes": "Sunset spots may have vendors; plan dinner at a dedicated vegan restaurant or request plant-based options at beach clubs.",
+        "accessibility": "Tanah Lot and Bukit Peninsula have steps/cliffs; choose a beach option for easier access."
+      },
+      {
+        "day": "Optional extras (pick any same-week)",
+        "name": "Ubud Shopping Tour / The Most Popular Instagram Spotlight",
+        "description": "Ubud Shopping Tour for crafts and souvenirs, or a curated 'Instagram Scenic Spotlight' tour visiting photogenic viewpoints around Bali.",
+        "approx_duration": "Half to full day",
+        "price_options": [
+          {
+            "name": "Ubud Shopping Tour",
+            "amount": 86,
+            "currency": "EUR",
+            "booking_link": "https://amadeus.booking.holibob.tech/product/f4cfe653-2f5d-4424-91ef-5e0e34383ec8"
+          },
+          {
+            "name": "Instagram Scenic Spotlight",
+            "amount": 38,
+            "currency": "EUR",
+            "booking_link": "https://amadeus.booking.holibob.tech/product/8e412e3a-0571-4024-a343-a9fd838d6b48"
+          }
+        ],
+        "vegan_notes": "Shopping tour gives many chances to discover local vegan snacks and raw desserts at cafés.",
+        "accessibility": "Varies by tour — shopping is low-impact; scenic spotlight may involve short walks and viewpoints with steps."
+      }
+    ]
+  },
+  "duration_days": 7,
+  "destination": "Bali",
+  "origin_city": null,
+  "budget_limit": null,
+  "budget_currency": "USD",
+  "trip_type": null,
+  "traveling_personas_number": 1,
+  "amenities": [],
+  "preferences": [
+    "street food",
+    "vegan",
+    "street food",
+    "vegan"
+  ],
+  "next_step": "Human_Approval",
+  "supervisor_instruction": "The plan has been APPROVED by the critic. Please confirm if you want to generate the final response.",
+  "user_query": "Let's go to Bali! 7 days.",
+  "steps": [
+    {
+      "module": "Supervisor",
+      "prompt": "I want to go on a street food tour in Bangkok.",
+      "response": "Routing to Attractions: User explicitly asked for a street food tour in Bangkok; we need local tours and vegan-friendly street food options."
+    },
+    {
+      "module": "Attractions",
+      "prompt": "I want to go on a street food tour in Bangkok.",
+      "response": "Top picks for a street-food day in Bangkok: try the Old Town audio tour, add the temple walking tour for culture + snacks, and finish with an evening crawl through Yaowarat (Chinatown) for the best bites.",
+      "attractions_found": [
+        "Bangkok's Old Town: A Self-Guided Audio Tour — €6 self-guided route through Rattanakosin/Old Town that’s perfect to pair with nearby street-food stalls and markets.",
+        "Temple Walking Tour - Grand Palace, Wat Pho, Wat Arun (Small Group Tour) — guided half-day tour (≈€78) hitting top temples and passing classic street-snack vendors for tasty breaks.",
+        "Yaowarat (Chinatown) street-food crawl — evening must-do for legendary noodle stalls, seafood woks and sweet treats; go hungry and roam the side sois."
+      ]
+    },
+    {
+      "module": "Supervisor",
+      "prompt": "Let's go to Bali! 7 days.",
+      "response": "Routing to Trip_Planner: User confirmed a destination (Bali) and provided duration (7 days), so we can build a full itinerary."
+    },
+    {
+      "module": "Planner",
+      "prompt": "Create 7-day Bali itinerary focused on street food and vegan options.",
+      "response": "Executing Tools..."
+    },
+    {
+      "module": "Researcher",
+      "prompt": "Executing suggest_attractions_tool: {'destination': 'Bali', 'interests': ['food', 'vegan', 'markets', 'nightlife'], 'trip_type': 'food'}",
+      "response": "[\n  {\n    \"name\": \"Bali\",\n    \"section\": \"other sports, adventure and family activities\",\n    \"description\": \"Bali has become a famous destination for golfers. Most of the golf courses are international, with relatively cheap green fees and all-year play with convenient climate: \\\"Bali Handara Kosaido Country Club\\\" in the mountains near Bedugul, the \\\"Bali Golf & Country Club\\\" in Nusa Dua, a 9-hole course at the Grand Bali Beach Hotel in Sanur, the \\\"Nirwana Bali Golf Club\\\" near Tanah Lot, the New Kuta Golf \",\n    \"source\": \"Wikivoyage\",\n    \"score\": 0.476240069\n  },\n  {\n    \"name\": \"Bali\",\n    \"section\": \"dietary restrictions\",\n    \"description\": \"Unlike Indian Hindus, virtually all Balinese eat meat, and '''vegetarianism''' has traditionally been limited to part-time fasts for some priests. However, cows are sacred in Hinduism, so Balinese traditional foods do not include beef but do include pork, which is not halal. It's best to assume that all local food is non-vegetarian unless"
+    },
+    {
+      "module": "Researcher",
+      "prompt": "Executing search_tours_activities_tool: {'latitude': -8.5069, 'longitude': 115.2624, 'radius': 15}",
+      "response": "[\n  {\n    \"name\": \"Bali Cycling Tour with Private Hotel Transfer\",\n    \"shortDescription\": \"\",\n    \"type\": \"activity\",\n    \"bookingLink\": \"https://amadeus.booking.holibob.tech/product/fe63c2a1-ff10-4569-b7bf-f3c22906a51b\",\n    \"price\": {\n      \"amount\": \"105.0\",\n      \"currency\": \"EUR\"\n    },\n    \"rating\": \"N/A\",\n    \"pictures\": [\n      \"https://images.holibob.tech/eyJrZXkiOiJwcm9kdWN0SW1hZ2VzLzAyMzQzNWNmLTI2ODMtNDcyYi05NjQ5LThjMjZmYTIzOTA1MyIsImVkaXRzIjp7InJlc2l6ZSI6eyJmaXQiOiJjb3ZlciIsIndpZHRoIjoxOTIwLCJoZWlnaHQiOjEwODB9fX0=\",\n      \"https://images.holibob.tech/eyJrZXkiOiJwcm9kdWN0SW1hZ2VzLzBmMjJlNmY2LTgwMWEtNGIzZC1hNmM1LTAyOGVlMDkwN2Y3NSIsImVkaXRzIjp7InJlc2l6ZSI6eyJmaXQiOiJjb3ZlciIsIndpZHRoIjoxOTIwLCJoZWlnaHQiOjEwODB9fX0=\"\n    ]\n  },\n  {\n    \"name\": \"Best of Ubud: Monkey Forest, Rice Terraces, Tegenungan Waterfall & Temples\",\n    \"shortDescription\": \"Monkey forests, waterfalls, holy temples, and more in Bali's spiritual center\",\n    \"type\": \"activity\",\n    \"bookingLink\": \"https://ww"
+    },
+    {
+      "module": "Researcher",
+      "prompt": "Executing search_points_of_interest_tool: {'latitude': -8.69, 'longitude': 115.1598, 'radius': 15, 'categories': ['RESTAURANT', 'NIGHTLIFE', 'SHOPPING']}",
+      "response": "{\n  \"warning\": \"Live POI search failed ([410]\\n). Showing mock data.\",\n  \"results\": [\n    {\n      \"name\": \"Mock Eiffel Tower\",\n      \"category\": \"SIGHTS\",\n      \"rank\": 1\n    },\n    {\n      \"name\": \"Mock Louvre Museum\",\n      \"category\": \"SIGHTS\",\n      \"rank\": 2\n    },\n    {\n      \"name\": \"Mock Notre Dame\",\n      \"category\": \"SIGHTS\",\n      \"rank\": 5\n    }\n  ]\n}"
+    },
+    {
+      "module": "Planner",
+      "prompt": "Tool Result (suggest_attractions_tool):\n[\n  {\n    \"name\": \"Bali\",\n    \"section\": \"other sports, adventure and family activities\",\n    \"description\": \"Bali has become a famous destination for golfers. Most of the golf courses are international, with relatively cheap green fees and all-year play with convenient climate: \\\"Bali Handara Kosaido Country Club\\\" in the mountains near Bedugul, the \\\"Bali Golf & Country Club\\\" in Nusa Dua, a 9-hole course at the Grand Bali Beach Hotel in Sanur, the \\\"Nirwana Bali Golf Club\\\" near Tanah Lot, the New Kuta Golf \",\n    \"source\": \"Wikivoyage\",\n    \"score\": 0.476240069\n  },\n  {\n    \"name\": \"Bali\",\n    \"section\": \"dietary restrictions\",\n    \"description\": \"Unlike Indian Hindus, virtually all Balinese eat meat, and '''vegetarianism''' has traditionally been limited to part-time fasts for some priests. However, cows are sacred in Hinduism, so Balinese traditional foods do not include beef but do include pork, which is not halal. It's best to assume that all local food is non-vegetarian unless assurances are given to the contrary. In particular, the In\",\n    \"source\": \"Wikivoyage\",\n    \"score\": 0.431662977\n  },\n  {\n    \"name\": \"Bali\",\n    \"section\": \"balinese food\",\n    \"description\": \"Actual Balinese food is common on the island but it has made few inroads in the rest of the country due to its emphasis on '''pork''', which is anathema to the largely Muslim population in the rest of the country. Notable dishes include: * '''Babi guling''' &mdash; roast suckling pig. A large ceremonial dish served with rice that is usually ordered several days in advance, but also often available\",\n    \"source\": \"Wikivoyage\",\n    \"score\": 0.429849535\n  },\n  {\n    \"name\": \"Bali\",\n    \"section\": \"scams\",\n    \"description\": \"Visitors to the island should avoid contact with dogs, cats, monkeys and other animals that carry the disease. If bitten seek medical attention. Whilst eating '''dog meat''' is not illegal in Bali, some vendors are breaching animal cruelty and food safety laws. Dogs are being bludgeoned, strangled or poisoned for human consumption. Dog meat is filtering into the tourist food chain in Bali, sometim\",\n    \"source\": \"Wikivoyage\",\n    \"score\": 0.425904483\n  },\n  {\n    \"name\": \"Bali\",\n    \"section\": \"landscape\",\n    \"description\": \"Most of the coastline of Bali is fringed by '''beaches''' of some type, with the exceptions being some important areas of mangrove forest in the southeast, and certain parts of the Bukit Peninsula where high cliffs drop straight to the crashing waves of the Indian Ocean. Beach in South Bali]] Unsurprisingly, given the volcanic nature of the island, black sand is the norm, but there are also some b\",\n    \"source\": \"Wikivoyage\",\n    \"score\": 0.417485982\n  },\n  {\n    \"name\": \"East Bali\",\n    \"section\": \"other destinations\",\n    \"description\": \"* &mdash; an area of peaceful, traditional fishing villages featuring black sand beaches, coral reefs and excellent diving * &mdash; there are there are several silver and gold craftsmen in this village * &mdash; active volcano Mount Batur, great mountain scenery and fruit growing * &mdash; highest mountain in Bali and the ''mother temple'' of Besakih * &mdash; mountains, the water palace and stun\",\n    \"source\": \"Wikivoyage\",\n    \"score\": 0.417207748\n  }\n]\nTool Result (search_tours_activities_tool):\n[\n  {\n    \"name\": \"Bali Cycling Tour with Private Hotel Transfer\",\n    \"shortDescription\": \"\",\n    \"type\": \"activity\",\n    \"bookingLink\": \"https://amadeus.booking.holibob.tech/product/fe63c2a1-ff10-4569-b7bf-f3c22906a51b\",\n    \"price\": {\n      \"amount\": \"105.0\",\n      \"currency\": \"EUR\"\n    },\n    \"rating\": \"N/A\",\n    \"pictures\": [\n      \"https://images.holibob.tech/eyJrZXkiOiJwcm9kdWN0SW1hZ2VzLzAyMzQzNWNmLTI2ODMtNDcyYi05NjQ5LThjMjZmYTIzOTA1MyIsImVkaXRzIjp7InJlc2l6ZSI6eyJmaXQiOiJjb3ZlciIsIndpZHRoIjoxOTIwLCJoZWlnaHQiOjEwODB9fX0=\",\n      \"https://images.holibob.tech/eyJrZXkiOiJwcm9kdWN0SW1hZ2VzLzBmMjJlNmY2LTgwMWEtNGIzZC1hNmM1LTAyOGVlMDkwN2Y3NSIsImVkaXRzIjp7InJlc2l6ZSI6eyJmaXQiOiJjb3ZlciIsIndpZHRoIjoxOTIwLCJoZWlnaHQiOjEwODB9fX0=\"\n    ]\n  },\n  {\n    \"name\": \"Best of Ubud: Monkey Forest, Rice Terraces, Tegenungan Waterfall & Temples\",\n    \"shortDescription\": \"Monkey forests, waterfalls, holy temples, and more in Bali's spiritual center\",\n    \"type\": \"activity\",\n    \"bookingLink\": \"https://www.tiqets.com/en/checkout/tickets-for-best-of-ubud-monkey-forest-rice-terraces-tegenungan-waterfall-temples-p1000416/booking_details/?partner=amadeus\",\n    \"price\": {\n      \"amount\": \"47.5\",\n      \"currency\": \"EUR\"\n    },\n    \"rating\": \"N/A\",\n    \"pictures\": [\n      \"https://aws-tiqets-cdn.imgix.net/images/content/f004cd74feb54829872c8b82d7cbafac.jpg?auto=format%2Ccompress&fit=crop&h=1284&ixlib=python-3.2.1&q=70&w=1284\",\n      \"https://aws-tiqets-cdn.imgix.net/images/content/efc22b44b62e4f229ecac34e29b96edf.jpeg?auto=format%2Ccompress&fit=crop&h=1284&ixlib=python-3.2.1&q=70&w=1284\"\n    ]\n  },\n  {\n    \"name\": \"Bali Ubud Hanging Garden Day Tour with Private Transport\",\n    \"shortDescription\": \"\",\n    \"type\": \"activity\",\n    \"bookingLink\": \"https://amadeus.booking.holibob.tech/product/fe69f9e0-8c1c-4f6d-a8ca-ec286394e87a\",\n    \"price\": {\n      \"amount\": \"326.0\",\n      \"currency\": \"EUR\"\n    },\n    \"rating\": \"N/A\",\n    \"pictures\": [\n      \"https://images.holibob.tech/eyJrZXkiOiJwcm9kdWN0SW1hZ2VzL2QxMTQwM2ZiLTdkMzctNDcxMi1iNThkLWY1YmYzMzc0NzZjNiIsImVkaXRzIjp7InJlc2l6ZSI6eyJmaXQiOiJjb3ZlciIsIndpZHRoIjoxOTIwLCJoZWlnaHQiOjEwODB9fX0=\",\n      \"https://images.holibob.tech/eyJrZXkiOiJwcm9kdWN0SW1hZ2VzL2JiYjdhNTIyLWYwYmEtNGIxNi04NWE5LWIwNGY5Zjk0YjliMyIsImVkaXRzIjp7InJlc2l6ZSI6eyJmaXQiOiJjb3ZlciIsIndpZHRoIjoxOTIwLCJoZWlnaHQiOjEwODB9fX0=\"\n    ]\n  },\n  {\n    \"name\": \"Full-Day Private and Guided Tour Around Ubud\",\n    \"shortDescription\": \"\",\n    \"type\": \"activity\",\n    \"bookingLink\": \"https://amadeus.booking.holibob.tech/product/46b0b2b2-af62-4a92-94ac-0701696c2e9e\",\n    \"price\": {\n      \"amount\": \"60.0\",\n      \"currency\": \"EUR\"\n    },\n    \"rating\": \"N/A\",\n    \"pictures\": [\n      \"https://images.holibob.tech/eyJrZXkiOiJwcm9kdWN0SW1hZ2VzL2IwNTcxMzZjLTI2MWQtNGM0MS05YTBlLTMyOWJkYjU4OTcwNiIsImVkaXRzIjp7InJlc2l6ZSI6eyJmaXQiOiJjb3ZlciIsIndpZHRoIjoxOTIwLCJoZWlnaHQiOjEwODB9fX0=\",\n      \"https://images.holibob.tech/eyJrZXkiOiJwcm9kdWN0SW1hZ2VzL2FlYzcxNDllLTdjNWYtNDY0MS1iYWY2LTVlMjJhMDEyMTljNCIsImVkaXRzIjp7InJlc2l6ZSI6eyJmaXQiOiJjb3ZlciIsIndpZHRoIjoxOTIwLCJoZWlnaHQiOjEwODB9fX0=\"\n    ]\n  },\n  {\n    \"name\": \"Private Tour Ubud - Best of Ubud with All Inclusive\",\n    \"shortDescription\": \"\",\n    \"type\": \"activity\",\n    \"bookingLink\": \"https://amadeus.booking.holibob.tech/product/1a75f06d-46cf-4013-b62a-4c85637941c7\",\n    \"price\": {\n      \"amount\": \"51.0\",\n      \"currency\": \"EUR\"\n    },\n    \"rating\": \"N/A\",\n    \"pictures\": [\n      \"https://images.holibob.tech/eyJrZXkiOiJwcm9kdWN0SW1hZ2VzL2ZkYWI1NjFjLTdjMTktNDQ2Ni1iMDczLTZmN2MxYWFiMDJlMCIsImVkaXRzIjp7InJlc2l6ZSI6eyJmaXQiOiJjb3ZlciIsIndpZHRoIjoxOTIwLCJoZWlnaHQiOjEwODB9fX0=\",\n      \"https://images.holibob.tech/eyJrZXkiOiJwcm9kdWN0SW1hZ2VzL2QyY2JkOGMxLWU1NDktNDVmMS1hMGFjLTViM2EwNWUzZjJiMiIsImVkaXRzIjp7InJlc2l6ZSI6eyJmaXQiOiJjb3ZlciIsIndpZHRoIjoxOTIwLCJoZWlnaHQiOjEwODB9fX0=\"\n    ]\n  },\n  {\n    \"name\": \"Mt. Batur Sunrise Trek, Hot Springs, and Coffee Plantation\",\n    \"shortDescription\": \"\",\n    \"type\": \"activity\",\n    \"bookingLink\": \"https://amadeus.booking.holibob.tech/product/e5dfb1f6-0f02-4769-a325-b0c96449afe0\",\n    \"price\": {\n      \"amount\": \"25.0\",\n      \"currency\": \"EUR\"\n    },\n    \"rating\": \"N/A\",\n    \"pictures\": [\n      \"https://images.holibob.tech/eyJrZXkiOiJwcm9kdWN0SW1hZ2VzL2U0NTM0NzE0LWI1MTMtNGUyOS1hZmNjLWQxMDQyODkzNzY3NCIsImVkaXRzIjp7InJlc2l6ZSI6eyJmaXQiOiJjb3ZlciIsIndpZHRoIjoxOTIwLCJoZWlnaHQiOjEwODB9fX0=\",\n      \"https://images.holibob.tech/eyJrZXkiOiJwcm9kdWN0SW1hZ2VzLzk4ZGMzYTc2LTJkNjAtNGVhOC05ZjY1LWJjOWMzZmVmNGRjZiIsImVkaXRzIjp7InJlc2l6ZSI6eyJmaXQiOiJjb3ZlciIsIndpZHRoIjoxOTIwLCJoZWlnaHQiOjEwODB9fX0=\"\n    ]\n  },\n  {\n    \"name\": \"The Most Popular Tour | Instagram Scenic Spotlight\",\n    \"shortDescription\": \"\",\n    \"type\": \"activity\",\n    \"bookingLink\": \"https://amadeus.booking.holibob.tech/product/8e412e3a-0571-4024-a343-a9fd838d6b48\",\n    \"price\": {\n      \"amount\": \"38.0\",\n      \"currency\": \"EUR\"\n    },\n    \"rating\": \"N/A\",\n    \"pictures\": [\n      \"https://images.holibob.tech/eyJrZXkiOiJwcm9kdWN0SW1hZ2VzLzFkNjcxMmJkLWZmNGUtNDA5MS1iZjBmLTIyYWQ1YzY0ZGFjNyIsImVkaXRzIjp7InJlc2l6ZSI6eyJmaXQiOiJjb3ZlciIsIndpZHRoIjoxOTIwLCJoZWlnaHQiOjEwODB9fX0=\",\n      \"https://images.holibob.tech/eyJrZXkiOiJwcm9kdWN0SW1hZ2VzL2U0NDgyZWYwLTIzM2EtNDgwNS05YWQ2LWIyOTdhNmZlOTI3YSIsImVkaXRzIjp7InJlc2l6ZSI6eyJmaXQiOiJjb3ZlciIsIndpZHRoIjoxOTIwLCJoZWlnaHQiOjEwODB9fX0=\"\n    ]\n  },\n  {\n    \"name\": \"Mt. Batur Sunset Hike Private Tour\",\n    \"shortDescription\": \"\",\n    \"type\": \"activity\",\n    \"bookingLink\": \"https://amadeus.booking.holibob.tech/product/8edf41cf-a948-4056-96c8-716cf1177f80\",\n    \"price\": {\n      \"amount\": \"30.0\",\n      \"currency\": \"EUR\"\n    },\n    \"rating\": \"N/A\",\n    \"pictures\": [\n      \"https://images.holibob.tech/eyJrZXkiOiJwcm9kdWN0SW1hZ2VzLzdiNTNlZGJhLTI5MDItNDJhYi1hYzI4LTNjN2NhZmY3NjFlNSIsImVkaXRzIjp7InJlc2l6ZSI6eyJmaXQiOiJjb3ZlciIsIndpZHRoIjoxOTIwLCJoZWlnaHQiOjEwODB9fX0=\",\n      \"https://images.holibob.tech/eyJrZXkiOiJwcm9kdWN0SW1hZ2VzLzY1YzgxNTdlLTdhMTktNGFiOS05OTU4LTc2YTA2MjAxYjU3MSIsImVkaXRzIjp7InJlc2l6ZSI6eyJmaXQiOiJjb3ZlciIsIndpZHRoIjoxOTIwLCJoZWlnaHQiOjEwODB9fX0=\"\n    ]\n  },\n  {\n    \"name\": \"Ubud Shopping Tour\",\n    \"shortDescription\": \"\",\n    \"type\": \"activity\",\n    \"bookingLink\": \"https://amadeus.booking.holibob.tech/product/f4cfe653-2f5d-4424-91ef-5e0e34383ec8\",\n    \"price\": {\n      \"amount\": \"86.0\",\n      \"currency\": \"EUR\"\n    },\n    \"rating\": \"N/A\",\n    \"pictures\": [\n      \"https://images.holibob.tech/eyJrZXkiOiJwcm9kdWN0SW1hZ2VzLzU5MmJmMjhmLTgxMjMtNDk3Ni1hZjE5LWEzMzc2NzVkZGU2YSIsImVkaXRzIjp7InJlc2l6ZSI6eyJmaXQiOiJjb3ZlciIsIndpZHRoIjoxOTIwLCJoZWlnaHQiOjEwODB9fX0=\",\n      \"https://images.holibob.tech/eyJrZXkiOiJwcm9kdWN0SW1hZ2VzLzE4MTg4YzcyLTk5YjctNDE5NS05NDU3LTYyYjZjOWUwY2I3YyIsImVkaXRzIjp7InJlc2l6ZSI6eyJmaXQiOiJjb3ZlciIsIndpZHRoIjoxOTIwLCJoZWlnaHQiOjEwODB9fX0=\"\n    ]\n  },\n  {\n    \"name\": \"Ubud Half Day Zipline and Jungle Swing\",\n    \"shortDescription\": \"\",\n    \"type\": \"activity\",\n    \"bookingLink\": \"https://amadeus.booking.holibob.tech/product/7e055ebe-0320-4659-8b1a-0fce40e996b7\",\n    \"price\": {\n      \"amount\": \"59.0\",\n      \"currency\": \"EUR\"\n    },\n    \"rating\": \"N/A\",\n    \"pictures\": [\n      \"https://images.holibob.tech/eyJrZXkiOiJwcm9kdWN0SW1hZ2VzLzhkMGFhNzllLTA2ODktNDM5YS1hMGM5LTIzYWM1ZTliYmVkMSIsImVkaXRzIjp7InJlc2l6ZSI6eyJmaXQiOiJjb3ZlciIsIndpZHRoIjoxOTIwLCJoZWlnaHQiOjEwODB9fX0=\",\n      \"https://images.holibob.tech/eyJrZXkiOiJwcm9kdWN0SW1hZ2VzLzc1OGM4NWY1LWJlMGMtNDMwMC1hOTRlLTg3MjMyYzc4YWZjMSIsImVkaXRzIjp7InJlc2l6ZSI6eyJmaXQiOiJjb3ZlciIsIndpZHRoIjoxOTIwLCJoZWlnaHQiOjEwODB9fX0=\"\n    ]\n  }\n]\nTool Result (search_points_of_interest_tool):\n{\n  \"warning\": \"Live POI search failed ([410]\\n). Showing mock data.\",\n  \"results\": [\n    {\n      \"name\": \"Mock Eiffel Tower\",\n      \"category\": \"SIGHTS\",\n      \"rank\": 1\n    },\n    {\n      \"name\": \"Mock Louvre Museum\",\n      \"category\": \"SIGHTS\",\n      \"rank\": 2\n    },\n    {\n      \"name\": \"Mock Notre Dame\",\n      \"category\": \"SIGHTS\",\n      \"rank\": 5\n    }\n  ]\n}\n",
+      "response": "Done — I’ve built a 7-day attractions-only plan focused on Bali (Ubud, Mount Batur, Seminyak/Canggu) with the bookable tours found for you. The plan highlights vegan-friendly notes and accessibility tips. If you want me to swap any activity, remove the pricey Hanging Garden day, or add exact dates and hotels/flights, tell me your origin city and preferred travel dates and I’ll update everything."
+    },
+    {
+      "module": "Critique",
+      "prompt": "Reviewing Plan...",
+      "response": "APPROVE: "
+    }
+  ],
+  "request_type": "AttractionsOnly",
+  "researcher_calls": 1,
+  "user_profile": 

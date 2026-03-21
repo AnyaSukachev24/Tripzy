@@ -1,0 +1,53 @@
+# feature_attractions.yaml — Phase 2: Attractions feature tests
+
+- id: "a-001"
+  name: "Top things to do in a city"
+  tags: [attractions]
+  turns:
+    - user: "Top things to do in Tokyo"
+      expected:
+        next_step: "Attractions"
+        request_type: "AttractionsOnly"
+        state_after:
+          destination: "Tokyo"
+        response_excludes: ["```json", "{\""]
+        groq_check: true
+        groq_prompt: "Does this response list at least 3 specific activities or attractions in Tokyo?"
+
+- id: "a-002"
+  name: "Dietary-filtered attractions"
+  tags: [attractions, dietary]
+  turns:
+    - user: "Best vegan restaurants in Lisbon"
+      expected:
+        next_step: "Attractions"
+        request_type: "AttractionsOnly"
+        state_after:
+          destination: "Lisbon"
+        response_contains: ["vegan", "lisbon"]
+        response_excludes: ["```json", "{\""]
+
+- id: "a-003"
+  name: "Family-friendly attractions"
+  tags: [attractions, family]
+  turns:
+    - user: "Family activities in Barcelona with kids"
+      expected:
+        next_step: "Attractions"
+        request_type: "AttractionsOnly"
+        state_after:
+          destination: "Barcelona"
+        response_excludes: ["```json", "{\""]
+        groq_check: true
+        groq_prompt: "Does this response mention activities or places suitable for families with children?"
+
+- id: "a-004"
+  name: "Attractions with no destination — asks where"
+  tags: [attractions, missing_info]
+  turns:
+    - user: "What are the best things to do?"
+      expected:
+        next_step: "End"
+        response_contains: ["where", "destination", "city", "location"]
+        response_excludes: ["```json", "{\""]
+        question_count_max: 2

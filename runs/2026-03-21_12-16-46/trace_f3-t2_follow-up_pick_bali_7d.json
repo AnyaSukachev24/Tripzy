@@ -1,0 +1,49 @@
+{
+  "messages": [
+    {
+      "role": "human",
+      "content": "I want to go on a street food tour in Bangkok."
+    },
+    {
+      "role": "human",
+      "content": "Let's go to Bali! 7 days."
+    },
+    {
+      "role": "ai",
+      "content": "Great — Bali for 7 days! Would you like me to plan the full trip or start with street-food and vegan spots?"
+    }
+  ],
+  "duration_days": 7,
+  "destination": "Bali",
+  "origin_city": null,
+  "budget_limit": null,
+  "budget_currency": "USD",
+  "trip_type": "food",
+  "traveling_personas_number": 1,
+  "amenities": [
+    "vegan"
+  ],
+  "preferences": [
+    "street food",
+    "vegan",
+    "street food",
+    "vegan"
+  ],
+  "next_step": "End",
+  "supervisor_instruction": "Great — Bali for 7 days! Would you like me to plan the full trip or start with street-food and vegan spots?",
+  "user_query": "Let's go to Bali! 7 days.",
+  "steps": [
+    {
+      "module": "Supervisor",
+      "prompt": "I want to go on a street food tour in Bangkok.",
+      "response": "Routing to Attractions: User asked specifically for a street food tour in Bangkok; Attractions agent handles local tours and food recommendations."
+    },
+    {
+      "module": "Supervisor",
+      "prompt": "Let's go to Bali! 7 days.",
+      "response": "Great — Bali for 7 days! Would you like me to plan the full trip or start with street-food and vegan spots?"
+    }
+  ],
+  "request_type": "Discovery",
+  "researcher_calls": 0,
+  "user_profile": 

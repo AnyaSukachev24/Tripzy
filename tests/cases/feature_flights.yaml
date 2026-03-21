@@ -1,0 +1,64 @@
+# feature_flights.yaml — Phase 2: FlightOnly feature tests
+
+- id: "f-001"
+  name: "Full flight info — routes directly"
+  tags: [flights]
+  turns:
+    - user: "Find flights from Tel Aviv to London on June 15"
+      expected:
+        next_step: "Trip_Planner"
+        request_type: "FlightOnly"
+        state_after:
+          origin_city: "Tel Aviv"
+          destination: "London"
+        response_excludes: ["```json", "{\""]
+
+- id: "f-002"
+  name: "Missing origin — asks for departure city"
+  tags: [flights, missing_info]
+  turns:
+    - user: "Flights to London on June 15"
+      expected:
+        next_step: "End"
+        request_type: "FlightOnly"
+        response_contains: ["from"]
+        response_excludes: ["```json", "{\""]
+        question_count_max: 1
+
+- id: "f-003"
+  name: "Missing date — asks for travel date"
+  tags: [flights, missing_info]
+  turns:
+    - user: "Flights from Tel Aviv to London"
+      expected:
+        next_step: "End"
+        request_type: "FlightOnly"
+        response_contains: ["date"]
+        response_excludes: ["```json", "{\""]
+        question_count_max: 1
+
+- id: "f-004"
+  name: "Relative date resolved"
+  tags: [flights, date]
+  turns:
+    - user: "Flights from NYC to Miami next Friday"
+      expected:
+        next_step: "Trip_Planner"
+        request_type: "FlightOnly"
+        state_after:
+          origin_city: "NYC"
+          destination: "Miami"
+        response_excludes: ["```json", "{\""]
+
+- id: "f-005"
+  name: "Cheapest flights — flexible search"
+  tags: [flights, budget]
+  turns:
+    - user: "Cheapest flights from London to Bali"
+      expected:
+        next_step: "Trip_Planner"
+        request_type: "FlightOnly"
+        state_after:
+          origin_city: "London"
+          destination: "Bali"
+        response_excludes: ["```json", "{\""]

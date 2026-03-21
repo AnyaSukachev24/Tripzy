@@ -1,0 +1,160 @@
+# conversations.yaml — Phase 4: Full multi-turn conversation flows
+# Most expensive — run only if Phase 3 has >= 80% pass rate.
+# Each conversation maintains session state across all turns.
+
+- id: "c-001"
+  name: "Discovery → pick city → book flights"
+  tags: [conversation, discovery, flights]
+  turns:
+    - user: "I want warm beaches on a $1500 budget"
+      expected:
+        next_step: "Researcher"
+        request_type: "Discovery"
+        response_excludes: ["```json", "{\""]
+    - user: "Let's go to Bali!"
+      expected:
+        next_step: "End"
+        state_after:
+          destination: "Bali"
+        response_contains: ["bali"]
+        response_excludes: ["```json", "{\""]
+    - user: "Find me flights from New York on July 1st"
+      expected:
+        next_step: "Trip_Planner"
+        request_type: "FlightOnly"
+        state_after:
+          destination: "Bali"
+          origin_city: "New York"
+        response_excludes: ["```json", "{\""]
+
+- id: "c-002"
+  name: "Vague request → refine → pick city → hotel"
+  tags: [conversation, discovery, hotels]
+  turns:
+    - user: "I'm thinking of a vacation but not sure where"
+      expected:
+        next_step: "End"
+        request_type: "Discovery"
+        response_contains: ["?"]
+    - user: "I like history and culture, maybe Europe?"
+      expected:
+        next_step: "Researcher"
+        request_type: "Discovery"
+        response_excludes: ["```json", "{\""]
+    - user: "Prague sounds great!"
+      expected:
+        next_step: "End"
+        state_after:
+          destination: "Prague"
+        response_contains: ["prague"]
+    - user: "Find me a hotel there for August 10-15"
+      expected:
+        next_step: "Trip_Planner"
+        request_type: "HotelOnly"
+        state_after:
+          destination: "Prague"
+        response_excludes: ["```json", "{\""]
+
+- id: "c-004"
+  name: "Greeting → discovery → pick destination → attractions"
+  tags: [conversation, greeting, discovery, attractions]
+  turns:
+    - user: "Hey!"
+      expected:
+        next_step: "End"
+        max_response_chars: 200
+        response_excludes: ["```json", "{\""]
+    - user: "I want to explore Japan, any tips on what to do?"
+      expected:
+        next_step: "Attractions"
+        request_type: "AttractionsOnly"
+        state_after:
+          destination: "Japan"
+        response_excludes: ["```json", "{\""]
+
+- id: "c-005"
+  name: "Hotel search then destination switch mid-conversation"
+  tags: [conversation, hotels, context_switch]
+  turns:
+    - user: "Find me a hotel in Rome for July 10-14"
+      expected:
+        next_step: "Trip_Planner"
+        request_type: "HotelOnly"
+        state_after:
+          destination: "Rome"
+        response_excludes: ["```json", "{\""]
+    - user: "Actually I changed my mind, let's do Barcelona instead for the same dates"
+      expected:
+        next_step: "Trip_Planner"
+        request_type: "HotelOnly"
+        state_after:
+          destination: "Barcelona"
+        response_contains: ["barcelona"]
+        response_excludes: ["rome", "```json", "{\""]
+
+- id: "c-006"
+  name: "Discovery refinement: vague → warm/beachy → budget → pick Bali → flight with budget"
+  tags: [conversation, discovery, refinement, flights]
+  turns:
+    - user: "I want to go on a trip but don't know where to go"
+      expected:
+        next_step: "End"
+        request_type: "Discovery"
+        response_contains: ["?"]
+        response_excludes: ["```json", "{\""]
+    - user: "I want to go somewhere warm and beachy. I love snorkeling."
+      expected:
+        next_step: "Researcher"
+        request_type: "Discovery"
+        response_excludes: ["new paltz", "košice", "kosice", "```json", "{\""]
+    - user: "I have $800 and want a budget trip. Where should I go?"
+      expected:
+        next_step: "Researcher"
+        request_type: "Discovery"
+        response_excludes: ["new paltz", "košice", "kosice", "```json", "{\""]
+    - user: "I WANT TO GO TO BALI."
+      expected:
+        next_step: "End"
+        state_after:
+          destination: "Bali"
+        response_contains: ["bali"]
+        response_excludes: ["```json", "{\""]
+    - user: "help me pick a one way flight to bali next week"
+      expected:
+        request_type: "FlightOnly"
+        response_excludes: ["```json", "{\""]
+    - user: "tel aviv"
+      expected:
+        state_after:
+          origin_city: "Tel Aviv"
+    - user: "i have a budget of $300 for the flight to bali (one way)"
+      expected:
+        next_step: "Trip_Planner"
+        request_type: "FlightOnly"
+        state_after:
+          destination: "Bali"
+          origin_city: "Tel Aviv"
+        response_excludes: ["```json", "{\""]
+
+- id: "c-003"
+  name: "Info gathered across 3 turns — state accumulates"
+  tags: [conversation, state_accumulation, flights]
+  turns:
+    - user: "I want to fly to Barcelona"
+      expected:
+        state_after:
+          destination: "Barcelona"
+        request_type: "FlightOnly"
+    - user: "I'll be flying from Tel Aviv"
+      expected:
+        state_after:
+          destination: "Barcelona"
+          origin_city: "Tel Aviv"
+    - user: "On June 20th"
+      expected:
+        next_step: "Trip_Planner"
+        request_type: "FlightOnly"
+        state_after:
+          destination: "Barcelona"
+          origin_city: "Tel Aviv"
+        response_excludes: ["```json", "{\""]

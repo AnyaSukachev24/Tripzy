@@ -1,0 +1,63 @@
+# feature_discovery.yaml — Phase 2: Discovery feature tests
+# Tests the Researcher node for destination discovery flows.
+
+- id: "d-001"
+  name: "Vague prompt triggers clarifying question (no immediate suggestion)"
+  tags: [discovery]
+  turns:
+    - user: "Suggest me a travel destination"
+      expected:
+        next_step: "End"
+        request_type: "Discovery"
+        response_contains: ["?"]
+        response_excludes: ["```json", "{\""]
+
+- id: "d-002"
+  name: "Discovery returns readable suggestions — no raw JSON"
+  tags: [discovery]
+  turns:
+    - user: "I'm not sure where to go, I like beaches and good food, budget around $2000"
+      expected:
+        next_step: "Researcher"
+        request_type: "Discovery"
+        response_excludes: ["```json", "{\"", "destination_name", "\"name\":"]
+
+- id: "d-003"
+  name: "User refines region — new Researcher search"
+  tags: [discovery, multi_turn]
+  turns:
+    - user: "I want somewhere warm with beaches"
+      expected:
+        next_step: "Researcher"
+        request_type: "Discovery"
+    - user: "What about South America?"
+      expected:
+        next_step: "Researcher"
+        request_type: "Discovery"
+        response_excludes: ["```json", "{\""]
+
+- id: "d-004"
+  name: "User picks destination — state updated"
+  tags: [discovery, multi_turn]
+  turns:
+    - user: "Suggest a beach destination in Southeast Asia"
+      expected:
+        next_step: "Researcher"
+        request_type: "Discovery"
+    - user: "Let's go to Bali!"
+      expected:
+        next_step: "End"
+        state_after:
+          destination: "Bali"
+        response_contains: ["bali"]
+        response_excludes: ["```json", "{\""]
+
+- id: "d-005"
+  name: "Continent input triggers Discovery guard"
+  tags: [discovery, vague]
+  turns:
+    - user: "I want to travel to Asia"
+      expected:
+        next_step: "Researcher"
+        request_type: "Discovery"
+        response_excludes: ["```json", "{\""]
