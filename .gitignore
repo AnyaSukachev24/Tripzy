@@ -2,6 +2,16 @@ data/
 ui-runs/
 evaluation-results/
 
+# Debug artifacts
+debug_output.txt
+verify_output.txt
+clean_models.txt
+valid_models.txt
+verify_models.txt
+
+# Evaluation cache
+tests/evaluations/.eval_cache.json
+
 
 
 # Byte-compiled / optimized / DLL files
