@@ -243,8 +243,34 @@ def _query_attractions_index(
         ).get("matches", [])
         
         results = _normalize_attractions_hits(matches)
+
+        # Prefer destination-local results when city/country hints are available.
+        city_hint = (city or "").strip().lower()
+        country_hint = (country or "").strip().lower()
+        if city_hint or country_hint:
+            localized = []
+            for row in results:
+                row_city = str(row.get("city", "")).strip().lower()
+                row_country = str(row.get("country", "")).strip().lower()
+                row_text = " ".join(
+                    [
+                        str(row.get("name", "")),
+                        str(row.get("address", "")),
+                        str(row.get("description", "")),
+                    ]
+                ).lower()
+
+                city_match = (not city_hint) or (city_hint in row_city) or (city_hint in row_text)
+                country_match = (not country_hint) or (country_hint in row_country) or (country_hint in row_text)
+                if city_match and country_match:
+                    localized.append(row)
+
+            # Only narrow when we still have enough local options.
+            if len(localized) >= 3:
+                results = localized
+
         print(f"  [Tool] Semantic search returned {len(results)} matches")
-        
+
         return results
         
     except Exception as e:
@@ -1451,11 +1477,13 @@ def suggest_attractions_tool(
 
     # Query attractions index using pure semantic similarity
     # (embedding of full query vs. chunks in Pinecone)
+    city_hint, country_hint = _extract_city_country(destination)
+
     attractions = _query_attractions_index(
         query,
         k=10,
-        city="",
-        country="",
+        city=city_hint,
+        country=country_hint,
         category_terms=None,
     )
 

@@ -2101,40 +2101,58 @@ def attractions_node(state: AgentState) -> Dict[str, Any]:
     tools = [suggest_attractions_tool, search_tours_activities_tool]
     llm_with_tools = llm.bind_tools(tools)
     
-    # 1. Gather data using tools
-    # We use a simple chain to decide which tools to call
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", ATTRACTIONS_SYSTEM_PROMPT),
-        ("human", "Destination: {destination}\nUser Query: {user_query}\nProfile: {user_profile}\nInstruction: {instruction}")
-    ])
-    
-    chain = prompt | llm_with_tools
-    
-    # Invoke to get tool calls
-    ai_msg = safe_llm_invoke(chain, {
-        "destination": destination,
-        "user_query": user_query,
-        "user_profile": user_profile_str,
-        "instruction": instruction
-    })
-    
+    # Extract intent keywords to strengthen deterministic fallback tool calls.
+    lower_query = (user_query or "").lower()
+    dining_keywords = [
+        "coffee", "cafe", "restaurant", "food", "dining", "bar", "brunch",
+        "breakfast", "lunch", "dinner", "vegan", "vegetarian", "gluten-free", "gluten free",
+    ]
+    inferred_interests = [kw for kw in dining_keywords if kw in lower_query]
+
+    # 1. Deterministic-first retrieval (RAG), independent of LLM tool-calling.
     tool_results = []
-    if ai_msg.tool_calls:
-        print(f"  [Attractions] Executing {len(ai_msg.tool_calls)} tool calls...")
-        available_tools = {
-            "suggest_attractions_tool": suggest_attractions_tool,
-            "search_tours_activities_tool": search_tours_activities_tool
+    try:
+        direct_args = {
+            "destination": destination,
+            "interests": inferred_interests or None,
+            "trip_type": state.get("trip_type", "") or "",
         }
-        
-        for tool_call in ai_msg.tool_calls:
-            tool_name = tool_call["name"]
-            if tool_name in available_tools:
-                try:
-                    res = available_tools[tool_name].invoke(tool_call["args"])
-                    # Include full results (JSON array of attractions with names)
-                    tool_results.append(res)
-                except Exception as e:
-                    print(f"  [Attractions] Tool {tool_name} failed: {e}")
+        direct_res = suggest_attractions_tool.invoke(direct_args)
+        tool_results.append(direct_res)
+        print("  [Attractions] Deterministic primary call invoked suggest_attractions_tool")
+    except Exception as e:
+        print(f"  [Attractions] Deterministic primary call failed: {e}")
+
+    # 2. LLM tool-routing fallback only when deterministic retrieval produced nothing.
+    if not tool_results:
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", ATTRACTIONS_SYSTEM_PROMPT),
+            ("human", "Destination: {destination}\nUser Query: {user_query}\nProfile: {user_profile}\nInstruction: {instruction}")
+        ])
+
+        chain = prompt | llm_with_tools
+        ai_msg = safe_llm_invoke(chain, {
+            "destination": destination,
+            "user_query": user_query,
+            "user_profile": user_profile_str,
+            "instruction": instruction
+        })
+
+        if ai_msg.tool_calls:
+            print(f"  [Attractions] Executing {len(ai_msg.tool_calls)} tool calls...")
+            available_tools = {
+                "suggest_attractions_tool": suggest_attractions_tool,
+                "search_tours_activities_tool": search_tours_activities_tool
+            }
+
+            for tool_call in ai_msg.tool_calls:
+                tool_name = tool_call["name"]
+                if tool_name in available_tools:
+                    try:
+                        res = available_tools[tool_name].invoke(tool_call["args"])
+                        tool_results.append(res)
+                    except Exception as e:
+                        print(f"  [Attractions] Tool {tool_name} failed: {e}")
                     
     # 2. Build final response deterministically from tool JSON.
     # Avoids structured-output parsing failures and guarantees names are shown.
@@ -2156,6 +2174,26 @@ def attractions_node(state: AgentState) -> Dict[str, Any]:
                     parsed_rows.append(payload)
         except Exception:
             continue
+
+    # Secondary fallback: if we still have no parsed rows, force one more direct query
+    # with stronger dining hints for restaurant-like requests.
+    if not parsed_rows:
+        try:
+            enhanced_interests = inferred_interests or ["restaurants", "food"]
+            retry_res = suggest_attractions_tool.invoke(
+                {
+                    "destination": destination,
+                    "interests": enhanced_interests,
+                    "trip_type": state.get("trip_type", "") or "",
+                }
+            )
+            payload = json.loads(retry_res)
+            if isinstance(payload, list):
+                parsed_rows.extend([item for item in payload if isinstance(item, dict)])
+            elif isinstance(payload, dict) and isinstance(payload.get("results"), list):
+                parsed_rows.extend([item for item in payload["results"] if isinstance(item, dict)])
+        except Exception as e:
+            print(f"  [Attractions] Secondary fallback failed: {e}")
 
     # Deduplicate by name while preserving order.
     seen_names = set()
