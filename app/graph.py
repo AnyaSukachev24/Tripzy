@@ -71,7 +71,6 @@ from app.tools import (
     search_tours_activities_tool,
     search_tours_activities_tool,
     search_points_of_interest_tool,
-    get_user_profile,
 )
 
 
@@ -316,32 +315,9 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             history_lines.append(f"{role}: {msg.content[:200]}")
         conversation_history = "\nCONVERSATION HISTORY:\n" + "\n".join(history_lines)
 
-    # --- Phase 29: User Profile Retrieval (CACHED) ---
-    # OPTIMIZATION: Only fetch from Pinecone ONCE per session, then cache in state
-    user_profile_update = {}
+    # Start every new conversation fresh. Do not auto-load any external profile.
+    # The session profile is built incrementally from this conversation only.
     current_profile = state.get("user_profile")
-    profile_fetch_attempted = state.get("_profile_fetch_attempted", False)
-
-    if not current_profile and not profile_fetch_attempted:
-        # First time in session: try to fetch from Pinecone (with caching flag)
-        try:
-            test_user_id = "test@example.com"
-            profile_dict = get_user_profile.invoke({"user_id": test_user_id})
-            if profile_dict:
-                current_profile = UserProfile(**profile_dict)
-                user_profile_update = {
-                    "user_profile": current_profile,
-                    "_profile_fetch_attempted": True  # Mark so we don't fetch again
-                }
-                print(
-                    f"  [Supervisor] Loaded User Profile (CACHED): {current_profile.travel_style}, {current_profile.dietary_needs}"
-                )
-            else:
-                # No profile found, don't retry
-                user_profile_update["_profile_fetch_attempted"] = True
-        except Exception as e:
-            print(f"  [Supervisor] Profile fetch ignored (will use empty): {e}")
-            user_profile_update["_profile_fetch_attempted"] = True
 
     # Prepare Profile String for Context
     profile_context = "Unknown"
@@ -358,42 +334,40 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
         updates: dict, extracted_prefs: list = None, extracted_trip_type: str = None, is_terminal: bool = False
     ) -> dict:
         """Helper to merge profile updates and message/turn logic before returning state."""
-        # 1. Profile background update logic
-        if user_profile_update:
-            updates.update(user_profile_update)
+        # 1. Build/update a session-local profile from conversation signals only.
+        profile = current_profile
+        if profile is None and (extracted_prefs or extracted_trip_type):
+            profile = UserProfile(user_id="session-local")
 
-        if current_profile:
-            new_prefs_added = False
-            merged_prefs = set(current_profile.interests or [])
-            if extracted_prefs:
-                for p in extracted_prefs:
-                    if p.lower() not in [ext.lower() for ext in merged_prefs]:
-                        merged_prefs.add(p)
-                        new_prefs_added = True
+        if profile is not None:
+            lower_interests = {i.lower() for i in (profile.interests or [])}
+            merged_interests = list(profile.interests or [])
+            for pref in (extracted_prefs or []):
+                if pref and pref.lower() not in lower_interests:
+                    merged_interests.append(pref)
+                    lower_interests.add(pref.lower())
 
-            merged_diet = set(current_profile.dietary_needs or [])
-            new_style = current_profile.travel_style
-            if extracted_trip_type and not current_profile.travel_style:
-                new_style = extracted_trip_type
-                new_prefs_added = True
+            dietary_keywords = {
+                "vegan": "vegan",
+                "vegetarian": "vegetarian",
+                "gluten-free": "gluten-free",
+                "gluten free": "gluten-free",
+                "kosher": "kosher",
+            }
+            lower_diet = {d.lower() for d in (profile.dietary_needs or [])}
+            merged_diet = list(profile.dietary_needs or [])
+            for pref in (extracted_prefs or []):
+                normalized = dietary_keywords.get((pref or "").strip().lower())
+                if normalized and normalized.lower() not in lower_diet:
+                    merged_diet.append(normalized)
+                    lower_diet.add(normalized.lower())
 
-            if new_prefs_added:
-                try:
-                    from app.tools import create_user_profile_tool
-                    user_email = getattr(current_profile, "email", None) or current_profile.user_id
-                    user_name = getattr(current_profile, "name", None) or current_profile.user_id
-                    create_user_profile_tool.invoke({
-                        "name": user_name, "email": user_email, "preferences": list(merged_prefs),
-                        "dietary_needs": list(merged_diet),
-                        "accessibility_needs": list(current_profile.accessibility_needs or []),
-                        "travel_style": new_style or "",
-                    })
-                    print(f"  [Supervisor] Background profile update triggered.")
-                    current_profile.interests = list(merged_prefs)
-                    current_profile.travel_style = new_style
-                    updates["user_profile"] = current_profile
-                except Exception as e:
-                    print(f"  [Supervisor] Failed to update profile in background: {e}")
+            if extracted_trip_type and not profile.travel_style:
+                profile.travel_style = extracted_trip_type
+
+            profile.interests = merged_interests
+            profile.dietary_needs = merged_diet
+            updates["user_profile"] = profile
                     
         # 2. Context-switch: if destination changed, wipe stale trip_plan and duration
         new_dest = updates.get("destination")
