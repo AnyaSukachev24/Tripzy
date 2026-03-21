@@ -27,7 +27,9 @@ const API_BASE = window.location.protocol === 'file:'
 // WINDOW-SCOPED THREAD ID
 // For parallel testing, always create a unique thread per browser window runtime.
 // This avoids accidental context carryover between duplicated tabs/windows.
-let sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+let sessionId = 'session_' + (typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : Date.now() + '_' + Math.random().toString(36).substr(2, 9));
 console.log('Window thread created:', sessionId);
 let lastProgressMessage = '';
 
@@ -101,7 +103,9 @@ function appendMessage(role, text) {
     msgDiv.className = `message ${role}`;
 
     if (role === 'agent') {
-        msgDiv.innerHTML = marked.parse(text);
+        msgDiv.innerHTML = (typeof DOMPurify !== 'undefined')
+            ? DOMPurify.sanitize(marked.parse(text))
+            : marked.parse(text);
     } else {
         msgDiv.textContent = text;
     }
@@ -232,7 +236,9 @@ function handleStreamEvent(data) {
                 const previewMd = formatPreview(data.preview);
                 const previewEl = document.getElementById('plan-preview');
                 if (previewEl) {
-                    previewEl.innerHTML = marked.parse(previewMd);
+                    previewEl.innerHTML = (typeof DOMPurify !== 'undefined')
+                        ? DOMPurify.sanitize(marked.parse(previewMd))
+                        : marked.parse(previewMd);
                 } else {
                     console.warn('plan-preview element not found - browser cache may need refresh');
                 }

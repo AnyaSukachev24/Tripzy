@@ -1,8 +1,11 @@
 import json
 import os
+from collections import OrderedDict
 from datetime import datetime
 from typing import Dict, Any, List
 from pathlib import Path
+
+_MAX_SESSIONS = 200  # Max in-memory sessions before evicting oldest
 
 
 def _safe_json_default(obj):
@@ -26,13 +29,15 @@ class ConversationLogger:
     def __init__(self, base_dir: str = "ui-runs"):
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(exist_ok=True)
-        self.conversations: Dict[str, List[Dict[str, Any]]] = {}
+        self.conversations: OrderedDict[str, List[Dict[str, Any]]] = OrderedDict()
         
     def log_message(self, thread_id: str, role: str, content: str, metadata: Dict[str, Any] | None = None):
         """Log a single message to the conversation history."""
         if thread_id not in self.conversations:
+            if len(self.conversations) >= _MAX_SESSIONS:
+                self.conversations.popitem(last=False)  # evict oldest
             self.conversations[thread_id] = []
-            
+
         message = {
             "timestamp": datetime.now().isoformat(),
             "role": role,

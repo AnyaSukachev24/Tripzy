@@ -1,0 +1,24 @@
+# Secrets — never bake into image
+.env
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+
+# Large data files (not needed at runtime)
+data/
+ui-runs/
+evaluation-results/
+
+# Git metadata
+.git/
+.gitignore
+
+# IDE / local tooling
+.vscode/
+.claude/
+*.log

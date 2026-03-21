@@ -7,9 +7,8 @@ WORKDIR /app
 # Copy the current directory contents into the container at /app
 COPY . /app
 
-# Install any needed packages specified in requirements.txt
-# If requirements.txt doesn't exist, we install manually for now but user should create it.
-RUN pip install --no-cache-dir fastapi uvicorn langgraph langchain-google-genai langchain-community duckduckgo-search pinecone-client python-dotenv
+# Install dependencies from requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Make port 8000 available to the world outside this container
 EXPOSE 8000

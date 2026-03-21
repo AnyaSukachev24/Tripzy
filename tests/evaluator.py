@@ -157,7 +157,11 @@ def evaluate_turn(
         if exp_val is None:
             passed = act_val is None or act_val == "" or act_val == 0
         else:
-            passed = exp_val.lower() in str(act_val or "").lower()
+            # Word-boundary match avoids false positives (e.g. "Paris" matching "despair")
+            passed = bool(
+                re.search(r"\b" + re.escape(str(exp_val).lower()) + r"\b",
+                          str(act_val or "").lower())
+            )
         checks.append(
             CheckResult(
                 name=f"state.{key}",

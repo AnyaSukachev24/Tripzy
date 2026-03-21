@@ -1,3 +1,4 @@
+import os
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response, JSONResponse, FileResponse, StreamingResponse
@@ -124,10 +125,12 @@ def format_plan_to_markdown(plan: Dict[str, Any]) -> str:
 
 app = FastAPI(title="Tripzy Travel Agent (Course Project)")
 
-# CORS (Allow all for Render/Testing)
+# CORS — restrict to known origins; set ALLOWED_ORIGINS env var for production
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000")
+_allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -319,10 +322,10 @@ def get_model_architecture():
 
     except Exception as e:
         import traceback
+        traceback.print_exc()  # Log server-side only
         return JSONResponse(
             status_code=500,
-            content={"error": f"Failed to generate graph image: {str(e)}",
-                     "trace": traceback.format_exc()},
+            content={"error": "Failed to generate graph image. Check server logs for details."},
         )
 
 
@@ -655,24 +658,38 @@ def approve_trip(request: ExecuteRequest):
     config = {"configurable": {"thread_id": request.thread_id}}
 
     try:
-        # Resuming with None input since we are just triggering the next step,
-        # but we must tell the graph we approved the plan via update_state
+        # Resume from the interrupted node. With interrupt_before, invoking with
+        # None is sufficient and avoids brittle node-scoped update_state writes.
         snapshot = graph.get_state(config)
-        if snapshot.next:
-            node_to_resume = snapshot.next[0]
-            graph.update_state(
-                config, {"user_query": "approve_trip_plan"}, as_node=node_to_resume
+        if not snapshot.next:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "No pending approval found for this thread."},
             )
 
         # Continue execution
         final_state_res = graph.invoke(None, config=config)
-        # Note: graph.invoke returns a dict of the final state variables directly, not a snapshot object
-        plan = final_state_res.get("trip_plan")
+
+        # Depending on graph/runtime state, invoke can return None; use snapshot values then.
+        if isinstance(final_state_res, dict):
+            final_state = final_state_res
+        else:
+            final_state = dict(graph.get_state(config).values)
+
+        plan = final_state.get("trip_plan")
+        supervisor_instruction = final_state.get("supervisor_instruction")
+
+        if isinstance(plan, dict) and plan:
+            response_text = format_plan_to_markdown(plan)
+        elif supervisor_instruction:
+            response_text = supervisor_instruction
+        else:
+            response_text = "Trip finalized."
 
         return {
             "status": "ok",
-            "response": format_plan_to_markdown(plan) if plan else "Trip finalized.",
-            "steps": final_state_res.get("steps", []),
+            "response": response_text,
+            "steps": final_state.get("steps", []),
         }
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
