@@ -182,11 +182,13 @@ class ExecuteResponse(BaseModel):
 def get_team_info():
     """Returns student details (Course Requirement)."""
     return {
-        "group_batch_order_number": "BATCH_XX_ORDER_XX",
+        "group_batch_order_number": "3_2",
         "team_name": "Tripzy",
         "students": [
-            {"name": "Student 1", "email": "s1@example.com"},
-            {"name": "Student 2", "email": "s2@example.com"},
+            {"name": "Noa Levi", "email": "noa-levi@campus.technion.ac.il"},
+            {"name": "Anya Sukachev", "email": "anya.sukachev@campus.technion.ac.il"},
+            {"name": "Alexa Birenbaum", "email": "alexab@campus.technion.ac.il"},
+            {"name": "Refael Levi", "email": "refaell@campus.technion.ac.il"},
         ],
     }
 
