@@ -256,8 +256,7 @@ class SupervisorOutput(BaseModel):
 
 
 class AttractionsOutput(BaseModel):
-    attractions: List[str] = Field(description="List of recommended attractions/restaurants.")
-    final_response: str = Field(description="The friendly response to show to the user.")
+    response: str = Field(description="The formatted response with numbered list of attractions/restaurants to show the user.")
 
 
 class PlannerOutput(BaseModel):
@@ -317,25 +316,32 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             history_lines.append(f"{role}: {msg.content[:200]}")
         conversation_history = "\nCONVERSATION HISTORY:\n" + "\n".join(history_lines)
 
-    # --- Phase 29: User Profile Retrieval ---
+    # --- Phase 29: User Profile Retrieval (CACHED) ---
+    # OPTIMIZATION: Only fetch from Pinecone ONCE per session, then cache in state
     user_profile_update = {}
     current_profile = state.get("user_profile")
+    profile_fetch_attempted = state.get("_profile_fetch_attempted", False)
 
-    if not current_profile:
+    if not current_profile and not profile_fetch_attempted:
+        # First time in session: try to fetch from Pinecone (with caching flag)
         try:
-            # TODO: In production, get user_id from context/session
-            # For now, we use the test profile we inspected earlier
             test_user_id = "test@example.com"
-            # Note: The tool handles ID sanitization/lookup
             profile_dict = get_user_profile.invoke({"user_id": test_user_id})
             if profile_dict:
                 current_profile = UserProfile(**profile_dict)
-                user_profile_update = {"user_profile": current_profile}
+                user_profile_update = {
+                    "user_profile": current_profile,
+                    "_profile_fetch_attempted": True  # Mark so we don't fetch again
+                }
                 print(
-                    f"  [Supervisor] Loaded User Profile: {current_profile.travel_style}, {current_profile.dietary_needs}"
+                    f"  [Supervisor] Loaded User Profile (CACHED): {current_profile.travel_style}, {current_profile.dietary_needs}"
                 )
+            else:
+                # No profile found, don't retry
+                user_profile_update["_profile_fetch_attempted"] = True
         except Exception as e:
-            print(f"  [Supervisor] Failed to load user profile: {e}")
+            print(f"  [Supervisor] Profile fetch ignored (will use empty): {e}")
+            user_profile_update["_profile_fetch_attempted"] = True
 
     # Prepare Profile String for Context
     profile_context = "Unknown"
@@ -1350,7 +1356,6 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
         resolve_airport_code_tool,
         get_airline_info_tool,
         search_tours_activities_tool,
-        search_points_of_interest_tool,
     ]
 
     # We also need a structured way to return the FINAL plan.
@@ -2092,10 +2097,8 @@ def attractions_node(state: AgentState) -> Dict[str, Any]:
             f"Interests: {', '.join(user_profile.interests or [])}"
         )
 
-    # Bind tools 
-    # Note: search_points_of_interest_tool needs lat/long, so we might need researcher to resolve that if missing
-    # For now we use suggest_attractions_tool (RAG) and tours as primary.
-    tools = [suggest_attractions_tool, search_points_of_interest_tool, search_tours_activities_tool]
+    # Bind tools (RAG-first): do not use live POI search in normal recommendation flow.
+    tools = [suggest_attractions_tool, search_tours_activities_tool]
     llm_with_tools = llm.bind_tools(tools)
     
     # 1. Gather data using tools
@@ -2120,7 +2123,6 @@ def attractions_node(state: AgentState) -> Dict[str, Any]:
         print(f"  [Attractions] Executing {len(ai_msg.tool_calls)} tool calls...")
         available_tools = {
             "suggest_attractions_tool": suggest_attractions_tool,
-            "search_points_of_interest_tool": search_points_of_interest_tool,
             "search_tours_activities_tool": search_tours_activities_tool
         }
         
@@ -2129,26 +2131,67 @@ def attractions_node(state: AgentState) -> Dict[str, Any]:
             if tool_name in available_tools:
                 try:
                     res = available_tools[tool_name].invoke(tool_call["args"])
-                    tool_results.append(f"TOOL {tool_name} RESULT: {res[:2000]}")
+                    # Include full results (JSON array of attractions with names)
+                    tool_results.append(res)
                 except Exception as e:
                     print(f"  [Attractions] Tool {tool_name} failed: {e}")
                     
-    # 2. Summarize findings
-    # Use structured output for the final response
-    summary_prompt = ChatPromptTemplate.from_messages([
-        ("system", ATTRACTIONS_SYSTEM_PROMPT + "\n\nSummarize the tool results found below for the user."),
-        ("human", "Tool Data: {tool_data}\nOriginal Query: {user_query}")
-    ])
-    
-    summary_chain = summary_prompt | llm.with_structured_output(AttractionsOutput)
-    
-    result = safe_llm_invoke(summary_chain, {
-        "tool_data": "\n\n".join(tool_results) if tool_results else "No specific data found, provide general advice.",
-        "user_query": user_query
-    })
-    
+    # 2. Build final response deterministically from tool JSON.
+    # Avoids structured-output parsing failures and guarantees names are shown.
+    parsed_rows: List[Dict[str, Any]] = []
+    for raw in tool_results:
+        try:
+            payload = json.loads(raw)
+            if isinstance(payload, list):
+                for item in payload:
+                    if isinstance(item, dict):
+                        parsed_rows.append(item)
+            elif isinstance(payload, dict):
+                # Some tools may return a single object or wrapper object.
+                if isinstance(payload.get("results"), list):
+                    for item in payload.get("results", []):
+                        if isinstance(item, dict):
+                            parsed_rows.append(item)
+                else:
+                    parsed_rows.append(payload)
+        except Exception:
+            continue
+
+    # Deduplicate by name while preserving order.
+    seen_names = set()
+    unique_rows: List[Dict[str, Any]] = []
+    for row in parsed_rows:
+        name = str(row.get("name", "")).strip()
+        if not name or name.lower() in seen_names:
+            continue
+        seen_names.add(name.lower())
+        unique_rows.append(row)
+
+    top_rows = unique_rows[:5]
+    if top_rows:
+        lines = [f"Here are {len(top_rows)} recommendations in {destination}:"]
+        for idx, row in enumerate(top_rows, start=1):
+            name = str(row.get("name", "")).strip() or f"Option {idx}"
+            category = str(row.get("category", "")).strip()
+            description = str(row.get("description", "")).strip().replace("\n", " ")
+            short_desc = description[:90] + ("..." if len(description) > 90 else "")
+
+            detail_bits = []
+            if category:
+                detail_bits.append(category)
+            if short_desc:
+                detail_bits.append(short_desc)
+            detail = " - ".join(detail_bits) if detail_bits else "recommended match"
+            lines.append(f"{idx}. {name} - {detail}")
+
+        response_text = "\n".join(lines)
+    else:
+        response_text = (
+            f"I couldn't find specific restaurant names in {destination} yet. "
+            "Try adding a neighborhood or cuisine and I will narrow it down."
+        )
+
     from langchain_core.messages import AIMessage
-    response_text = result.final_response
     
     messages = list(state.get("messages", []))
     messages.append(AIMessage(content=response_text))
@@ -2157,14 +2200,12 @@ def attractions_node(state: AgentState) -> Dict[str, Any]:
         "module": "Attractions",
         "prompt": user_query,
         "response": response_text,
-        "attractions_found": result.attractions
     }
     
     return {
         "messages": messages,
         "supervisor_instruction": response_text,
         "next_step": "End",
-        "attractions_result": result.model_dump(),
         "steps": [step_log],
     }
 

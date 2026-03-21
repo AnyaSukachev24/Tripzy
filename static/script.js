@@ -6,6 +6,17 @@ const statBudget = document.getElementById('stat-budget');
 const statStatus = document.getElementById('stat-status');
 const profileSummary = document.getElementById('profile-summary');
 const agentThought = document.getElementById('agent-thought');
+const newChatBtn = document.getElementById('newChatBtn');
+const suggestionsBlock = document.getElementById('suggestions-block');
+
+// ── Suggestion cards: click to inject prompt ──────────────
+document.querySelectorAll('.suggestion-card').forEach(card => {
+    card.addEventListener('click', () => {
+        promptInput.value = card.dataset.prompt;
+        promptInput.dispatchEvent(new Event('input')); // trigger auto-resize
+        promptInput.focus();
+    });
+});
 
 // API base URL: same-origin by default.
 // If the file is opened directly (file://), fallback to local FastAPI server.
@@ -13,14 +24,64 @@ const API_BASE = window.location.protocol === 'file:'
     ? 'http://127.0.0.1:8000'
     : window.location.origin;
 
-// PERSISTENT SESSION ID - Maintains state across multiple messages
-let sessionId = sessionStorage.getItem('tripzy_session_id');
-if (!sessionId) {
+// WINDOW-SCOPED THREAD ID
+// For parallel testing, always create a unique thread per browser window runtime.
+// This avoids accidental context carryover between duplicated tabs/windows.
+let sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+console.log('Window thread created:', sessionId);
+let lastProgressMessage = '';
+
+function mapToolToProgressMessage(toolName) {
+    const name = (toolName || '').toLowerCase();
+
+    if (name.includes('search_flights') || name.includes('cheapest_flights')) {
+        return 'Searching flights...';
+    }
+    if (name.includes('search_hotels') || name.includes('hotel_ratings')) {
+        return 'Searching hotels...';
+    }
+    if (name.includes('suggest_attractions') || name.includes('search_tours') || name.includes('search_points_of_interest')) {
+        return 'Searching restaurants and local places...';
+    }
+    if (name.includes('resolve_airport_code')) {
+        return 'Resolving airport codes...';
+    }
+    if (name.includes('create_plan')) {
+        return 'Building your itinerary...';
+    }
+    return 'Working on your trip...';
+}
+
+function appendProgressMessage(text) {
+    if (!text || text === lastProgressMessage) return;
+    lastProgressMessage = text;
+    appendMessage('system', text);
+}
+
+function resetForNewChat() {
     sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-    sessionStorage.setItem('tripzy_session_id', sessionId);
-    console.log('New session created:', sessionId);
-} else {
-    console.log('Resuming session:', sessionId);
+    currentThreadId = null;
+    lastProgressMessage = '';
+
+    chatDisplay.innerHTML = '<div class="message agent">Hello! I\'m your AI Travel Agent. Where would you like to go today?</div>';
+    promptInput.value = '';
+
+    if (statDest) statDest.textContent = '-';
+    if (statBudget) statBudget.textContent = '-';
+    if (statStatus) {
+        statStatus.textContent = 'Idle';
+        statStatus.style.color = '';
+    }
+
+    if (profileSummary) profileSummary.textContent = 'Waiting for input...';
+    agentThought.textContent = 'I\'m ready to plan your next adventure.';
+
+    // Restore suggestions on new chat
+    if (suggestionsBlock) suggestionsBlock.classList.remove('hidden');
+
+    approvalSection.classList.add('hidden');
+
+    console.log('New chat thread created:', sessionId);
 }
 
 function formatPreview(plan) {
@@ -52,15 +113,22 @@ function appendMessage(role, text) {
 runBtn.addEventListener('click', async () => {
     const prompt = promptInput.value.trim();
     if (!prompt) return;
+    lastProgressMessage = '';
 
     // Reset Input
     promptInput.value = '';
+    promptInput.style.height = 'auto';
     appendMessage('user', prompt);
+
+    // Hide suggestions once the conversation starts
+    if (suggestionsBlock) suggestionsBlock.classList.add('hidden');
 
     // Update UI Status
     runBtn.disabled = true;
-    statStatus.textContent = 'Initializing...';
-    statStatus.style.color = 'var(--accent)';
+    if (statStatus) {
+        statStatus.textContent = 'Initializing...';
+        statStatus.style.color = 'var(--accent)';
+    }
     agentThought.textContent = 'Connecting to the Tripzy Engine...';
 
     try {
@@ -106,11 +174,13 @@ runBtn.addEventListener('click', async () => {
         console.error('Error message:', e.message);
         console.error('Error stack:', e.stack);
         appendMessage('system', `Connection failed: ${e.message}. API base: ${API_BASE}. Please check the console for details.`);
-        statStatus.textContent = 'Offline';
+        if (statStatus) statStatus.textContent = 'Offline';
     } finally {
         runBtn.disabled = false;
-        statStatus.textContent = 'Completed';
-        statStatus.style.color = 'var(--success)';
+        if (statStatus) {
+            statStatus.textContent = 'Completed';
+            statStatus.style.color = 'var(--success)';
+        }
     }
 });
 
@@ -119,14 +189,32 @@ const approvalSection = document.getElementById('approval-section');
 const approveBtn = document.getElementById('approveBtn');
 const cancelBtn = document.getElementById('cancelBtn');
 
+newChatBtn.addEventListener('click', () => {
+    if (runBtn.disabled) {
+        appendMessage('system', 'Please wait for the current request to finish before starting a new chat.');
+        return;
+    }
+    resetForNewChat();
+});
+
 function handleStreamEvent(data) {
     switch (data.type) {
         case 'status':
             agentThought.textContent = data.content;
-            statStatus.textContent = 'Working...';
+            if (statStatus) statStatus.textContent = 'Working...';
+
+            if (typeof data.content === 'string') {
+                if (data.content.startsWith('Executing Tool:')) {
+                    const match = data.content.match(/^Executing Tool:\s*([^\.\s]+).*$/i);
+                    const toolName = match ? match[1] : '';
+                    appendProgressMessage(mapToolToProgressMessage(toolName));
+                } else if (data.content.includes('Starting Graph')) {
+                    appendProgressMessage('Working on your request...');
+                }
+            }
             break;
         case 'node_complete':
-            statStatus.textContent = `Node: ${data.node}`;
+            if (statStatus) statStatus.textContent = `Node: ${data.node}`;
             if (data.node === 'Researcher') {
                 agentThought.textContent = 'Searching for local insights...';
             } else if (data.node === 'Critique') {
@@ -135,8 +223,10 @@ function handleStreamEvent(data) {
             break;
         case 'waiting_for_approval':
             currentThreadId = data.thread_id;
-            statStatus.textContent = 'Paused';
-            statStatus.style.color = 'var(--primary)';
+            if (statStatus) {
+                statStatus.textContent = 'Paused';
+                statStatus.style.color = 'var(--primary)';
+            }
             agentThought.textContent = 'The plan is ready for your review. Please approve to finalize.';
             if (data.preview) {
                 const previewMd = formatPreview(data.preview);
@@ -155,7 +245,7 @@ function handleStreamEvent(data) {
             break;
         case 'error':
             appendMessage('system', 'Error: ' + data.content);
-            statStatus.textContent = 'Error';
+            if (statStatus) statStatus.textContent = 'Error';
             break;
     }
 }
@@ -175,14 +265,14 @@ approveBtn.addEventListener('click', async () => {
 
     if (!response.ok) {
         appendMessage('system', `Approval failed: API error ${response.status}: ${response.statusText}`);
-        statStatus.textContent = 'Error';
+        if (statStatus) statStatus.textContent = 'Error';
         return;
     }
 
     const data = await response.json();
     if (data.status === 'ok') {
         appendMessage('agent', data.response);
-        statStatus.textContent = 'Completed';
+        if (statStatus) statStatus.textContent = 'Completed';
         agentThought.textContent = 'Trip successfully planned!';
     } else {
         appendMessage('system', 'Approval failed: ' + data.error);
@@ -192,7 +282,7 @@ approveBtn.addEventListener('click', async () => {
 
 cancelBtn.addEventListener('click', () => {
     approvalSection.classList.add('hidden');
-    statStatus.textContent = 'Cancelled';
+    if (statStatus) statStatus.textContent = 'Cancelled';
     agentThought.textContent = 'Approval cancelled by user.';
 });
 
@@ -202,4 +292,10 @@ promptInput.addEventListener('keydown', (e) => {
         e.preventDefault();
         runBtn.click();
     }
+});
+
+// Auto-resize textarea as user types
+promptInput.addEventListener('input', () => {
+    promptInput.style.height = 'auto';
+    promptInput.style.height = Math.min(promptInput.scrollHeight, 130) + 'px';
 });

@@ -128,7 +128,12 @@ def _extract_city_country(destination: str) -> tuple[str, str]:
 
 
 def _normalize_attractions_hits(raw_hits: Any, source: str = "Pinecone-Attractions") -> List[Dict[str, Any]]:
-    """Normalize Pinecone search/query hits into a consistent attractions schema."""
+    """Normalize Pinecone search/query hits into a consistent attractions schema.
+    
+    Handles both:
+    - Dict objects (from index.search with "result"."hits")
+    - ScoredVector objects (from index.query with "matches")
+    """
     normalized: List[Dict[str, Any]] = []
     seen_keys = set()
 
@@ -136,18 +141,35 @@ def _normalize_attractions_hits(raw_hits: Any, source: str = "Pinecone-Attractio
         return normalized
 
     for hit in raw_hits:
-        if not isinstance(hit, dict):
-            continue
+        # Convert ScoredVector to dict if needed
+        if isinstance(hit, dict):
+            hit_dict = hit
+        else:
+            # ScoredVector object - convert to dict
+            try:
+                hit_dict = {
+                    "id": getattr(hit, "id", None),
+                    "score": getattr(hit, "score", 0.0),
+                    "metadata": getattr(hit, "metadata", {}),
+                    "values": getattr(hit, "values", None),
+                }
+            except Exception:
+                continue
 
-        fields = hit.get("fields") or hit.get("metadata") or {}
+        fields = hit_dict.get("fields") or hit_dict.get("metadata") or {}
         if not isinstance(fields, dict):
             fields = {}
 
-        name = (fields.get("name") or hit.get("id") or hit.get("_id") or "Unknown").strip()
+        name = (fields.get("name") or hit_dict.get("id") or "Unknown")
+        if isinstance(name, str):
+            name = name.strip()
+        else:
+            name = str(name).strip()
+            
         category = str(fields.get("category", "")).strip()
         city = str(fields.get("city", "")).strip()
         country = str(fields.get("country", "")).strip()
-        score = hit.get("_score", hit.get("score", 0.0))
+        score = hit_dict.get("_score", hit_dict.get("score", 0.0))
         try:
             score = float(score)
         except (TypeError, ValueError):
@@ -176,6 +198,8 @@ def _normalize_attractions_hits(raw_hits: Any, source: str = "Pinecone-Attractio
 
     return normalized
 
+    return normalized
+
 
 def _query_attractions_index(
     query: str,
@@ -184,55 +208,47 @@ def _query_attractions_index(
     country: str = "",
     category_terms: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
-    """Query attractions namespace with optional metadata filters.
-
-    Tries the integrated `index.search` path first; falls back to embedding+query.
+    """Query attractions namespace using embedding similarity.
+    
+    STRATEGY: Pure semantic search based on user query embedding.
+    - Embeds the FULL user query (destination + interests + trip_type)
+    - Queries Pinecone attractions index for top-K semantically similar chunks
+    - NO metadata filtering (city/country/category filters disabled)
+    - Embedding similarity handles all matching logic
+    
+    Why: Metadata in attractions index is sparse/unreliable. 
+    Semantic similarity is more robust and returns actual relevant results.
     """
     pc, index = _get_pinecone_attractions_client_and_index()
     if not pc or not index:
         return []
 
-    filters: Dict[str, Any] = {}
-    if city:
-        filters["city"] = {"$eq": city}
-    if country:
-        filters["country"] = {"$eq": country}
-    if category_terms:
-        filters["category"] = {"$in": category_terms}
-
-    # Attempt integrated text search first (works with upsert_records text fields).
+    # Pure embedding-based search: no metadata filters
     try:
-        search_query: Dict[str, Any] = {"inputs": {"text": query}, "top_k": k}
-        if filters:
-            search_query["filter"] = filters
-        results = index.search(namespace="attractions", query=search_query)
-        hits = (((results or {}).get("result") or {}).get("hits") or [])
-        normalized = _normalize_attractions_hits(hits)
-        if normalized:
-            return normalized
-    except Exception as e:
-        print(f"  [Warning] Attractions index.search failed: {e}")
-
-    # Fallback: embed query and use vector query.
-    try:
+        print(f"  [Tool] Embedding query for semantic search: '{query[:60]}...'")
+        
         embedding_response = pc.inference.embed(
             model="llama-text-embed-v2",
             inputs=[query],
             parameters={"input_type": "query", "truncate": "END"},
         )
-        query_values = embedding_response[0]["values"]
-        query_kwargs: Dict[str, Any] = {
-            "vector": query_values,
-            "top_k": k,
-            "include_metadata": True,
-            "namespace": "attractions",
-        }
-        if filters:
-            query_kwargs["filter"] = filters
-        matches = index.query(**query_kwargs).get("matches", [])
-        return _normalize_attractions_hits(matches)
+        query_vector = embedding_response[0]["values"]
+        
+        # Query by embedding similarity (no filters)
+        matches = index.query(
+            vector=query_vector,
+            top_k=k,
+            include_metadata=True,
+            namespace="attractions",
+        ).get("matches", [])
+        
+        results = _normalize_attractions_hits(matches)
+        print(f"  [Tool] Semantic search returned {len(results)} matches")
+        
+        return results
+        
     except Exception as e:
-        print(f"  [Warning] Attractions vector query failed: {e}")
+        print(f"  [Warning] Attractions semantic search failed: {e}")
         return []
 
 
@@ -1424,92 +1440,47 @@ def suggest_attractions_tool(
     """
     print(f"  [Tool] Finding attractions in: {destination}")
 
-    # Build rich query
-    parts = [destination, "things to do", "attractions", "activities", "see"]
+    # Build rich query combining all user inputs
+    # This full query embedding will be matched against all RAG chunks
+    parts = [destination, "things to do", "attractions", "activities"]
     if interests:
         parts.extend(interests)
     if trip_type:
-        parts.append(f"{trip_type} activities")
+        parts.append(f"{trip_type} trip")
     query = " ".join(parts)
 
-    city, country = _extract_city_country(destination)
-    interest_text = " ".join(interests or []).lower()
-    restaurant_intent = any(
-        token in f"{interest_text} {trip_type.lower()}"
-        for token in ["restaurant", "food", "dining", "cafe", "gastronomy"]
+    # Query attractions index using pure semantic similarity
+    # (embedding of full query vs. chunks in Pinecone)
+    attractions = _query_attractions_index(
+        query,
+        k=10,
+        city="",
+        country="",
+        category_terms=None,
     )
-
-    category_terms = None
-    if restaurant_intent:
-        category_terms = [
-            "Restaurant",
-            "Restaurants",
-            "Dining",
-            "Food",
-            "Cafe",
-            "Market",
-            "Street Food",
-        ]
-
-    # IMPORTANT: For restaurant/dining queries, skip attractions index (built for landmarks)
-    # and go straight to wikivoyage RAG (best source for restaurant coverage).
-    attractions = []
-    if not restaurant_intent:
-        # Try dedicated Attractions index first (strict city-first, then relaxed).
-        attractions = _query_attractions_index(
-            query,
-            k=10,
-            city=city,
-            country=country,
-            category_terms=category_terms,
-        )
-        if len(attractions) < 4:
-            relaxed = _query_attractions_index(
-                query,
-                k=10,
-                city="",
-                country=country,
-                category_terms=category_terms,
-            )
-            if relaxed:
-                attractions = attractions + [
-                    item
-                    for item in relaxed
-                    if item.get("name") not in {a.get("name") for a in attractions}
-                ]
 
     if attractions:
         print(
-            f"  [Tool] Attractions index returned {len(attractions)} matches "
-            f"(city_filter={'on' if city else 'off'}, dining_intent={'yes' if restaurant_intent else 'no'})"
+            f"  [Tool] Attractions index returned {len(attractions)} matches via semantic similarity"
         )
         return json.dumps(attractions[:8], indent=2)
 
-    # Try RAG first (for restaurant queries, this is the primary source)
+    # Fallback: Try Wikivoyage RAG/web search
+    print("  [Tool] Attractions index returned 0 matches. Trying Wikivoyage RAG...")
     try:
         matches = _query_pinecone_inference(query, k=8, namespace="wikivoyage")
         if matches:
             attractions = []
             seen = set()
             for match in matches:
-                # If similarity is too low, the query is outside the mock DB's knowledge base.
                 if match.get("score", 0) < 0.35:
                     continue
 
                 metadata = match.get("metadata", {})
                 title = metadata.get("title", "Unknown")
-
-                # Filter by relevance: Title must match destination (fuzzy)
-                # This prevents "Paris" results showing up for "Tokyo" when index is small
-                if (
-                    destination.lower() not in title.lower()
-                    and title.lower() not in destination.lower()
-                ):
-                    continue
-
                 section = metadata.get("section", "")
                 snippet = metadata.get("text", "")[:400]
-                # Deduplicate
+                
                 key = f"{title}:{section}"
                 if key not in seen:
                     seen.add(key)
@@ -1519,8 +1490,8 @@ def suggest_attractions_tool(
                             "category": section,
                             "description": snippet,
                             "address": "",
-                            "city": city,
-                            "country": country,
+                            "city": destination,
+                            "country": "",
                             "latitude": None,
                             "longitude": None,
                             "source": "Wikivoyage",
@@ -1530,18 +1501,14 @@ def suggest_attractions_tool(
                     )
 
             if attractions:
-                print(f"  [Tool] RAG returned {len(attractions)} attractions")
+                print(f"  [Tool] Wikivoyage RAG returned {len(attractions)} attractions")
                 return json.dumps(attractions, indent=2)
-            else:
-                print(
-                    "  [Tool] RAG matches below similarity threshold or none found. Falling back."
-                )
 
     except Exception as e:
         print(f"  [Warning] Wikivoyage RAG failed: {e}")
 
-    # Fallback: DuckDuckGo targeting Wikivoyage
-    print("  [Tool] Falling back to DuckDuckGo for attraction suggestions")
+    # Fallback: DuckDuckGo web search
+    print("  [Tool] Falling back to DuckDuckGo web search...")
     try:
         search = DuckDuckGoSearchRun()
         search_query = f"site:wikivoyage.org {destination} things to do attractions"
@@ -1555,8 +1522,8 @@ def suggest_attractions_tool(
                     "category": "General",
                     "description": str(results)[:1000],
                     "address": "",
-                    "city": city,
-                    "country": country,
+                    "city": destination,
+                    "country": "",
                     "latitude": None,
                     "longitude": None,
                     "source": "Wikivoyage (web search)",
@@ -2700,16 +2667,11 @@ def search_points_of_interest_tool(
 
     except Exception as e:
         print(f"  [Tool] POI search failed: {e}")
-        # Mock Fallback for Test Environment Reliability
-        mock_pois = [
-            {"name": "Mock Eiffel Tower", "category": "SIGHTS", "rank": 1},
-            {"name": "Mock Louvre Museum", "category": "SIGHTS", "rank": 2},
-            {"name": "Mock Notre Dame", "category": "SIGHTS", "rank": 5},
-        ]
+        # Never leak internal exception details or unrelated mock places to end users.
         return json.dumps(
             {
-                "warning": f"Live POI search failed ({e}). Showing mock data.",
-                "results": mock_pois,
+                "warning": "Live POI data is temporarily unavailable.",
+                "results": [],
             },
             indent=2,
         )

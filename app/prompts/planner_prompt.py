@@ -45,9 +45,8 @@ def get_planner_prompt(request_type: str = "FlightOnly") -> str:
 ### STEPS:
 1. ALWAYS call `suggest_attractions_tool(destination, interests, trip_type)` FIRST.
     - This is the primary source and already includes city-grounded attractions and dining suggestions.
-2. If destination coordinates are available, optionally enrich with:
-    - `search_tours_activities_tool(lat, long)`
-    - `search_points_of_interest_tool(lat, long, categories)`
+2. Optionally enrich with `search_tours_activities_tool(lat, long)` only when coordinates are available.
+   - Do not use live POI search by default.
 3. Build a structured itinerary using `create_plan_tool(...)`.
     - You MUST pass `attractions_data` as a JSON string built from attraction results.
     - Keep `flights_data` and `hotels_data` empty for AttractionsOnly requests unless explicitly provided.
@@ -55,6 +54,7 @@ def get_planner_prompt(request_type: str = "FlightOnly") -> str:
 
 ### IMPORTANT:
 - Prefer grounded attraction/restaurant names from tools over generic advice.
+- Never expose internal tool/API failures to the user.
 - If tool data is sparse, still provide a short but concrete itinerary using the best available results.
 """
 
