@@ -181,19 +181,26 @@ class ExecuteResponse(BaseModel):
 # --- ENDPOINTS ---
 
 
-@app.get("/api/team_info", response_model=TeamInfoResponse)
+@app.get("/api/team_info")
 def get_team_info():
     """Returns student details (Course Requirement)."""
-    return {
-        "group_batch_order_number": "3_2",
-        "team_name": "Tripzy",
-        "students": [
-            {"name": "Noa Levi", "email": "noa-levi@campus.technion.ac.il"},
-            {"name": "Anya Sukachev", "email": "anya.sukachev@campus.technion.ac.il"},
-            {"name": "Alexa Birenbaum", "email": "alexab@campus.technion.ac.il"},
-            {"name": "Refael Levi", "email": "refaell@campus.technion.ac.il"},
-        ],
-    }
+    students = [
+        {"name": "Noa Levi", "email": "noa-levi@campus.technion.ac.il"},
+        {"name": "Anya Sukachev", "email": "anya.sukachev@campus.technion.ac.il"},
+        {"name": "Alexa Birenbaum", "email": "alexab@campus.technion.ac.il"},
+        {"name": "Refael Levi", "email": "refaell@campus.technion.ac.il"},
+    ]
+    students_lines = ",\n    ".join(json.dumps(s) for s in students)
+    body = (
+        '{\n'
+        '  "group_batch_order_number": "3_2",\n'
+        '  "team_name": "Tripzy",\n'
+        '  "students": [\n'
+        f'    {students_lines}\n'
+        '  ]\n'
+        '}'
+    )
+    return Response(content=body, media_type="application/json")
 
 
 @app.get("/api/agent_info", response_model=AgentInfoResponse)
