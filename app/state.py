@@ -164,10 +164,11 @@ class AgentState(TypedDict):
     user_query: str  # The original prompt
     steps: Annotated[List[Dict[str, Any]], operator.add]  # REQUIRED: Grading Log
 
-    # --- 4. ROUTING METADATA (new) ---
     request_type: Optional[
         str
     ]  # "Planning", "Discovery", "FlightOnly", "HotelOnly", "AttractionsOnly"
     researcher_calls: Optional[int]  # Count of researcher node invocations (loop guard)
     user_profile: Optional[UserProfile]  # Retrieved user preferences
     budget_warning: Optional[str]  # Budget-aware warning from critique
+    last_hotel_results: Optional[List[Dict[str, Any]]]  # Cached hotel search results
+    last_flight_results: Optional[List[Dict[str, Any]]]  # Cached flight search results

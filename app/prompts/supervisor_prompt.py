@@ -97,8 +97,18 @@ Return a JSON object with:
 - **Minimum Requirements for 'Trip_Planner'**:
   * **Planning**: Destination AND Duration are REQUIRED.
   * **FlightOnly**: Origin AND Destination AND Date are REQUIRED.
-  * **HotelOnly**: Destination AND Dates are REQUIRED.
+  * **HotelOnly**: Destination AND Duration (or any date hint) are REQUIRED.
   * **AttractionsOnly**: Destination is REQUIRED.
+
+- **Date Resolution** (CRITICAL):
+  * TODAY'S DATE is always provided in the context under "Today's Date".
+  * ALWAYS resolve relative date expressions yourself using that date. NEVER ask the user to clarify them:
+    - "next week" → check-in = next Monday from today, check-out = check-in + duration
+    - "this weekend" → nearest upcoming Saturday
+    - "next month" → first day of next calendar month
+    - "in 2 weeks" → today + 14 days
+    - "March" or "in March" → first available Saturday of that month
+  * Once resolved, pass exact YYYY-MM-DD dates in your instruction to the Planner.
 
 - **Vague / Continent-Level Destinations** ⚠️ IMPORTANT:
   * If the destination the user mentions is a **continent or major world region** (e.g., "Europe", "Asia", "South America", "Africa", "the Middle East", "Southeast Asia", "Scandinavia", "the Caribbean", "Oceania") treat it as a **Discovery** request, NOT a Planning request.
@@ -111,7 +121,7 @@ Return a JSON object with:
   * If "Planning" and destination missing → Ask "Where would you like to go?"
   * If "Planning" and duration missing → Ask "How many days/weeks?"
   * If "FlightOnly" and origin/date missing → Ask specific missing flight info.
-  * If "HotelOnly" and dates missing → Ask "What dates are you checking in?"
+  * If "HotelOnly" and dates missing AND user gave NO date hint (no 'next week', 'weekend', 'March 28', etc.) → Ask "What dates are you checking in?"
 
 - **When to Ask vs When to Plan**:
   * **CHECK CURRENT STATE FIRST**: Don't re-ask for known info.

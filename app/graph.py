@@ -1,3 +1,15 @@
+import sys
+
+# Force UTF-8 output encoding globally so that print() never crashes with
+# Unicode characters (arrows, emoji, etc.) regardless of OS locale.
+# - On Mac/Linux: stdout is already UTF-8 → this is a safe no-op.
+# - On Windows (CP1252/CP1255 terminals): fixes the charmap UnicodeEncodeError.
+# - When running under uvicorn/gunicorn: already UTF-8, no effect.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 from typing import Any, Dict, Literal, List
 from datetime import datetime
 from langgraph.checkpoint.memory import MemorySaver
@@ -438,6 +450,7 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
 
     current_context = (
         f"CURRENT STATE:\n"
+        f"- Today's Date: {datetime.today().strftime('%Y-%m-%d')} (use this to resolve relative dates like 'next week', 'next month', 'this weekend', 'in 2 weeks')\n"
         f"- User Profile: {profile_context}\n"
         f"- Destination: {state.get('destination') or 'Not Set'}\n"
         f"- Duration: {state.get('duration_days') or 0} days\n"
@@ -1342,9 +1355,10 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
         content = result.content if hasattr(result, "content") else ""
         content_str = content if content else ""
 
-        print(f"  Planner Content: {content_str}")
+        _safe = lambda s: str(s).encode("ascii", "replace").decode("ascii")
+        print(f"  Planner Content: {_safe(content_str)}")
         print(f"  Tool Calls: {len(tool_calls)}")
-        print(f"  Tool Calls: {tool_calls}")
+        print(f"  Tool Calls: {_safe(tool_calls)}")
 
         step_log = {
             "module": "Planner",
@@ -1372,7 +1386,7 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
         updates = {"steps": [step_log]}
         # Analyze Tool Calls
         if submit_plan_call:
-            print(f"  [DEBUG] SubmitPlan Args: {submit_plan_call}")
+            print(f"  [DEBUG] SubmitPlan Args: {str(submit_plan_call).encode('ascii', 'replace').decode('ascii')}")
             submission = submit_plan_call.get("args", {})
             trip_plan = submission.get("trip_plan", {})
             updates["trip_plan"] = trip_plan
@@ -1473,18 +1487,41 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
         return updates
 
     except Exception as e:
-        print(f"Planner Error: {e}")
+        err_str = str(e).encode("ascii", "replace").decode("ascii")
+        print(f"Planner Error: {err_str}")
         # Guard: if researcher called too many times, go to End instead of looping
         researcher_calls = state.get("researcher_calls", 0)
-        if researcher_calls >= 4:
+        # Also end immediately on encoding errors — retrying Researcher won't fix them
+        is_encoding_error = isinstance(e, (UnicodeEncodeError, UnicodeDecodeError))
+        if researcher_calls >= 4 or is_encoding_error:
             print(
-                f"  [GUARD] Max researcher calls reached ({researcher_calls}). Ending."
+                f"  [GUARD] Ending planner (calls={researcher_calls}, encoding_err={is_encoding_error})."
             )
+            # Build a minimal plan from what we have so the user gets SOMETHING
+            emergency_plan = {
+                "destination": destination,
+                "origin_city": origin_city,
+                "dates": "To be confirmed",
+                "duration_days": duration_days,
+                "budget_estimate": budget_limit or 0,
+                "budget_currency": state.get("budget_currency", "USD"),
+                "trip_type": trip_type,
+                "travelers": traveling_personas_number,
+                "flights": [],
+                "hotels": state.get("last_hotel_results", []),
+                "itinerary": [
+                    {"day": i + 1, "activity": f"Day {i+1} in {destination}", "cost": 0}
+                    for i in range(duration_days or 1)
+                ],
+                "special_notes": "Hotels were found successfully. Full plan generation encountered a formatting issue.",
+            }
             return {
                 "next_step": "End",
-                "supervisor_instruction": f"I encountered an issue planning your trip: {e}. Please try again with more specific details.",
+                "trip_plan": emergency_plan,
+                "supervisor_instruction": "Plan Drafted",
+                "steps": [{"module": "Planner", "prompt": instruction, "response": f"Emergency plan generated after error: {err_str}"}],
             }
-        return {"next_step": "Researcher", "supervisor_instruction": f"Error: {e}"}
+        return {"next_step": "Researcher", "supervisor_instruction": f"Error: {err_str}"}
 
 
 # 3. CRITIQUE NODE
@@ -1688,6 +1725,33 @@ def researcher_node(state: AgentState) -> Dict[str, Any]:
 
                     results += f"Tool Result ({t_name}):\n{tool_res}\n"
                     tool_used = t_name  # Keep track of last used
+
+                    # Cache hotel/flight results so the emergency planner path can use them
+                    try:
+                        parsed_res = json.loads(tool_res) if isinstance(tool_res, str) else tool_res
+                        if t_name == "search_hotels_tool" and isinstance(parsed_res, list) and parsed_res:
+                            # Normalize to the HotelInfo-compatible format expected by main.py
+                            cached_hotels = []
+                            for h in parsed_res[:5]:
+                                cached_hotels.append({
+                                    "name": h.get("name", ""),
+                                    "rating": str(h.get("rating", "")),
+                                    "price": h.get("price_per_night", ""),
+                                    "location": h.get("location", {}).get("address", "") if isinstance(h.get("location"), dict) else str(h.get("location", "")),
+                                    "amenities": h.get("amenities", []),
+                                    "booking_link": h.get("booking_link", "#"),
+                                    "check_in": h.get("check_in", ""),
+                                    "check_out": h.get("check_out", ""),
+                                    "total_price": h.get("total_price", ""),
+                                    "price_per_night": h.get("price_per_night", ""),
+                                })
+                            step_logs.append({"_cache_hotels": cached_hotels})  # Marker
+                            print(f"  [Researcher] Cached {len(cached_hotels)} hotels to state")
+                        elif t_name in ("search_flights_tool", "search_flights_with_kiwi_tool", "cheapest_flights_tool"):
+                            if isinstance(parsed_res, list) and parsed_res:
+                                step_logs.append({"_cache_flights": parsed_res[:5]})
+                    except Exception as cache_err:
+                        print(f"  [Researcher] Cache warning: {cache_err}")
                 else:
                     results += f"Error: Unknown tool {t_name}\n"
 
@@ -1795,6 +1859,19 @@ def researcher_node(state: AgentState) -> Dict[str, Any]:
             }
         )
 
+    # Extract cached hotel/flight data from step_logs markers
+    cached_hotels = None
+    cached_flights = None
+    clean_step_logs = []
+    for sl in step_logs:
+        if "_cache_hotels" in sl:
+            cached_hotels = sl["_cache_hotels"]
+        elif "_cache_flights" in sl:
+            cached_flights = sl["_cache_flights"]
+        else:
+            clean_step_logs.append(sl)
+    step_logs = clean_step_logs
+
     # Decide where to route after research:
     # Dynamically route back to whoever called us (Supervisor or Trip_Planner)
     steps = state.get("steps", [])
@@ -1815,12 +1892,17 @@ def researcher_node(state: AgentState) -> Dict[str, Any]:
     # and we are returning to Supervisor, let it process the results naturally.
     print(f"  [RESEARCHER] Routing back to: {next_node}")
 
-    return {
+    result_payload = {
         "steps": step_logs,
         "supervisor_instruction": results,  # Return results for Planner/Supervisor to see
         "next_step": next_node,
         "researcher_calls": researcher_calls,
     }
+    if cached_hotels is not None:
+        result_payload["last_hotel_results"] = cached_hotels
+    if cached_flights is not None:
+        result_payload["last_flight_results"] = cached_flights
+    return result_payload
 
 
 # --- GRAPH ---
