@@ -1130,12 +1130,18 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                 result.next_step = "Trip_Planner"
 
         # ── ATTRACTIONS QUERY GUARD ───────────────────────────────────────────
-        # AttractionsOnly needs to know what the user wants to see/do before we
-        # can run the RAG search. If the supervisor is routing to Attractions but
-        # we don't yet have a free-text description, ask for it first.
+        # AttractionsOnly needs a free-text description of what the user wants.
+        # Fall back (in order) to: explicit attractions_query state → raw user
+        # query → Supervisor-generated instruction. Only prompt the user again
+        # when all three sources are empty.
         if result.request_type == "AttractionsOnly" and result.next_step == "Attractions":
-            _attractions_q = state.get("attractions_query") or ""
-            if not _attractions_q.strip():
+            _attractions_q = (
+                state.get("attractions_query")
+                or state.get("user_query")
+                or result.instruction
+                or ""
+            ).strip()
+            if not _attractions_q:
                 print("  [ATTRACTIONS GUARD] No attractions_query in state — asking user.")
                 return _apply_updates(
                     {
@@ -1150,6 +1156,11 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                     extracted_prefs=result.preferences,
                     is_terminal=True,
                 )
+            elif not state.get("attractions_query"):
+                # Backfill so the Attractions node and downstream state always
+                # have an explicit attractions_query set.
+                print(f"  [ATTRACTIONS GUARD] Backfilling attractions_query: {_attractions_q!r}")
+                result.__dict__["_backfill_attractions_q"] = _attractions_q
         # ─────────────────────────────────────────────────────────────────────
 
         updates = {
@@ -1169,6 +1180,13 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             "request_type": result.request_type,
             "pending_stages": result.pending_stages if result.pending_stages else (state.get("pending_stages") or []),
             "steps": [step_log],
+            # Persist backfilled attractions_query so the Attractions node has it.
+            "attractions_query": (
+                state.get("attractions_query")
+                or getattr(result, "_backfill_attractions_q", None)
+                or state.get("user_query")
+                or ""
+            ) if result.request_type == "AttractionsOnly" else state.get("attractions_query", ""),
         }
         return _apply_updates(
             updates,
