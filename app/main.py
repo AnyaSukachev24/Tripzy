@@ -379,10 +379,14 @@ def execute_agent(request: ExecuteRequest):
                     final_text = resp
                     break
 
+        # For combined requests (e.g. flights + hotels), surface all stage results
+        # so the frontend can render each as a separate bubble.
+        completed_stages = final_state.get("completed_stage_responses") or []
         data = {
             "status": "ok",
             "error": None,
             "response": final_text,
+            "responses": completed_stages if len(completed_stages) > 1 else None,
             "steps": steps,
         }
         return Response(content=json.dumps(data, indent=2, default=str),

@@ -1695,6 +1695,8 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
             updates["steps"] = [step_log]
             updates["supervisor_instruction"] = final_msg
             if request_type in ("FlightOnly", "HotelOnly"):
+                # Record this stage's result; operator.add accumulates across stages
+                updates["completed_stage_responses"] = [final_msg]
                 if pending_stages:
                     updates["next_step"] = "Supervisor"
                 else:
