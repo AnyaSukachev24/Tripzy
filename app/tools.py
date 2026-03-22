@@ -2383,6 +2383,35 @@ def resolve_airport_code_tool(keyword: str) -> str:
 
     """
     print(f"  [Tool] Resolving airport code for: {keyword}")
+
+    # Fast alias lookup — skip the API call for well-known resort/city names
+    _AIRPORT_ALIASES: Dict[str, str] = {
+        # Bali / Indonesia
+        "bali": "DPS", "seminyak": "DPS", "ubud": "DPS", "kuta": "DPS",
+        "nusa dua": "DPS", "denpasar": "DPS", "canggu": "DPS", "jimbaran": "DPS",
+        "sanur": "DPS", "legian": "DPS",
+        # Thailand
+        "phuket": "HKT", "patong": "HKT", "kata beach": "HKT",
+        "chiang mai": "CNX", "koh samui": "USM",
+        # Maldives
+        "maldives": "MLE", "male": "MLE",
+        # Tenerife / Canaries
+        "tenerife": "TFS", "tenerife south": "TFS", "tenerife north": "TCI",
+        "gran canaria": "LPA", "lanzarote": "ACE",
+        # Common aliases already in fallback map but also short-circuit here
+        "tel aviv": "TLV", "paris": "PAR", "london": "LON", "rome": "ROM",
+        "new york": "NYC", "tokyo": "TYO", "istanbul": "IST", "barcelona": "BCN",
+        "madrid": "MAD", "berlin": "BER", "amsterdam": "AMS", "bangkok": "BKK",
+        "dubai": "DXB", "singapore": "SIN", "athens": "ATH", "budapest": "BUD",
+        "vienna": "VIE", "milan": "MXP", "prague": "PRG", "tbilisi": "TBS",
+        "sofia": "SOF", "warsaw": "WAW", "bucharest": "OTP",
+    }
+    _kw_lower = keyword.strip().lower()
+    if _kw_lower in _AIRPORT_ALIASES:
+        _iata = _AIRPORT_ALIASES[_kw_lower]
+        print(f"  [Tool] Alias shortcut: {keyword} → {_iata}")
+        return json.dumps([{"iataCode": _iata, "name": keyword, "cityName": keyword, "type": "AIRPORT"}])
+
     from app.amadeus_rate_limiter import get_amadeus_client, amadeus_call
 
     amadeus = get_amadeus_client()

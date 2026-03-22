@@ -277,7 +277,11 @@ function handleStreamEvent(data) {
                 statStatus.textContent = 'Paused';
                 statStatus.style.color = 'var(--primary)';
             }
-            agentThought.textContent = 'The plan is ready for your review. Please approve to finalize.';
+            agentThought.textContent = 'Waiting for your confirmation.';
+            // Show the approval question / option summary as a chat bubble
+            if (data.message) {
+                appendAgentMessage(data.message, []);
+            }
             if (data.preview) {
                 const previewMd = formatPreview(data.preview);
                 const previewEl = document.getElementById('plan-preview');

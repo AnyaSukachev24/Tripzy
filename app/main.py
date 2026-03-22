@@ -109,16 +109,6 @@ def format_plan_to_markdown(plan: Dict[str, Any]) -> str:
                 md += f"- {details}\n"
         md += "\n"
 
-    # --- ITINERARY ---
-    md += "#### 📅 Itinerary\n"
-    itinerary = plan.get("itinerary", [])
-    if isinstance(itinerary, list):
-        for item in itinerary:
-            day = item.get("day", "?")
-            activity = item.get("activity", "No activity")
-            cost = item.get("cost", 0)
-            md += f"- **Day {day}**: {activity} (${cost})\n"
-
     return md
 
 
@@ -368,9 +358,13 @@ def execute_agent(request: ExecuteRequest):
         INTERNAL_TAGS = {"Plan Drafted", "Done", "None", ""}
 
         if plan:
-            final_text = format_plan_to_markdown(plan)
-            if budget_warning:
-                final_text = f"⚠️ **Budget Note:** {budget_warning}\n\n{final_text}"
+            plan_trip_type = plan.get("trip_type", "") if isinstance(plan, dict) else ""
+            if plan_trip_type in ("FlightOnly", "HotelOnly") and instruction and instruction not in INTERNAL_TAGS:
+                final_text = instruction
+            else:
+                final_text = format_plan_to_markdown(plan)
+                if budget_warning:
+                    final_text = f"⚠️ **Budget Note:** {budget_warning}\n\n{final_text}"
         elif instruction and instruction not in INTERNAL_TAGS:
             final_text = instruction
         else:
@@ -472,11 +466,13 @@ async def stream_agent(request: ExecuteRequest):
 
                 if snapshot.next:
                     draft_plan = snapshot.values.get("trip_plan")
+                    approval_question = snapshot.values.get("supervisor_instruction", "")
                     await queue.put(
                         {
                             "type": "waiting_for_approval",
                             "thread_id": thread_id,
                             "preview": draft_plan,
+                            "message": approval_question,
                         }
                     )
                 else:
