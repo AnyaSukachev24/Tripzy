@@ -219,8 +219,15 @@ runBtn.addEventListener('click', async () => {
             return;
         }
 
-        // Display agent response + collapsible steps
-        appendAgentMessage(data.response || '(no response)', data.steps || []);
+        // For combined requests (flights + hotels etc.), each stage gets its own bubble.
+        if (data.responses && data.responses.length > 1) {
+            data.responses.forEach((r, idx) => {
+                const isLast = idx === data.responses.length - 1;
+                appendAgentMessage(r, isLast ? (data.steps || []) : []);
+            });
+        } else {
+            appendAgentMessage(data.response || '(no response)', data.steps || []);
+        }
 
         agentThought.textContent = 'Done.';
         if (statStatus) {

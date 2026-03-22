@@ -192,3 +192,8 @@ class AgentState(TypedDict):
     # Free-text description of what the user wants to see/do (used as RAG query).
     # Set by supervisor_node when request_type == AttractionsOnly.
     attractions_query: Optional[str]
+
+    # --- 7. COMBINED REQUEST STAGE RESULTS ---
+    # Accumulates the formatted response for each completed stage (FlightOnly, HotelOnly, etc.)
+    # so the API can return all of them and the UI can render each as a separate bubble.
+    completed_stage_responses: Annotated[List[str], operator.add]

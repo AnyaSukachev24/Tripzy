@@ -102,6 +102,99 @@ def _is_retriable_error(exc: Exception) -> bool:
     )
 
 
+def _classify_error(exc: Exception, service_name: str = "") -> dict:
+    """
+    Classify an exception into a user-friendly category.
+
+    Returns a dict with:
+      - ``code``     – machine-readable error code for the JSON response
+      - ``user_msg`` – friendly Markdown message to show the user
+    """
+    msg = str(exc).lower()
+
+    if _is_rate_limit_error(exc):
+        return {
+            "code": "rate_limit",
+            "user_msg": (
+                "⏳ Our AI assistant is a bit busy right now due to high demand. "
+                "Please wait a moment and try again."
+            ),
+        }
+
+    if (
+        "401" in msg
+        or "403" in msg
+        or "unauthorized" in msg
+        or "invalid api key" in msg
+        or "authentication" in msg
+        or "access denied" in msg
+    ):
+        return {
+            "code": "auth_error",
+            "user_msg": (
+                "🔒 There's a configuration issue on our end and we couldn't "
+                "authenticate with one of our services. Our team has been notified."
+            ),
+        }
+
+    if (
+        "timeout" in msg
+        or "timed out" in msg
+        or "connection" in msg
+        or "refused" in msg
+        or "unreachable" in msg
+        or "socket" in msg
+        or "errno" in msg
+        or "network" in msg
+    ):
+        return {
+            "code": "network_error",
+            "user_msg": (
+                "🌐 We had trouble connecting to one of our services. "
+                "Please check your connection and try again in a moment."
+            ),
+        }
+
+    if (
+        "500" in msg
+        or "502" in msg
+        or "503" in msg
+        or "bad gateway" in msg
+        or "service unavailable" in msg
+        or "server error" in msg
+        or "internal server" in msg
+    ):
+        return {
+            "code": "api_error",
+            "user_msg": (
+                "⚠️ One of our services returned an unexpected error. "
+                "Please try again in a moment."
+            ),
+        }
+
+    if service_name:
+        # Make the service name human-readable: "search_flights_tool" → "flight search"
+        label = (
+            service_name
+            .replace("search_", "")
+            .replace("_tool", "")
+            .replace("_", " ")
+            .strip()
+        )
+        return {
+            "code": "tool_error",
+            "user_msg": (
+                f"🔍 The {label} service ran into an issue and couldn't complete "
+                "the search. You may want to try different dates or parameters."
+            ),
+        }
+
+    return {
+        "code": "unknown",
+        "user_msg": "😕 Something unexpected happened on our end. Please try again.",
+    }
+
+
 def _wait_for_rate_limit(retry_state) -> float:
     """
     Custom wait strategy:
@@ -855,18 +948,40 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
 
         # ────────────────────────────────────────────────────────────────────────
         # VAGUE DESTINATION GUARD
-        # If the user says "Europe", "Asia", etc. — not a real destination.
-        # Ask them to specify a city or country.
+        # If the user says "Europe", "Caribbean", etc. — not a real destination.
+        # Ask them to pick a specific city, with tailored examples per region.
         # ────────────────────────────────────────────────────────────────────────
         VAGUE_DESTINATIONS = {
             "europe", "european", "south america", "north america", "latin america",
             "central america", "asia", "southeast asia", "east asia", "south asia",
             "middle east", "africa", "sub-saharan africa", "north africa", "oceania",
-            "pacific", "caribbean", "scandinavia", "nordic", "mediterranean", "balkans",
-            "eastern europe", "western europe", "central asia", "the world",
-            "somewhere", "anywhere", "abroad", "overseas", "international",
-            "a nice place", "a good place", "somewhere nice", "somewhere warm",
-            "somewhere cold", "somewhere sunny", "somewhere exotic",
+            "pacific", "caribbean", "caribbeans", "scandinavia", "nordic",
+            "mediterranean", "balkans", "eastern europe", "western europe",
+            "central asia", "the world", "somewhere", "anywhere", "abroad",
+            "overseas", "international", "a nice place", "a good place",
+            "somewhere nice", "somewhere warm", "somewhere cold", "somewhere sunny",
+            "somewhere exotic",
+        }
+
+        _REGION_EXAMPLES = {
+            "caribbean":      "Aruba, Bahamas (Nassau), Barbados, Curaçao, or Cancún",
+            "caribbeans":     "Aruba, Bahamas (Nassau), Barbados, Curaçao, or Cancún",
+            "europe":         "Paris, Rome, Barcelona, Amsterdam, or Prague",
+            "european":       "Paris, Rome, Barcelona, Amsterdam, or Prague",
+            "mediterranean":  "Barcelona, Nice, Santorini, Dubrovnik, or Malta",
+            "scandinavia":    "Stockholm, Copenhagen, Oslo, Helsinki, or Reykjavik",
+            "nordic":         "Stockholm, Copenhagen, Oslo, Helsinki, or Reykjavik",
+            "southeast asia": "Bangkok, Bali, Singapore, Ho Chi Minh City, or Kuala Lumpur",
+            "east asia":      "Tokyo, Seoul, Hong Kong, Taipei, or Shanghai",
+            "south asia":     "Mumbai, Delhi, Colombo, Kathmandu, or Dhaka",
+            "middle east":    "Dubai, Tel Aviv, Amman, Doha, or Muscat",
+            "africa":         "Cape Town, Marrakech, Nairobi, Cairo, or Lagos",
+            "north africa":   "Marrakech, Cairo, Tunis, Casablanca, or Alexandria",
+            "south america":  "Buenos Aires, Rio de Janeiro, Lima, Medellín, or Cartagena",
+            "latin america":  "Mexico City, Bogotá, Buenos Aires, Lima, or San José",
+            "central america":"San José, Panama City, Guatemala City, or Antigua",
+            "oceania":        "Sydney, Auckland, Melbourne, Fiji, or Bora Bora",
+            "pacific":        "Sydney, Auckland, Honolulu, Fiji, or Bora Bora",
         }
 
         def _is_vague_destination(dest: str) -> bool:
@@ -874,13 +989,38 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                 return False
             return dest.strip().lower() in VAGUE_DESTINATIONS
 
+        def _vague_dest_message(dest: str, request_type: str) -> str:
+            key = dest.strip().lower()
+            examples = _REGION_EXAMPLES.get(key)
+            region_name = dest.strip().title()
+            if examples:
+                return (
+                    f"**{region_name}** is a broad region — flights and hotels need a specific "
+                    f"city or island. Which one did you have in mind? For example: {examples}."
+                )
+            service = {"FlightOnly": "flights", "HotelOnly": "hotels"}.get(request_type, "this search")
+            return (
+                f"**{region_name}** is a broad region and {service} require a specific city or "
+                "destination. Could you tell me which city or place you'd like to visit?"
+            )
+
         raw_destination = result.destination or state.get("destination") or ""
-        if result.request_type in ("FlightOnly", "HotelOnly", "AttractionsOnly") and _is_vague_destination(raw_destination):
+        # Fallback: LLM sometimes clears destination when it recognises a vague region.
+        # Scan the raw user query for any known vague keyword so the guard still fires.
+        if not raw_destination:
+            _uq_lower = user_query.lower()
+            for _vd in sorted(VAGUE_DESTINATIONS, key=len, reverse=True):  # longest match first
+                if _vd in _uq_lower:
+                    raw_destination = _vd
+                    print(f"  [VAGUE DEST FALLBACK] Extracted '{_vd}' from user query (LLM cleared destination)")
+                    break
+        if result.request_type in ("FlightOnly", "HotelOnly") and _is_vague_destination(raw_destination):
             print(f"  [VAGUE DEST GUARD] '{raw_destination}' is a region → asking for specific city.")
+            _vague_msg = _vague_dest_message(raw_destination, result.request_type)
             return _apply_updates(
                 {
                     "next_step": "End",
-                    "supervisor_instruction": "Which city or destination did you have in mind?",
+                    "supervisor_instruction": _vague_msg,
                     "destination": "",
                     "request_type": result.request_type,
                     "pending_stages": result.pending_stages or [],
@@ -1037,12 +1177,18 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                 result.next_step = "Trip_Planner"
 
         # ── ATTRACTIONS QUERY GUARD ───────────────────────────────────────────
-        # AttractionsOnly needs to know what the user wants to see/do before we
-        # can run the RAG search. If the supervisor is routing to Attractions but
-        # we don't yet have a free-text description, ask for it first.
+        # AttractionsOnly needs a free-text description of what the user wants.
+        # Fall back (in order) to: explicit attractions_query state → raw user
+        # query → Supervisor-generated instruction. Only prompt the user again
+        # when all three sources are empty.
         if result.request_type == "AttractionsOnly" and result.next_step == "Attractions":
-            _attractions_q = state.get("attractions_query") or ""
-            if not _attractions_q.strip():
+            _attractions_q = (
+                state.get("attractions_query")
+                or state.get("user_query")
+                or result.instruction
+                or ""
+            ).strip()
+            if not _attractions_q:
                 print("  [ATTRACTIONS GUARD] No attractions_query in state — asking user.")
                 return _apply_updates(
                     {
@@ -1057,6 +1203,11 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                     extracted_prefs=result.preferences,
                     is_terminal=True,
                 )
+            elif not state.get("attractions_query"):
+                # Backfill so the Attractions node and downstream state always
+                # have an explicit attractions_query set.
+                print(f"  [ATTRACTIONS GUARD] Backfilling attractions_query: {_attractions_q!r}")
+                result.__dict__["_backfill_attractions_q"] = _attractions_q
         # ─────────────────────────────────────────────────────────────────────
 
         updates = {
@@ -1077,6 +1228,34 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             "pending_stages": result.pending_stages if result.pending_stages else (state.get("pending_stages") or []),
             "steps": [step_log],
         }
+
+        # ── ATTRACTIONS_QUERY PERSISTENCE ────────────────────────────────────
+        # a) Follow-up: user already had an attractions result and is now asking
+        #    for something different (e.g. "and museums? maybe local history").
+        #    → OVERWRITE attractions_query with the fresh user message so the
+        #      Attractions node searches only the new intent.
+        # b) First-time / backfill: no prior attractions_query in state yet.
+        #    → Fill from the fallback chain: existing value → backfill tag →
+        #      current user_query.
+        if result.request_type == "AttractionsOnly":
+            _prior_attr_q = (state.get("attractions_query") or "").strip()
+            if _prior_attr_q and user_query.strip():
+                print(
+                    f"  [ATTRACTIONS FOLLOW-UP] Replacing stale query "
+                    f"{_prior_attr_q!r} with new intent {user_query.strip()!r}"
+                )
+                updates["attractions_query"] = user_query.strip()
+            else:
+                updates["attractions_query"] = (
+                    _prior_attr_q
+                    or getattr(result, "_backfill_attractions_q", None)
+                    or user_query.strip()
+                    or ""
+                )
+        else:
+            updates["attractions_query"] = state.get("attractions_query", "")
+        # ─────────────────────────────────────────────────────────────────────
+
         return _apply_updates(
             updates,
             extracted_prefs=result.preferences,
@@ -1085,10 +1264,8 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
         )
     except Exception as e:
         print(f"  Supervisor Error: {str(e)}")
-        if _is_rate_limit_error(e):
-            error_msg = "⚠️ The AI service is temporarily busy (rate limit). Please wait a moment and try again."
-        else:
-            error_msg = f"System Error: {str(e)}"
+        classified = _classify_error(e)
+        error_msg = classified["user_msg"]
         return _apply_updates(
             {
                 "next_step": "End",
@@ -1100,6 +1277,33 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
 
 
 # ... (Previous code remains the same up to Planner Node)
+
+
+def _validate_plan_output(request_type: str, trip_plan_data: dict) -> tuple:
+    """
+    Validates that the plan actually contains the expected data for the request type.
+    Returns (is_valid: bool, sorry_message: str | None).
+    """
+    if request_type == "FlightOnly":
+        outbound = trip_plan_data.get("outbound_flight") or {}
+        if not outbound:
+            flights = trip_plan_data.get("flights") or []
+            outbound = flights[0] if flights else {}
+        if not outbound:
+            return False, (
+                "Sorry, we couldn't find any available flights for your route. "
+                "This may be due to limited availability or a temporary issue with the "
+                "flight search. Please try different dates or a different route."
+            )
+    elif request_type == "HotelOnly":
+        hotels = trip_plan_data.get("hotels") or []
+        if not hotels:
+            return False, (
+                "Sorry, we couldn't find any available hotels for your destination. "
+                "This may be due to limited availability or a temporary issue with the "
+                "hotel search. Please try adjusting your dates or preferences."
+            )
+    return True, None
 
 
 def _build_staged_approval_msg(
@@ -1161,7 +1365,6 @@ def _build_staged_approval_msg(
         elif price_raw:
             msg += f"**Price:** {price_raw}\n"
 
-        msg += "\n**Do you want to book this flight? (yes / no)**"
         return msg
 
     elif request_type == "HotelOnly":
@@ -1193,7 +1396,6 @@ def _build_staged_approval_msg(
             amenity_strs = [str(a) for a in amenities[:5]]
             msg += f"**Amenities:** {', '.join(amenity_strs)}\n"
 
-        msg += "\n**Do you want to book this hotel? (yes / no)**"
         return msg
 
     else:
@@ -1458,6 +1660,17 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
             final_response_from_llm = submission.get("final_response", "")
             updates["trip_plan"] = trip_plan_data
 
+            # ── OUTPUT VALIDATION: abort early if no usable results were found ──
+            is_valid, sorry_msg = _validate_plan_output(request_type, trip_plan_data)
+            if not is_valid:
+                print(f"  [VALIDATION] No results for {request_type}: {sorry_msg}")
+                step_log["response"] = sorry_msg
+                updates["trip_plan"] = None  # clear so /api/execute shows instruction, not empty plan
+                updates["steps"] = [step_log]
+                updates["supervisor_instruction"] = sorry_msg
+                updates["next_step"] = "End"
+                return updates
+
             # Build a staged, single-option approval message instead of passing
             # the raw LLM response. AttractionsOnly gets the LLM text (no gate needed).
             approval_msg = _build_staged_approval_msg(
@@ -1470,11 +1683,26 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
                 budget_currency=budget_currency or "USD",
                 fallback_response=final_response_from_llm,
             )
-            step_log["response"] = approval_msg
+            # No approval gate for flights or hotels — present result immediately.
+            # If more stages are pending (e.g. hotel after flight, attractions after hotel),
+            # continue to Supervisor to handle the next stage.
+            pending_stages = state.get("pending_stages") or []
+            # Append closing message only on the very last stage
+            final_msg = approval_msg
+            if request_type in ("FlightOnly", "HotelOnly") and not pending_stages:
+                final_msg = approval_msg + "\n\n---\n✈️ Enjoy your trip! Safe travels from the Tripzy team. 🌍"
+            step_log["response"] = final_msg
             updates["steps"] = [step_log]
-            updates["supervisor_instruction"] = approval_msg
-            # Skip Critique for staged flow — route directly to Human_Approval
-            updates["next_step"] = "Human_Approval"
+            updates["supervisor_instruction"] = final_msg
+            if request_type in ("FlightOnly", "HotelOnly"):
+                # Record this stage's result; operator.add accumulates across stages
+                updates["completed_stage_responses"] = [final_msg]
+                if pending_stages:
+                    updates["next_step"] = "Supervisor"
+                else:
+                    updates["next_step"] = "End"
+            else:
+                updates["next_step"] = "Human_Approval"
             return updates
 
         if not tool_calls:
@@ -1557,10 +1785,8 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
                             if prior_sig == new_call_sig:
                                 exact_run_count += 1
                     except Exception:
-                        # Fallback: if we can't parse, do a loose name-only check as before
-                        if new_tool_name in prior_prompt:
-                            exact_run_count += 1
-            if exact_run_count >= 1:
+                        pass  # skip unparseable steps — don't count as duplicate
+            if exact_run_count >= 2:
                 print(
                     f"  [DEDUP GUARD] Planner repeating identical tool call '{new_tool_name}' with same args (already ran {exact_run_count}x). Forcing submit."
                 )
@@ -1595,7 +1821,7 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
                     or "no flights" in last_response.lower()
                     or last_response.strip() == ""
                 )
-                if no_results and new_tool_city:
+                if no_results:
                     if "hotel" in new_tool_name:
                         user_msg = (
                             f"I couldn't find available hotels in {destination} for those dates. "
@@ -1618,7 +1844,8 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
                         "Would you like to refine the search or try different options?"
                     )
                 updates["supervisor_instruction"] = user_msg
-                updates["next_step"] = "Human_Approval"
+                _pending = state.get("pending_stages") or []
+                updates["next_step"] = "Supervisor" if _pending else "End"
                 return updates
 
         # Serialize tool calls for Researcher
@@ -1664,7 +1891,7 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
                 "supervisor_instruction": "Plan Drafted",
                 "steps": [{"module": "Trip_Planner", "prompt": instruction, "response": f"Emergency plan generated after error: {err_str}"}],
             }
-        return {"next_step": "Researcher", "supervisor_instruction": f"Error: {err_str}"}
+        return {"next_step": "Researcher", "supervisor_instruction": _classify_error(e)["user_msg"]}
 
 
 # 3. CRITIQUE NODE
@@ -1816,6 +2043,7 @@ def researcher_node(state: AgentState) -> Dict[str, Any]:
     if instruction.startswith("TOOL_CALLS:"):
         import json
 
+        _current_tool = ""  # tracks the tool being executed for error reporting
         try:
             json_str = instruction.replace("TOOL_CALLS:", "").strip()
             tool_calls = json.loads(json_str)
@@ -1844,6 +2072,7 @@ def researcher_node(state: AgentState) -> Dict[str, Any]:
 
             for tc in tool_calls:
                 t_name = tc["name"]
+                _current_tool = t_name
                 t_args = tc["args"]
 
                 if t_name == "create_plan_tool" and isinstance(t_args, dict):
@@ -1908,14 +2137,16 @@ def researcher_node(state: AgentState) -> Dict[str, Any]:
                     results += f"Error: Unknown tool {t_name}\n"
 
         except Exception as e:
+            _err = _classify_error(e, service_name=_current_tool)
             error_log = {
                 "module": "Researcher",
                 "prompt": "Tool Execution",
-                "response": f"Error: {str(e)}",
+                "response": _err["user_msg"],
+                "error_code": _err["code"],
             }
-            print(f"  [Error] Tool Execution Failed: {e}")
+            print(f"  [Error] Tool Execution Failed ({_err['code']}): {e}")
             step_logs.append(error_log)
-            results += f"Tool Execution Error: {str(e)}\n"
+            results += f"Tool Error: {_err['user_msg']}\n"
 
     # Check for Legacy Structured calls (Backwards compatibility if needed, or if Supervisor uses it)
     elif "FLIGHTS:" in instruction or "HOTELS:" in instruction:
@@ -2139,15 +2370,18 @@ def attractions_node(state: AgentState) -> Dict[str, Any]:
     messages = list(state.get("messages", []))
     messages.append(AIMessage(content=formatted_response))
 
+    closing = "\n\n---\n✈️ Enjoy your trip! Safe travels from the Tripzy team. 🌍"
+    final_attractions_response = formatted_response + closing
+
     step_log = {
         "module": "Attractions",
         "prompt": user_query,
-        "response": formatted_response,
+        "response": final_attractions_response,
     }
 
     return {
         "messages": messages,
-        "supervisor_instruction": formatted_response,
+        "supervisor_instruction": final_attractions_response,
         "next_step": "End",
         "steps": [step_log],
     }
