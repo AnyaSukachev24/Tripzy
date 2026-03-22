@@ -11,7 +11,7 @@ import asyncio
 import time
 
 # Import the Graph
-from app.graph import graph
+from app.graph import graph, _classify_error
 from app.callbacks import CostCallbackHandler
 from app.conversation_logger import conversation_logger, _safe_json_default
 
@@ -163,6 +163,7 @@ class ExecuteResponse(BaseModel):
     response: Optional[str]
     steps: List[Dict[str, Any]]
     error: Optional[str] = None
+    error_code: Optional[str] = None
 
 
 # --- ENDPOINTS ---
@@ -387,11 +388,12 @@ def execute_agent(request: ExecuteRequest):
         return Response(content=json.dumps(data, indent=2, default=str),
                         media_type="application/json")
     except Exception as e:
-        error_msg = "Sorry, we couldn't process your request. Please try again later."
+        _err = _classify_error(e)
         data = {
             "status": "error",
             "error": str(e),
-            "response": error_msg,
+            "error_code": _err["code"],
+            "response": _err["user_msg"],
             "steps": [],
         }
         return Response(content=json.dumps(data, indent=2),
@@ -575,18 +577,15 @@ async def stream_agent(request: ExecuteRequest):
 
                 error_trace = traceback.format_exc()
                 print(f"  [STREAM ERROR] {error_trace}")
-                error_msg = str(e)
-                if (
-                    "Errno 22" in error_msg
-                    or "RESOURCE_EXHAUSTED" in error_msg
-                    or "429" in error_msg
-                    or "Too Many Requests" in error_msg
-                ):
-                    error_msg = "⚠️ The AI service is temporarily busy (rate limit). Please wait a moment and try again."
+                _err = _classify_error(e)
                 conversation_logger.log_message(
-                    thread_id, "error", f"Error: {error_msg}"
+                    thread_id, "error", f"Error [{_err['code']}]: {_err['user_msg']}"
                 )
-                await queue.put({"type": "error", "content": f"Error: {error_msg}"})
+                await queue.put({
+                    "type": "error",
+                    "content": _err["user_msg"],
+                    "error_code": _err["code"],
+                })
             finally:
                 await queue.put(None)  # Sentinel: graph is done
 

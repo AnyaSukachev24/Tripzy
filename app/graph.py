@@ -102,6 +102,99 @@ def _is_retriable_error(exc: Exception) -> bool:
     )
 
 
+def _classify_error(exc: Exception, service_name: str = "") -> dict:
+    """
+    Classify an exception into a user-friendly category.
+
+    Returns a dict with:
+      - ``code``     – machine-readable error code for the JSON response
+      - ``user_msg`` – friendly Markdown message to show the user
+    """
+    msg = str(exc).lower()
+
+    if _is_rate_limit_error(exc):
+        return {
+            "code": "rate_limit",
+            "user_msg": (
+                "⏳ Our AI assistant is a bit busy right now due to high demand. "
+                "Please wait a moment and try again."
+            ),
+        }
+
+    if (
+        "401" in msg
+        or "403" in msg
+        or "unauthorized" in msg
+        or "invalid api key" in msg
+        or "authentication" in msg
+        or "access denied" in msg
+    ):
+        return {
+            "code": "auth_error",
+            "user_msg": (
+                "🔒 There's a configuration issue on our end and we couldn't "
+                "authenticate with one of our services. Our team has been notified."
+            ),
+        }
+
+    if (
+        "timeout" in msg
+        or "timed out" in msg
+        or "connection" in msg
+        or "refused" in msg
+        or "unreachable" in msg
+        or "socket" in msg
+        or "errno" in msg
+        or "network" in msg
+    ):
+        return {
+            "code": "network_error",
+            "user_msg": (
+                "🌐 We had trouble connecting to one of our services. "
+                "Please check your connection and try again in a moment."
+            ),
+        }
+
+    if (
+        "500" in msg
+        or "502" in msg
+        or "503" in msg
+        or "bad gateway" in msg
+        or "service unavailable" in msg
+        or "server error" in msg
+        or "internal server" in msg
+    ):
+        return {
+            "code": "api_error",
+            "user_msg": (
+                "⚠️ One of our services returned an unexpected error. "
+                "Please try again in a moment."
+            ),
+        }
+
+    if service_name:
+        # Make the service name human-readable: "search_flights_tool" → "flight search"
+        label = (
+            service_name
+            .replace("search_", "")
+            .replace("_tool", "")
+            .replace("_", " ")
+            .strip()
+        )
+        return {
+            "code": "tool_error",
+            "user_msg": (
+                f"🔍 The {label} service ran into an issue and couldn't complete "
+                "the search. You may want to try different dates or parameters."
+            ),
+        }
+
+    return {
+        "code": "unknown",
+        "user_msg": "😕 Something unexpected happened on our end. Please try again.",
+    }
+
+
 def _wait_for_rate_limit(retry_state) -> float:
     """
     Custom wait strategy:
@@ -1085,10 +1178,8 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
         )
     except Exception as e:
         print(f"  Supervisor Error: {str(e)}")
-        if _is_rate_limit_error(e):
-            error_msg = "⚠️ The AI service is temporarily busy (rate limit). Please wait a moment and try again."
-        else:
-            error_msg = f"System Error: {str(e)}"
+        classified = _classify_error(e)
+        error_msg = classified["user_msg"]
         return _apply_updates(
             {
                 "next_step": "End",
@@ -1712,7 +1803,7 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
                 "supervisor_instruction": "Plan Drafted",
                 "steps": [{"module": "Trip_Planner", "prompt": instruction, "response": f"Emergency plan generated after error: {err_str}"}],
             }
-        return {"next_step": "Researcher", "supervisor_instruction": f"Error: {err_str}"}
+        return {"next_step": "Researcher", "supervisor_instruction": _classify_error(e)["user_msg"]}
 
 
 # 3. CRITIQUE NODE
@@ -1864,6 +1955,7 @@ def researcher_node(state: AgentState) -> Dict[str, Any]:
     if instruction.startswith("TOOL_CALLS:"):
         import json
 
+        _current_tool = ""  # tracks the tool being executed for error reporting
         try:
             json_str = instruction.replace("TOOL_CALLS:", "").strip()
             tool_calls = json.loads(json_str)
@@ -1892,6 +1984,7 @@ def researcher_node(state: AgentState) -> Dict[str, Any]:
 
             for tc in tool_calls:
                 t_name = tc["name"]
+                _current_tool = t_name
                 t_args = tc["args"]
 
                 if t_name == "create_plan_tool" and isinstance(t_args, dict):
@@ -1956,14 +2049,16 @@ def researcher_node(state: AgentState) -> Dict[str, Any]:
                     results += f"Error: Unknown tool {t_name}\n"
 
         except Exception as e:
+            _err = _classify_error(e, service_name=_current_tool)
             error_log = {
                 "module": "Researcher",
                 "prompt": "Tool Execution",
-                "response": f"Error: {str(e)}",
+                "response": _err["user_msg"],
+                "error_code": _err["code"],
             }
-            print(f"  [Error] Tool Execution Failed: {e}")
+            print(f"  [Error] Tool Execution Failed ({_err['code']}): {e}")
             step_logs.append(error_log)
-            results += f"Tool Execution Error: {str(e)}\n"
+            results += f"Tool Error: {_err['user_msg']}\n"
 
     # Check for Legacy Structured calls (Backwards compatibility if needed, or if Supervisor uses it)
     elif "FLIGHTS:" in instruction or "HOTELS:" in instruction:
