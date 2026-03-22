@@ -195,24 +195,350 @@ def get_team_info():
 def get_agent_info():
     """Returns agent metadata (Course Requirement)."""
     return {
-        "description": "Tripzy is an autonomous travel companion that plans detailed itineraries while strictly adhering to user budgets.",
-        "purpose": "To plan end-to-end travel itineraries with real-time data and budget validation.",
+        "description": (
+            "Tripzy is a multi-agent AI travel companion that handles end-to-end trip planning. "
+            "It searches for real-time flights (via Amadeus API), hotels (via SerpApi/Google Hotels), "
+            "and local attractions (via semantic RAG over a curated knowledge base). "
+            "A Supervisor LLM orchestrates a network of specialized agents—Trip_Planner, Researcher, "
+            "Attractions, and Critique—managing multi-turn clarification, budget enforcement, and "
+            "combined flight+hotel requests across a single conversation."
+        ),
+        "purpose": (
+            "To plan personalized, budget-aware travel itineraries by combining live flight/hotel data "
+            "with curated destination knowledge. Tripzy supports flight-only searches, hotel-only searches, "
+            "combined flight+hotel planning, full multi-day itinerary generation, and attraction/activity "
+            "discovery—all through a conversational interface that asks clarifying questions when needed."
+        ),
         "prompt_template": {
-            "template": "Plan a {days}-day trip to {destination} with a budget of {budget}."
+            "flight_search": "Find me flights from {origin} to {destination} departing on {date} for {travelers} traveler(s)",
+            "hotel_search": "Find me hotels in {destination} from {check_in} to {check_out} with a {budget} budget",
+            "full_trip": "Plan a {days}-day trip to {destination} from {origin}, departing {date}, budget {budget}",
+            "attractions": "Find {activity_type} activities in {destination}",
         },
         "prompt_examples": [
+            # ── Example 1: Multi-turn flight search – Bali from Berlin (run1) ────────
             {
-                "prompt": "Plan a 3-day trip to Paris for cheap.",
-                "full_response": "Here is a budget-friendly Paris itinerary...",
+                "prompt": "I want a 7-day vacation in Bali, help me find flights",
+                "full_response": (
+                    "Recommended flight for your 7-day Bali trip (Berlin \u2192 Bali)\n\n"
+                    "I found a round-trip option that matches your dates (departing 24 Mar 2026, returning 31 Mar 2026) "
+                    "and a 7-day duration. Summary:\n"
+                    "- Total price (round-trip): EUR 978.49\n"
+                    "- Travelers: 1\n"
+                    "- Outbound: BER \u2192 DPS, 24 Mar 2026, departs BER 16:30, arrives DPS 20:20 (local next day), "
+                    "duration ~20h50, 1 connection (AMS) \u2014 operated by KLM. Not direct.\n"
+                    "- Return: DPS \u2192 BER, 31 Mar 2026, departs DPS 15:15, arrives BER 11:55 (1 Apr 2026), "
+                    "duration ~26h40, 2 connections (SIN, CDG) \u2014 operated by Air France on return CDG\u2192BER. Not direct.\n\n"
+                    "Notes:\n"
+                    "- Price shown (EUR 978.49) is the total round-trip. "
+                    "A checked bag option is listed at an additional EUR 75 on some fares.\n"
+                    "- Connection times: outbound has a comfortable ~2h45 connection in Amsterdam (AMS). "
+                    "Return has comfortable layovers (including ~4h at CDG before the final leg).\n\n"
+                    "If you want, I can hold/book this fare, check baggage options, or show alternative "
+                    "times/cheaper carriers (Qatar Airways option available at EUR 1,043.75). "
+                    "Which would you like next?"
+                ),
                 "steps": [
                     {
                         "module": "Supervisor",
-                        "prompt": "...",
-                        "response": "Routing to Planner",
+                        "prompt": "I want a 7-day vacation in Bali, help me find flights",
+                        "response": (
+                            "Routing to End: User asked for flights to Bali and gave a 7-day duration but did not "
+                            "provide an origin city or departure date, so we must ask for the origin first."
+                        ),
                     },
-                    {"module": "Trip_Planner", "prompt": "...", "response": "Drafting plan"},
+                    {
+                        "module": "Supervisor",
+                        "prompt": "berlin",
+                        "response": (
+                            "Routing to End: User answered origin as 'Berlin'; "
+                            "departure_date is still missing for the flight search."
+                        ),
+                    },
+                    {
+                        "module": "Supervisor",
+                        "prompt": "24 march",
+                        "response": (
+                            "Routing to Trip_Planner: User provided departure date and origin; all required "
+                            "flight fields for FlightOnly are present so proceed to Trip_Planner."
+                        ),
+                    },
+                    {
+                        "module": "Trip_Planner",
+                        "prompt": (
+                            "Search for round-trip flights from Berlin to Bali departing 2026-03-24 for 1 traveler, "
+                            "returning after 7 nights (check 31 March 2026 return), economy class unless specified, "
+                            "budget unknown."
+                        ),
+                        "response": "Executing Tools...",
+                    },
+                    {
+                        "module": "Researcher",
+                        "prompt": "Executing resolve_airport_code_tool: {'keyword': 'Berlin'}",
+                        "response": '[{"iataCode": "BER", "name": "Berlin", "cityName": "Berlin", "type": "AIRPORT"}]',
+                    },
+                    {
+                        "module": "Trip_Planner",
+                        "prompt": 'Tool Result (resolve_airport_code_tool): [{"iataCode": "BER", "name": "Berlin", "cityName": "Berlin", "type": "AIRPORT"}]',
+                        "response": "Executing Tools...",
+                    },
+                    {
+                        "module": "Researcher",
+                        "prompt": "Executing resolve_airport_code_tool: {'keyword': 'Bali'}",
+                        "response": '[{"iataCode": "DPS", "name": "Bali", "cityName": "Bali", "type": "AIRPORT"}]',
+                    },
+                    {
+                        "module": "Trip_Planner",
+                        "prompt": 'Tool Result (resolve_airport_code_tool): [{"iataCode": "DPS", "name": "Bali", "cityName": "Bali", "type": "AIRPORT"}]',
+                        "response": "Executing Tools...",
+                    },
+                    {
+                        "module": "Researcher",
+                        "prompt": "Executing search_flights_tool: {'origin': 'BER', 'destination': 'DPS', 'departure_date': '2026-03-24', 'return_date': '2026-03-31', 'adults': 1, 'currency': 'EUR'}",
+                        "response": (
+                            "Aggregated 5 flights from Amadeus "
+                            "(best: KLM BER\u2192DPS EUR 978.49 round-trip, 1 connection AMS)"
+                        ),
+                    },
+                    {
+                        "module": "Trip_Planner",
+                        "prompt": "Tool Result (search_flights_tool): [Amadeus round-trip flight data BER\u2192DPS 2026-03-24]",
+                        "response": (
+                            "Recommended flight for your 7-day Bali trip: KLM round-trip BER\u2192DPS, EUR 978.49, "
+                            "departing 24 Mar 2026 16:30. Plan submitted."
+                        ),
+                    },
                 ],
-            }
+            },
+            # ── Example 2: Attractions search – Tokyo spas for couples (run2) ────────
+            {
+                "prompt": "Find me spas in Tokyo, I'm looking for a relaxing weekend with my girlfriend",
+                "full_response": (
+                    "**Waho-An NATURE Tokyo** \u2014 A healing-focused spa that offers targeted treatments "
+                    "designed to deliver deep relaxation and recovery, perfect for a restorative weekend together.\n\n"
+                    "**LaQua** \u2014 A popular Tokyo water and amusement complex with relaxing facilities and "
+                    "atmosphere, making it an easy choice for a leisurely, spa-like weekend outing.\n\n"
+                    "**ASMR TWIX TOKYO HEAD SPA** \u2014 A specialty head spa that uses ASMR-style techniques "
+                    "and calming treatments to create an intimate, deeply relaxing experience for couples.\n\n"
+                    "---\n\u2708\ufe0f Enjoy your trip! Safe travels from the Tripzy team. \U0001f30d"
+                ),
+                "steps": [
+                    {
+                        "module": "Supervisor",
+                        "prompt": "Find me spas in Tokyo, I'm looking for a relaxing weekend with my girlfriend",
+                        "response": (
+                            "Routing to Attractions: User asked for spas in Tokyo for a relaxing weekend with their "
+                            "girlfriend, which is an attractions/activities request with destination provided."
+                        ),
+                    },
+                    {
+                        "module": "Attractions",
+                        "prompt": "Find me spas in Tokyo, I'm looking for a relaxing weekend with my girlfriend",
+                        "response": (
+                            "**Waho-An NATURE Tokyo** \u2014 A healing-focused spa that offers targeted treatments "
+                            "designed to deliver deep relaxation and recovery, perfect for a restorative weekend together.\n\n"
+                            "**LaQua** \u2014 A popular Tokyo water and amusement complex with relaxing facilities and "
+                            "atmosphere, making it an easy choice for a leisurely, spa-like weekend outing.\n\n"
+                            "**ASMR TWIX TOKYO HEAD SPA** \u2014 A specialty head spa that uses ASMR-style techniques "
+                            "and calming treatments to create an intimate, deeply relaxing experience for couples.\n\n"
+                            "---\n\u2708\ufe0f Enjoy your trip! Safe travels from the Tripzy team. \U0001f30d"
+                        ),
+                    },
+                ],
+            },
+            # ── Example 3: Multi-turn attractions – Amsterdam cultural + vegetarian (run3) ──
+            {
+                "prompt": "Suggest places for a cultural trip in Europe, I love history (so museums) and food (i am vegetarian)",
+                "full_response": (
+                    "**Spectrum** \u2014 An internationally dynamic kitchen with proud Dutch heritage led by "
+                    "Chef Sidney Schutte, great for adventurous diners and likely able to accommodate vegetarian "
+                    "requests (best to check the menu or call ahead).\n\n"
+                    "**Restaurant DS** \u2014 Offers Dutch, seafood and European dishes and is explicitly listed "
+                    "as \"Vegetarian Friendly\" with vegan options, making it a reliable vegetarian-friendly choice.\n\n"
+                    "**Restaurant Amsterdam** \u2014 Serves Dutch, seafood and Central European fare and is marked "
+                    "\"Vegetarian Friendly\" with gluten-free options, so it's a good spot for varied "
+                    "vegetarian-friendly meals.\n\n"
+                    "---\n\u2708\ufe0f Enjoy your trip! Safe travels from the Tripzy team. \U0001f30d"
+                ),
+                "steps": [
+                    {
+                        "module": "Supervisor",
+                        "prompt": "Suggest places for a cultural trip in Europe, I love history (so museums) and food (i am vegetarian)",
+                        "response": (
+                            "Routing to End: User requested cultural places in Europe but gave only a continent "
+                            "(not an acceptable destination); a specific city or destination is required to suggest attractions."
+                        ),
+                    },
+                    {
+                        "module": "Supervisor",
+                        "prompt": "amsterdam",
+                        "response": (
+                            "Routing to Attractions: User provided Amsterdam as the destination for an AttractionsOnly "
+                            "request focused on cultural/history museums and vegetarian food, so we can proceed to "
+                            "generate relevant sights and restaurants."
+                        ),
+                    },
+                    {
+                        "module": "Attractions",
+                        "prompt": "amsterdam",
+                        "response": (
+                            "**ARTIS Amsterdam Royal Zoo** \u2014 A historic zoo and botanical park in the heart of "
+                            "Amsterdam where you can stroll among shady trees, meet diverse animals, and enjoy the "
+                            "aquarium, planetarium, and heritage exhibits.\n\n"
+                            "**The Amsterdam Dungeon** \u2014 An interactive, theatrical attraction that brings "
+                            "Amsterdam's darker 500 years of history to life with immersive shows, scares, and storytelling.\n\n"
+                            "**ARTIS** \u2014 A centrally located Amsterdam attraction combining a zoo, aquarium, "
+                            "museum, and park (coordinates: 52.3660003, 4.9165321), ideal for families and culture lovers.\n\n"
+                            "---\n\u2708\ufe0f Enjoy your trip! Safe travels from the Tripzy team. \U0001f30d"
+                        ),
+                    },
+                    {
+                        "module": "Supervisor",
+                        "prompt": "and restaurants? I'm vegetarian so its importantt",
+                        "response": (
+                            "Routing to Attractions: User is asking for vegetarian restaurant recommendations "
+                            "in Amsterdam as a follow-up to the cultural sights already provided."
+                        ),
+                    },
+                    {
+                        "module": "Attractions",
+                        "prompt": "and restaurants? I'm vegetarian so its importantt",
+                        "response": (
+                            "**Spectrum** \u2014 An internationally dynamic kitchen with proud Dutch heritage led by "
+                            "Chef Sidney Schutte, great for adventurous diners and likely able to accommodate "
+                            "vegetarian requests (best to check the menu or call ahead).\n\n"
+                            "**Restaurant DS** \u2014 Offers Dutch, seafood and European dishes and is explicitly "
+                            "listed as \"Vegetarian Friendly\" with vegan options, making it a reliable choice.\n\n"
+                            "**Restaurant Amsterdam** \u2014 Serves Dutch, seafood and Central European fare and is "
+                            "marked \"Vegetarian Friendly\" with gluten-free options.\n\n"
+                            "---\n\u2708\ufe0f Enjoy your trip! Safe travels from the Tripzy team. \U0001f30d"
+                        ),
+                    },
+                ],
+            },
+            # ── Example 4: Multi-turn combined flights+hotels – Bahamas snorkeling (run4) ──
+            {
+                "prompt": "I want a place to snorkel in the caribbeans. So find me flights and hotels.",
+                "full_response": (
+                    "\u2708\ufe0f Flight: JFK (Terminal 5, New York) \u2192 NAS (Nassau, Terminal C) | "
+                    "2026-08-12 | JetBlue B6 121 | 3h07 direct | $194.50 USD\n\n"
+                    "\U0001f3e8 Hotels in Nassau, Bahamas (check-in 2026-08-12, check-out 2026-08-17 \u2014 5 nights):\n\n"
+                    "Top 3 recommendations:\n"
+                    "1) Warwick Paradise Island - Bahamas \u2014 $220/night | Total: $1,099 | Rating: 4.1\u2605 | "
+                    "Best value; free breakfast, beach access \u2014 ideal base for snorkeling trips.\n"
+                    "2) The Reef at Atlantis \u2014 $345/night | Total: $1,727 | Rating: 4.3\u2605 | "
+                    "Atlantis resort with top snorkeling and marine experiences nearby.\n"
+                    "3) Sandyport Beach Resort \u2014 $317/night | Total: $1,583 | Rating: 4.3\u2605 | "
+                    "Relaxed beachfront with private beach and snorkeling access.\n\n"
+                    "Estimated minimum budget: ~$1,294.50 USD (JetBlue flight + Warwick hotel, 5 nights)."
+                ),
+                "steps": [
+                    {
+                        "module": "Supervisor",
+                        "prompt": "I want a place to snorkel in the caribbeans. So find me flights and hotels.",
+                        "response": "Vague destination 'caribbeans' \u2192 asked for specific city.",
+                    },
+                    {
+                        "module": "Supervisor",
+                        "prompt": "Bahamas",
+                        "response": (
+                            "Routing to End: User requested flights (with hotels pending) to Bahamas but "
+                            "required flight fields (origin and departure date) are missing, so ask for origin first."
+                        ),
+                    },
+                    {
+                        "module": "Supervisor",
+                        "prompt": "new york",
+                        "response": (
+                            "Routing to End: User provided origin_city (new york) for FlightOnly but "
+                            "departure_date is still missing; user originally requested flights and hotels "
+                            "so HotelOnly remains pending."
+                        ),
+                    },
+                    {
+                        "module": "Supervisor",
+                        "prompt": "12 august",
+                        "response": (
+                            "Routing to Trip_Planner: User supplied the departure date, so all required flight "
+                            "fields are now present; proceed to Trip_Planner and then handle the pending HotelOnly stage."
+                        ),
+                    },
+                    {
+                        "module": "Trip_Planner",
+                        "prompt": (
+                            "Find flights from new york to Bahamas departing 2026-08-12 for 1 traveler "
+                            "(preference: snorkeling); after returning flight options, continue with the pending HotelOnly stage."
+                        ),
+                        "response": "Executing Tools...",
+                    },
+                    {
+                        "module": "Researcher",
+                        "prompt": "Executing resolve_airport_code_tool: {'keyword': 'New York'}",
+                        "response": '[{"iataCode": "NYC", "name": "New York", "cityName": "New York", "type": "AIRPORT"}]',
+                    },
+                    {
+                        "module": "Trip_Planner",
+                        "prompt": 'Tool Result (resolve_airport_code_tool): [{"iataCode": "NYC", "name": "New York", "cityName": "New York", "type": "AIRPORT"}]',
+                        "response": "Executing Tools...",
+                    },
+                    {
+                        "module": "Researcher",
+                        "prompt": "Executing resolve_airport_code_tool: {'keyword': 'Nassau'}",
+                        "response": '[{"iataCode": "NAS", "name": "Nassau", "type": "fallback"}]',
+                    },
+                    {
+                        "module": "Trip_Planner",
+                        "prompt": 'Tool Result (resolve_airport_code_tool): [{"iataCode": "NAS", "name": "Nassau", "type": "fallback"}]',
+                        "response": "Executing Tools...",
+                    },
+                    {
+                        "module": "Researcher",
+                        "prompt": "Executing search_flights_tool: {'origin': 'NYC', 'destination': 'NAS', 'departure_date': '2026-08-12', 'adults': 1, 'currency': 'USD'}",
+                        "response": (
+                            "Aggregated 3 direct flights from Amadeus "
+                            "(best: JetBlue B6 121 JFK\u2192NAS $194.50 direct)"
+                        ),
+                    },
+                    {
+                        "module": "Trip_Planner",
+                        "prompt": "Tool Result (search_flights_tool): [3 Amadeus direct flights NYC\u2192NAS 2026-08-12]",
+                        "response": (
+                            "FlightOnly plan submitted: JetBlue JFK\u2192NAS $194.50 direct. "
+                            "Continuing to pending HotelOnly stage."
+                        ),
+                    },
+                    {
+                        "module": "Supervisor",
+                        "prompt": "12 august",
+                        "response": "Pending stages detected: auto-routing to Trip_Planner for HotelOnly.",
+                    },
+                    {
+                        "module": "Trip_Planner",
+                        "prompt": (
+                            "Search hotels in Nassau for 1 adult, check-in 2026-08-12, check-out 2026-08-17, "
+                            "medium budget, sort by rating."
+                        ),
+                        "response": "Executing Tools...",
+                    },
+                    {
+                        "module": "Researcher",
+                        "prompt": "Executing search_hotels_tool: {'city': 'Nassau', 'check_in': '2026-08-12', 'check_out': '2026-08-17', 'budget': 'medium', 'adults': 1, 'sort_by': 'rating'}",
+                        "response": (
+                            "SerpApi returned 5 valid hotel offers "
+                            "(top: The Reef at Atlantis 4.3\u2605, Sandyport Beach Resort 4.3\u2605, "
+                            "Warwick Paradise Island 4.1\u2605 $220/night)"
+                        ),
+                    },
+                    {
+                        "module": "Trip_Planner",
+                        "prompt": "Tool Result (search_hotels_tool): [5 Nassau hotels sorted by rating]",
+                        "response": (
+                            "HotelOnly plan submitted: top recommendation Warwick Paradise Island $220/night "
+                            "($1,099 total, 5 nights). Estimated combined budget ~$1,294.50 USD."
+                        ),
+                    },
+                ],
+            },
         ],
     }
 
