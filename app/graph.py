@@ -200,7 +200,7 @@ llm = ChatOpenAI(
 
 # --- Output Models ---
 class SupervisorOutput(BaseModel):
-    next_step: Literal["Trip_Planner", "Researcher", "Attractions", "End"] = Field(
+    next_step: Literal["Trip_Planner", "Attractions", "End"] = Field(
         description="Next worker to call."
     )
     reasoning: str = Field(description="Reason for selecting this node.")
@@ -243,14 +243,16 @@ class SupervisorOutput(BaseModel):
     )
     request_type: Literal[
         "AttractionsOnly",
-        "Discovery",
-        # "Planning" removed - Tripzy does not plan full trips
         "FlightOnly",
         "HotelOnly",
         "GeneralQuestion",
     ] = Field(
-        description="Intent: 'AttractionsOnly' for sights/restaurants, 'Discovery' for suggestions, 'FlightOnly'/'HotelOnly' for partial plans, 'GeneralQuestion' for geography/travel facts.",
-        default="Discovery",
+        description="Intent: 'AttractionsOnly' for sights/activities/restaurants, 'FlightOnly'/'HotelOnly' for transport/accommodation searches, 'GeneralQuestion' for travel facts.",
+        default="GeneralQuestion",
+    )
+    pending_stages: List[str] = Field(
+        description="For combined requests: list of remaining request types to execute after the current stage (e.g. ['HotelOnly', 'AttractionsOnly']). Empty list by default.",
+        default=[],
     )
 
 
@@ -429,6 +431,99 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             is_terminal=True
         )
 
+    # ── ATTRACTIONS QUERY CAPTURE ─────────────────────────────────────────────
+    # If we just asked "what kind of attractions?" and this is the user's reply,
+    # store it as attractions_query and route to Attractions.
+    _prior_request_type = state.get("request_type") or ""
+    _prior_attractions_q = (state.get("attractions_query") or "").strip()
+    _prior_instruction = (state.get("supervisor_instruction") or "").lower()
+    if (
+        _prior_request_type == "AttractionsOnly"
+        and not _prior_attractions_q
+        and "what kind of attractions" in _prior_instruction
+        and user_query.strip()
+    ):
+        _dest = state.get("destination", "")
+        print(f"  [ATTRACTIONS QUERY CAPTURE] Storing attractions_query: {user_query!r}")
+        return _apply_updates(
+            {
+                "next_step": "Attractions",
+                "request_type": "AttractionsOnly",
+                "attractions_query": user_query.strip(),
+                "destination": _dest,
+                "pending_stages": state.get("pending_stages") or [],
+                "steps": [{"module": "Supervisor", "prompt": user_query,
+                            "response": f"Stored attractions_query, routing to Attractions."}],
+            }
+        )
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # ── PENDING STAGES CHECK (combined request chaining) ──────────────────────
+    # If there are pending stages from a previous combined request stage and
+    # the previous stage produced a result, auto-route to Trip_Planner for the
+    # next stage without calling the LLM.
+    pending_stages_from_state = list(state.get("pending_stages") or [])
+    if pending_stages_from_state and state.get("trip_plan"):
+        next_stage = pending_stages_from_state.pop(0)
+        _dest = state.get("destination", "")
+
+        if next_stage == "AttractionsOnly":
+            # For attractions we need a free-text query — ask if not yet captured.
+            _attr_q = (state.get("attractions_query") or "").strip()
+            if not _attr_q:
+                print(f"  [PENDING STAGES] AttractionsOnly next — asking for attractions_query.")
+                return _apply_updates(
+                    {
+                        "next_step": "End",
+                        "request_type": "AttractionsOnly",
+                        "pending_stages": [next_stage] + pending_stages_from_state,  # put it back
+                        "supervisor_instruction": "What kind of attractions are you looking for? (e.g. beaches, temples, restaurants, nightlife, museums)",
+                        "destination": _dest,
+                        "steps": [{"module": "Supervisor", "prompt": user_query,
+                                    "response": "Asked user for attractions type before continuing pipeline."}],
+                    },
+                    is_terminal=True,
+                )
+            print(f"  [PENDING STAGES] Auto-routing to Attractions for AttractionsOnly (remaining: {pending_stages_from_state})")
+            return _apply_updates(
+                {
+                    "next_step": "Attractions",
+                    "request_type": "AttractionsOnly",
+                    "pending_stages": pending_stages_from_state,
+                    "supervisor_instruction": f"Find attractions in {_dest} matching: {_attr_q}",
+                    "destination": _dest,
+                    "attractions_query": _attr_q,
+                    "steps": [{"module": "Supervisor", "prompt": user_query,
+                                "response": f"Auto-continuing to AttractionsOnly."}],
+                }
+            )
+
+        _stage_instructions = {
+            "HotelOnly": f"Find the best hotel options in {_dest}. Use check-in/check-out dates from state.",
+        }
+        _stage_instruction = _stage_instructions.get(next_stage, f"Continue with {next_stage} for {_dest}.")
+        print(f"  [PENDING STAGES] Auto-routing to Trip_Planner for {next_stage} (remaining: {pending_stages_from_state})")
+        return _apply_updates(
+            {
+                "next_step": "Trip_Planner",
+                "request_type": next_stage,
+                "pending_stages": pending_stages_from_state,
+                "supervisor_instruction": _stage_instruction,
+                "destination": _dest,
+                "origin_city": state.get("origin_city", ""),
+                "budget_limit": state.get("budget_limit") or 0,
+                "budget_currency": state.get("budget_currency") or "USD",
+                "trip_type": state.get("trip_type") or "",
+                "duration_days": state.get("duration_days") or 0,
+                "traveling_personas_number": state.get("traveling_personas_number") or 1,
+                "amenities": list(state.get("amenities") or []),
+                "preferences": [],
+                "steps": [{"module": "Supervisor", "prompt": user_query,
+                            "response": f"Auto-continuing combined request: {next_stage}."}],
+            }
+        )
+    # ─────────────────────────────────────────────────────────────────────────
+
     # Format context for the LLM clearly, including RAG results
     steps = state.get("steps", [])
     research_steps = [s for s in steps if s.get("module") == "Researcher"]
@@ -554,32 +649,66 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             f"  [Supervisor] next_step={result.next_step}, request_type={result.request_type}, prefs={result.preferences}"
         )
 
+        # ── COMBINED REQUEST DETECTION (Python-level, takes priority over LLM) ──
+        # Detect when user asks for multiple service types in one message.
+        _uq = user_query.lower()
+        _flight_kws = ["flight", "fly ", "flying ", "flights", "airline", "fly to"]
+        _hotel_kws  = ["hotel", " stay", "accommodation", "hostel", "lodging"]
+        _attr_kws   = ["things to do", "attractions", "activities", "what to do",
+                       "restaurants", "sights", "tours", "explore"]
+        _py_wants_flight = any(k in _uq for k in _flight_kws)
+        _py_wants_hotel  = any(k in _uq for k in _hotel_kws)
+        _py_wants_attr   = any(k in _uq for k in _attr_kws)
+        _combined = [t for t, w in [("FlightOnly", _py_wants_flight),
+                                     ("HotelOnly",  _py_wants_hotel),
+                                     ("AttractionsOnly", _py_wants_attr)] if w]
+        if len(_combined) > 1:
+            result.request_type = _combined[0]
+            result.pending_stages = _combined[1:]
+            print(f"  [COMBINED REQUEST GUARD] Detected {_combined}: first={_combined[0]}, pending={result.pending_stages}")
+        # ─────────────────────────────────────────────────────────────────────
+
+        # ── ASK FOR REQUEST TYPE GUARD ────────────────────────────────────────
+        # Destination known but no service type specified → ask what they want.
+        _known_dest = result.destination or state.get("destination", "")
+        _no_concrete_service = not (_py_wants_flight or _py_wants_hotel or _py_wants_attr)
+        _prior_request_type = state.get("request_type") or ""
+        if (
+            _known_dest
+            and _no_concrete_service
+            and result.next_step == "End"
+            and not _prior_request_type  # not mid-conversation
+        ):
+            print(f"  [ASK REQUEST TYPE GUARD] Destination known ({_known_dest}) but service unclear → asking.")
+            return _apply_updates(
+                {
+                    "next_step": "End",
+                    "supervisor_instruction": "What would you like help with: flights, hotels, or attractions?",
+                    "destination": _known_dest,
+                    "duration_days": result.duration_days or state.get("duration_days") or 0,
+                    "budget_limit": result.budget_limit or state.get("budget_limit") or 0,
+                    "budget_currency": result.budget_currency or state.get("budget_currency", "USD"),
+                    "trip_type": result.trip_type or state.get("trip_type") or "",
+                    "preferences": result.preferences or [],
+                    "request_type": "GeneralQuestion",
+                    "pending_stages": [],
+                    "steps": [{"module": "Supervisor", "prompt": user_query,
+                                "response": "Asked user for request type (flights/hotels/attractions)."}],
+                },
+                extracted_prefs=result.preferences,
+                is_terminal=True,
+            )
+        # ─────────────────────────────────────────────────────────────────────
+
         step_log = {
             "module": "Supervisor",
             "prompt": user_query,
             "response": f"Routing to {result.next_step}: {result.reasoning}",
         }
 
-        # ── PREFERENCE REFINEMENT GUARD ──────────────────────────────────────
-        # If user added new preferences (climate/activity/budget) but LLM chose End,
-        # force Researcher so we don't repeat stale suggestions.
-        already_routed_this_turn = (state.get("researcher_calls") or 0) > 0
-        if (
-            asks_for_new_region
-            and result.request_type == "Discovery"
-            and result.next_step == "End"
-            and not already_routed_this_turn
-        ):
-            print(
-                f"  [PREF REFINEMENT GUARD] LLM chose End but user added new prefs → forcing Researcher."
-            )
-            result.next_step = "Researcher"
-        # ─────────────────────────────────────────────────────────────────────
-
         # ── DESTINATION SWITCH GUARD (code-level override) ───────────────────
         # If prior request was FlightOnly/HotelOnly and the supervisor mistakenly
-        # routes to Researcher/End with a different destination, correct it to
-        # Trip_Planner keeping the same request_type.
+        # routes to End with a different destination, correct it to Trip_Planner.
         prior_request_type = state.get("request_type", "")
         prior_destination = (state.get("destination") or "").strip().lower()
         new_destination = (result.destination or "").strip().lower()
@@ -588,270 +717,16 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             and new_destination
             and prior_destination
             and new_destination != prior_destination
-            and result.next_step in ("Researcher", "End")
-            and result.request_type in ("HotelOnly", "FlightOnly", "Discovery")
+            and result.next_step == "End"
+            and result.request_type in ("HotelOnly", "FlightOnly")
         ):
             print(
-                f"  [DEST SWITCH GUARD] Overriding {result.next_step}/{result.request_type} "
+                f"  [DEST SWITCH GUARD] Overriding End/{result.request_type} "
                 f"→ Trip_Planner/{prior_request_type} (dest: {prior_destination} → {new_destination})"
             )
             result.next_step = "Trip_Planner"
             result.request_type = prior_request_type
         # ─────────────────────────────────────────────────────────────────────
-
-        # HANDLE DISCOVERY (Vague Requests)
-        if result.request_type == "Discovery":
-            print(f"  [DISCOVERY MODE] Preferences: {result.preferences}")
-
-            # ── NO-PREFERENCE GUARD ───────────────────────────────────────────
-            # If user was vague (no concrete preferences yet) but LLM routed to
-            # Researcher anyway, redirect to End to ask a clarifying question.
-            CONCRETE_PREF_KEYWORDS = {
-                "beach", "beachy", "warm", "tropical", "hot", "island", "snorkel",
-                "diving", "swim", "ocean", "sea", "cold", "snow", "ski", "mountain",
-                "hiking", "adventure", "desert", "safari", "nature", "outdoor",
-                "budget", "cheap", "affordable", "backpack", "luxury", "boutique",
-                "family", "kids", "solo", "couple", "romantic", "honeymoon", "friends",
-                "culture", "history", "museum", "food", "nightlife", "relax", "spa",
-                "wellness", "shopping", "europe", "asia", "africa", "caribbean",
-                "america", "mediterranean", "southeast asia",
-            }
-            merged_prefs = " ".join(result.preferences or state.get("preferences") or []).lower()
-            has_concrete_prefs = any(kw in merged_prefs for kw in CONCRETE_PREF_KEYWORDS)
-            if (
-                result.next_step == "Researcher"
-                and not has_concrete_prefs
-                and not research_steps  # no prior research done yet
-            ):
-                print(
-                    "  [NO-PREF GUARD] No concrete preferences yet — asking clarifying question instead of searching."
-                )
-                clarify_instruction = (
-                    result.instruction
-                    if result.instruction and "?" in result.instruction
-                    else "What kind of experience are you after — beaches, culture, adventure, or something else? Any preferences on climate or budget?"
-                )
-                return _apply_updates(
-                    {
-                        "next_step": "End",
-                        "supervisor_instruction": clarify_instruction,
-                        "request_type": "Discovery",
-                        "preferences": result.preferences or state.get("preferences") or [],
-                        "steps": [
-                            {
-                                "module": "Supervisor",
-                                "prompt": user_query,
-                                "response": clarify_instruction,
-                            }
-                        ],
-                    },
-                    extracted_prefs=result.preferences,
-                    extracted_trip_type=result.trip_type,
-                    is_terminal=True,
-                )
-            # ─────────────────────────────────────────────────────────────────
-
-            # ── HARD LOOP-BREAKER ─────────────────────────────────────────────
-            # Fix: detect looping by checking researcher_calls which is now
-            # safely reset to 0 on every new user turn.
-            # ─────────────────────────────────────────────────────────────────
-            already_routed_to_researcher_for_this_query = (state.get("researcher_calls") or 0) > 0
-
-            if (
-                research_steps
-                and result.next_step == "Researcher"
-                and already_routed_to_researcher_for_this_query
-            ):
-                print(
-                    "  [LOOP BREAKER] Same query already sent to Researcher — forcing End with conversational summary."
-                )
-                from langchain_core.messages import SystemMessage, HumanMessage
-
-                summary_prefs = ", ".join(
-                    result.preferences or state.get("preferences") or []
-                )
-
-                # Ensure text is clean to avoid Windows charmap encoding errors
-                clean_history = (
-                    str(research_history).encode("ascii", "ignore").decode("ascii")
-                )
-                clean_query = str(user_query).encode("ascii", "ignore").decode("ascii")
-
-                summary_prompt = [
-                    SystemMessage(
-                        content=(
-                            "You are a friendly travel agent. Based on the destination suggestions below, "
-                            "write a warm, natural response to the user. Pick the 2-3 best matches for their preferences, "
-                            "explain in 1-2 sentences WHY each fits them, and ask which one they'd like to explore or "
-                            "if they want to refine the search.\n\n"
-                            "IMPORTANT: Do NOT mention JSON, scores, or technical data. Write naturally like a friend.\n"
-                            f"User preferences: {summary_prefs}\n\n"
-                            f"Destination options:\n{clean_history}"
-                        )
-                    ),
-                    HumanMessage(content=f"User said: {clean_query}"),
-                ]
-                try:
-                    summary_resp = llm.invoke(summary_prompt)
-                    summary_text = (
-                        summary_resp.content
-                        if hasattr(summary_resp, "content")
-                        else str(summary_resp)
-                    )
-                except Exception as e_sum:
-                    print(f"  [LOOP BREAKER] Summary LLM failed: {e_sum}")
-                    summary_text = ""
-
-                # Guarantee we don't return an empty string, which causes "Task completed." in UI
-                if not summary_text or summary_text.strip() == "":
-                    if result.instruction and result.instruction.strip() != "":
-                        summary_text = result.instruction
-                    else:
-                        summary_text = "I've found some great destination options based on your request. Please let me know if you'd like to hear more details about any specific places!"
-
-                return _apply_updates(
-                    {
-                        "next_step": "End",
-                        "supervisor_instruction": summary_text,
-                        "destination": result.destination or state.get("destination"),
-                        "duration_days": result.duration_days
-                        or state.get("duration_days"),
-                        "budget_limit": result.budget_limit
-                        or state.get("budget_limit"),
-                        "budget_currency": result.budget_currency
-                        or state.get("budget_currency", "USD"),
-                        "trip_type": result.trip_type or state.get("trip_type"),
-                        "origin_city": result.origin_city or state.get("origin_city"),
-                        "traveling_personas_number": result.traveling_personas_number
-                        or state.get("traveling_personas_number", 1),
-                        "amenities": result.amenities,
-                        "preferences": result.preferences,
-                        "request_type": "Discovery",
-                        "steps": [
-                            {
-                                "module": "Supervisor",
-                                "prompt": user_query,
-                                "response": summary_text,
-                            }
-                        ],
-                    },
-                    extracted_prefs=result.preferences,
-                    extracted_trip_type=result.trip_type,
-                    is_terminal=True
-                )
-
-            # Let the LLM decide if we need more research or if we are done.
-            if result.next_step == "Researcher":
-
-                # Budget tier selection - priority order:
-
-                # 1. Explicit trip_type from the user ("budget trip" -> budget)
-                # 2. Budget limit amount from the query
-                # 3. User profile travel style
-                if result.trip_type and result.trip_type.lower() in [
-                    "budget",
-                    "backpacker",
-                    "cheap",
-                ]:
-                    budget_tier = "budget"
-                elif result.trip_type and result.trip_type.lower() in [
-                    "luxury",
-                    "premium",
-                    "high-end",
-                ]:
-                    budget_tier = "luxury"
-                elif result.budget_limit > 0:
-                    if result.budget_limit < 800:
-                        budget_tier = "budget"
-                    elif result.budget_limit > 3000:
-                        budget_tier = "luxury"
-                    else:
-                        budget_tier = "medium"
-                elif current_profile and current_profile.travel_style:
-                    style = current_profile.travel_style.lower()
-                    if "budget" in style or "cheap" in style or "backpacker" in style:
-                        budget_tier = "budget"
-                    elif "luxury" in style or "premium" in style:
-                        budget_tier = "luxury"
-                    else:
-                        budget_tier = "medium"
-                else:
-                    budget_tier = "medium"
-
-                tool_args = {
-                    "preferences": (
-                        ", ".join(result.preferences)
-                        if result.preferences
-                        else "travel options"
-                    ),
-                    "budget_tier": budget_tier,
-                    "trip_type": result.trip_type or "",
-                    "duration_days": result.duration_days or 0,
-                    "user_profile": profile_context if current_profile else None,
-                }
-
-                tool_calls = [{"name": "suggest_destination_tool", "args": tool_args}]
-                search_query = f"TOOL_CALLS: {json.dumps(tool_calls)}"
-
-                print(f"  [DISCOVERY] Routing to Researcher: {search_query}")
-                return _apply_updates(
-                    {
-                        "next_step": "Researcher",
-                    "supervisor_instruction": search_query,
-                    "destination": result.destination or state.get("destination"),
-                    "duration_days": result.duration_days or state.get("duration_days"),
-                    "budget_limit": result.budget_limit or state.get("budget_limit"),
-                    "budget_currency": result.budget_currency
-                    or state.get("budget_currency", "USD"),
-                    "trip_type": result.trip_type or state.get("trip_type"),
-                    "origin_city": result.origin_city or state.get("origin_city"),
-                    "traveling_personas_number": result.traveling_personas_number
-                    or state.get("traveling_personas_number", 1),
-                    "amenities": result.amenities,  # additive
-                    "preferences": result.preferences,  # additive
-                    "request_type": result.request_type,
-                    "steps": [
-                        {
-                            "module": "Supervisor",
-                            "prompt": user_query,
-                            "response": "Routing to Researcher for destination suggestions.",
-                        }
-                    ],
-                })
-            elif result.next_step == "End":
-                print(
-                    f"  [DISCOVERY] Discovery complete. Returning LLM instruction to user."
-                )
-                return _apply_updates(
-                    {
-                        "next_step": "End",
-                        "supervisor_instruction": result.instruction,
-                        "destination": result.destination or state.get("destination"),
-                        "duration_days": result.duration_days
-                        or state.get("duration_days"),
-                        "budget_limit": result.budget_limit
-                        or state.get("budget_limit"),
-                        "budget_currency": result.budget_currency
-                        or state.get("budget_currency", "USD"),
-                        "trip_type": result.trip_type or state.get("trip_type"),
-                        "origin_city": result.origin_city or state.get("origin_city"),
-                        "traveling_personas_number": result.traveling_personas_number
-                        or state.get("traveling_personas_number", 1),
-                        "amenities": result.amenities,
-                        "preferences": result.preferences,
-                        "request_type": result.request_type,
-                        "steps": [
-                            {
-                                "module": "Supervisor",
-                                "prompt": user_query,
-                                "response": result.instruction,
-                            }
-                        ],
-                    },
-                    extracted_prefs=result.preferences,
-                    extracted_trip_type=result.trip_type,
-                    is_terminal=True
-                )
 
         # HANDLE GENERAL QUESTIONS (Facts, Geography)
         if result.request_type == "GeneralQuestion":
@@ -980,125 +855,41 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
 
         # ────────────────────────────────────────────────────────────────────────
         # VAGUE DESTINATION GUARD
-        # If the user says "Europe", "Asia", "somewhere warm" — that's not a real
-        # destination. Intercept here and convert to a Discovery flow so we suggest
-        # specific cities/countries instead of blindly planning a trip to a continent.
+        # If the user says "Europe", "Asia", etc. — not a real destination.
+        # Ask them to specify a city or country.
         # ────────────────────────────────────────────────────────────────────────
         VAGUE_DESTINATIONS = {
-            # Continents / world regions
-            "europe",
-            "european",
-            "south america",
-            "north america",
-            "latin america",
-            "central america",
-            "asia",
-            "southeast asia",
-            "east asia",
-            "south asia",
-            "middle east",
-            "africa",
-            "sub-saharan africa",
-            "north africa",
-            "oceania",
-            "pacific",
-            "caribbean",
-            "scandinavia",
-            "nordic",
-            "mediterranean",
-            "balkans",
-            "eastern europe",
-            "western europe",
-            "central asia",
-            "the world",
-            # Vague English phrases
-            "somewhere",
-            "anywhere",
-            "abroad",
-            "overseas",
-            "international",
-            "a nice place",
-            "a good place",
-            "somewhere nice",
-            "somewhere warm",
-            "somewhere cold",
-            "somewhere sunny",
-            "somewhere exotic",
+            "europe", "european", "south america", "north america", "latin america",
+            "central america", "asia", "southeast asia", "east asia", "south asia",
+            "middle east", "africa", "sub-saharan africa", "north africa", "oceania",
+            "pacific", "caribbean", "scandinavia", "nordic", "mediterranean", "balkans",
+            "eastern europe", "western europe", "central asia", "the world",
+            "somewhere", "anywhere", "abroad", "overseas", "international",
+            "a nice place", "a good place", "somewhere nice", "somewhere warm",
+            "somewhere cold", "somewhere sunny", "somewhere exotic",
         }
 
         def _is_vague_destination(dest: str) -> bool:
             if not dest:
                 return False
-            d = dest.strip().lower()
-            return d in VAGUE_DESTINATIONS or any(d == v for v in VAGUE_DESTINATIONS)
+            return dest.strip().lower() in VAGUE_DESTINATIONS
 
         raw_destination = result.destination or state.get("destination") or ""
-        if result.request_type in (
-            "FlightOnly",
-            "HotelOnly",
-            "AttractionsOnly",
-        ) and _is_vague_destination(raw_destination):
-            print(
-                f"  [VAGUE DEST GUARD] '{raw_destination}' is a region, not a specific destination → Discovery"
-            )
-            # Build a rich preferences list from what the user told us
-            discovery_prefs = list(result.preferences or [])
-            if result.trip_type and result.trip_type.lower() not in discovery_prefs:
-                discovery_prefs.append(result.trip_type)
-            region_pref = raw_destination  # e.g. "Europe"
-            if region_pref.lower() not in [p.lower() for p in discovery_prefs]:
-                discovery_prefs.append(region_pref)
-
-            budget_tier = "medium"
-            if result.budget_limit > 3000:
-                budget_tier = "luxury"
-            elif result.budget_limit > 0 and result.budget_limit < 800:
-                budget_tier = "budget"
-            elif current_profile and current_profile.travel_style:
-                s = current_profile.travel_style.lower()
-                if "budget" in s or "cheap" in s:
-                    budget_tier = "budget"
-                elif "luxury" in s:
-                    budget_tier = "luxury"
-
-            tool_args = {
-                "preferences": (
-                    ", ".join(discovery_prefs) if discovery_prefs else "travel options"
-                ),
-                "budget_tier": budget_tier,
-                "trip_type": result.trip_type or "",
-                "duration_days": result.duration_days or 0,
-                "user_profile": profile_context if current_profile else None,
-            }
-            tool_calls = [{"name": "suggest_destination_tool", "args": tool_args}]
-            search_query = f"TOOL_CALLS: {json.dumps(tool_calls)}"
-
+        if result.request_type in ("FlightOnly", "HotelOnly", "AttractionsOnly") and _is_vague_destination(raw_destination):
+            print(f"  [VAGUE DEST GUARD] '{raw_destination}' is a region → asking for specific city.")
             return _apply_updates(
                 {
-                    "next_step": "Researcher",
-                    "supervisor_instruction": search_query,
-                    "destination": "",  # clear the vague destination — researcher will set it
-                    "duration_days": result.duration_days or state.get("duration_days"),
-                    "budget_limit": result.budget_limit or state.get("budget_limit"),
-                    "budget_currency": result.budget_currency
-                    or state.get("budget_currency", "USD"),
-                    "trip_type": result.trip_type or state.get("trip_type"),
-                    "origin_city": result.origin_city or state.get("origin_city"),
-                    "traveling_personas_number": result.traveling_personas_number
-                    or state.get("traveling_personas_number", 1),
-                    "amenities": result.amenities,
-                    "preferences": discovery_prefs,
-                    "request_type": "Discovery",
-                    "steps": [
-                        {
-                            "module": "Supervisor",
-                            "prompt": user_query,
-                            "response": f"Vague destination '{raw_destination}' detected → routing to Discovery/Researcher.",
-                        }
-                    ],
+                    "next_step": "End",
+                    "supervisor_instruction": "Which city or destination did you have in mind?",
+                    "destination": "",
+                    "request_type": result.request_type,
+                    "pending_stages": result.pending_stages or [],
+                    "steps": [{"module": "Supervisor", "prompt": user_query,
+                                "response": f"Vague destination '{raw_destination}' → asked for specific city."}],
                 },
-                extracted_prefs=discovery_prefs,
+                extracted_prefs=result.preferences,
                 extracted_trip_type=result.trip_type,
+                is_terminal=True,
             )
 
         # MULTI-TURN: Check if we have minimum required information
@@ -1193,6 +984,8 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                         or state.get("traveling_personas_number", 1),
                         "amenities": result.amenities,
                         "request_type": req_type,  # Ensure this is persisted!
+                        # Preserve pending_stages so combined requests survive mid-flow clarifications
+                        "pending_stages": result.pending_stages if result.pending_stages else (state.get("pending_stages") or []),
                         "steps": [
                             {
                                 "module": "Supervisor",
@@ -1243,6 +1036,29 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                 )
                 result.next_step = "Trip_Planner"
 
+        # ── ATTRACTIONS QUERY GUARD ───────────────────────────────────────────
+        # AttractionsOnly needs to know what the user wants to see/do before we
+        # can run the RAG search. If the supervisor is routing to Attractions but
+        # we don't yet have a free-text description, ask for it first.
+        if result.request_type == "AttractionsOnly" and result.next_step == "Attractions":
+            _attractions_q = state.get("attractions_query") or ""
+            if not _attractions_q.strip():
+                print("  [ATTRACTIONS GUARD] No attractions_query in state — asking user.")
+                return _apply_updates(
+                    {
+                        "next_step": "End",
+                        "supervisor_instruction": "What kind of attractions are you looking for? (e.g. beaches, temples, restaurants, nightlife, museums)",
+                        "destination": result.destination or state.get("destination"),
+                        "request_type": "AttractionsOnly",
+                        "pending_stages": result.pending_stages or state.get("pending_stages") or [],
+                        "steps": [{"module": "Supervisor", "prompt": user_query,
+                                    "response": "Asked user for attractions type."}],
+                    },
+                    extracted_prefs=result.preferences,
+                    is_terminal=True,
+                )
+        # ─────────────────────────────────────────────────────────────────────
+
         updates = {
             "next_step": result.next_step,
             "supervisor_instruction": result.instruction,
@@ -1258,6 +1074,7 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             "amenities": result.amenities,
             "preferences": result.preferences,
             "request_type": result.request_type,
+            "pending_stages": result.pending_stages if result.pending_stages else (state.get("pending_stages") or []),
             "steps": [step_log],
         }
         return _apply_updates(
@@ -1283,6 +1100,105 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
 
 
 # ... (Previous code remains the same up to Planner Node)
+
+
+def _build_staged_approval_msg(
+    request_type: str,
+    trip_plan: dict,
+    destination: str,
+    origin_city: str,
+    duration_days: int,
+    budget_limit: float,
+    budget_currency: str,
+    fallback_response: str = "",
+) -> str:
+    """
+    Builds a human-readable, single-option approval question for a given stage.
+    Returns a Markdown string with the best option and a yes/no question.
+    """
+    if request_type == "FlightOnly":
+        outbound = trip_plan.get("outbound_flight") or {}
+        return_fl = trip_plan.get("return_flight") or {}
+        # Also try legacy flights list
+        if not outbound:
+            flights = trip_plan.get("flights") or []
+            outbound = flights[0] if flights else {}
+            return_fl = flights[1] if len(flights) > 1 else {}
+
+        if not outbound:
+            return fallback_response or "I found a flight option. Would you like to proceed? (yes/no)"
+
+        airline = (outbound.get("source") or outbound.get("airline") or
+                   outbound.get("carrierCode") or "Unknown Airline")
+        orig = outbound.get("origin") or origin_city or "?"
+        dest = outbound.get("destination") or destination or "?"
+        price_raw = outbound.get("price", 0)
+        try:
+            price_val = float(str(price_raw).split()[0].replace(",", ""))
+        except (ValueError, TypeError):
+            price_val = None
+        depart_date = outbound.get("date") or outbound.get("departure") or ""
+        return_date = (return_fl.get("date") or return_fl.get("departure") or "") if return_fl else ""
+        flight_dur = outbound.get("duration") or ""
+        is_direct = outbound.get("is_direct")
+        direct_label = ""
+        if is_direct is not None:
+            direct_label = "Direct" if is_direct else "1+ Stops"
+
+        msg = "✈️ **I found this flight option:**\n\n"
+        msg += f"**Route:** {orig} → {dest}\n"
+        if depart_date:
+            msg += f"**Depart:** {depart_date}\n"
+        if return_date:
+            msg += f"**Return:** {return_date}\n"
+        msg += f"**Airline:** {airline}\n"
+        if flight_dur:
+            msg += f"**Flight time:** {flight_dur}\n"
+        if direct_label:
+            msg += f"**Type:** {direct_label}\n"
+        if price_val is not None:
+            msg += f"**Price:** ${price_val:.0f} {budget_currency}\n"
+        elif price_raw:
+            msg += f"**Price:** {price_raw}\n"
+
+        msg += "\n**Do you want to book this flight? (yes / no)**"
+        return msg
+
+    elif request_type == "HotelOnly":
+        hotels = trip_plan.get("hotels") or []
+        if not hotels:
+            return fallback_response or "I found a hotel option. Would you like to proceed? (yes/no)"
+
+        hotel = hotels[0]
+        name = hotel.get("name") or "Hotel"
+        rating = hotel.get("rating") or hotel.get("rate") or ""
+        price_night = hotel.get("price_per_night") or hotel.get("price") or ""
+        total = hotel.get("total_price") or hotel.get("totalPrice") or ""
+        location = hotel.get("location") or destination or ""
+        if isinstance(location, dict):
+            location = location.get("address") or destination
+        amenities = hotel.get("amenities") or []
+
+        msg = f"🏨 **I found this hotel in {destination}:**\n\n"
+        msg += f"**Hotel:** {name}\n"
+        if rating:
+            msg += f"**Rating:** {rating} ⭐\n"
+        if price_night:
+            msg += f"**Price:** {price_night} per night\n"
+        if total and duration_days:
+            msg += f"**Total:** {total} for {duration_days} nights\n"
+        if location and str(location).lower() != destination.lower():
+            msg += f"**Location:** {location}\n"
+        if amenities:
+            amenity_strs = [str(a) for a in amenities[:5]]
+            msg += f"**Amenities:** {', '.join(amenity_strs)}\n"
+
+        msg += "\n**Do you want to book this hotel? (yes / no)**"
+        return msg
+
+    else:
+        # AttractionsOnly or other: no approval gate, just return plan text
+        return fallback_response or f"Here are the top attractions in {destination}!"
 
 
 # 2. PLANNER NODE
@@ -1511,7 +1427,7 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
         print(f"  Tool Calls: {_safe(tool_calls)}")
 
         step_log = {
-            "module": "Planner",
+            "module": "Trip_Planner",
             "prompt": instruction,
             "response": content_str if content_str else "Executing Tools...",
         }
@@ -1538,12 +1454,27 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
         if submit_plan_call:
             print(f"  [DEBUG] SubmitPlan Args: {str(submit_plan_call).encode('ascii', 'replace').decode('ascii')}")
             submission = submit_plan_call.get("args", {})
-            trip_plan = submission.get("trip_plan", {})
-            # Preserve the planner's final_response — this is what the user sees
-            final_response = submission.get("final_response", "")
-            updates["trip_plan"] = trip_plan
-            updates["supervisor_instruction"] = final_response or "Plan ready."
-            updates["next_step"] = "Critique"
+            trip_plan_data = submission.get("trip_plan", {})
+            final_response_from_llm = submission.get("final_response", "")
+            updates["trip_plan"] = trip_plan_data
+
+            # Build a staged, single-option approval message instead of passing
+            # the raw LLM response. AttractionsOnly gets the LLM text (no gate needed).
+            approval_msg = _build_staged_approval_msg(
+                request_type=request_type,
+                trip_plan=trip_plan_data,
+                destination=destination,
+                origin_city=origin_city,
+                duration_days=duration_days or 0,
+                budget_limit=budget_limit or 0.0,
+                budget_currency=budget_currency or "USD",
+                fallback_response=final_response_from_llm,
+            )
+            step_log["response"] = approval_msg
+            updates["steps"] = [step_log]
+            updates["supervisor_instruction"] = approval_msg
+            # Skip Critique for staged flow — route directly to Human_Approval
+            updates["next_step"] = "Human_Approval"
             return updates
 
         if not tool_calls:
@@ -1590,7 +1521,7 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
             updates["next_step"] = "Human_Approval"
             return updates
 
-        # DEDUP CHECK: stop if the same tool has been called >= 2 times already
+        # DEDUP CHECK: stop if the exact same tool call (name + args) has been run >= 2 times
         import json
 
         last_steps = state.get("steps", [])
@@ -1604,22 +1535,34 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
         if researcher_steps and len(tool_calls) == 1:
             new_tool_name = tool_calls[0].get("name", "")
             new_tool_args = tool_calls[0].get("args", {})
-            new_tool_city = (new_tool_args.get("city") or new_tool_args.get("destination") or "").lower()
-            # Count how many researcher steps already ran this tool FOR THE SAME CITY
-            tool_run_count = 0
+            # Normalize args to a canonical string for exact-match comparison
+            try:
+                new_call_sig = json.dumps({new_tool_name: new_tool_args}, sort_keys=True)
+            except Exception:
+                new_call_sig = str(new_tool_name) + str(new_tool_args)
+            # Count how many researcher steps already ran this exact tool+args combo
+            exact_run_count = 0
             for s in researcher_steps:
-                if new_tool_name and new_tool_name in s.get("prompt", ""):
-                    # Check if that prior call was for the same destination
-                    prior_prompt = s.get("prompt", "")
-                    if not new_tool_city or new_tool_city in prior_prompt.lower():
-                        tool_run_count += 1
-            repeat_guard = tool_run_count >= 1  # stop after 1st attempt for same city
-            # Also check last step specifically (original logic), but only if same city
-            last_researcher_prompt = researcher_steps[-1].get("prompt", "")
-            same_city_in_last = not new_tool_city or new_tool_city in last_researcher_prompt.lower()
-            if (repeat_guard or (new_tool_name and new_tool_name in last_researcher_prompt and same_city_in_last)):
+                prior_prompt = s.get("prompt", "")
+                # The researcher logs the call as "TOOL_CALLS: [...]" in the prompt
+                if new_tool_name and new_tool_name in prior_prompt:
+                    try:
+                        prior_json_str = prior_prompt.replace("TOOL_CALLS:", "").strip()
+                        prior_calls = json.loads(prior_json_str)
+                        for pc in prior_calls:
+                            try:
+                                prior_sig = json.dumps({pc["name"]: pc.get("args", {})}, sort_keys=True)
+                            except Exception:
+                                prior_sig = str(pc.get("name")) + str(pc.get("args"))
+                            if prior_sig == new_call_sig:
+                                exact_run_count += 1
+                    except Exception:
+                        # Fallback: if we can't parse, do a loose name-only check as before
+                        if new_tool_name in prior_prompt:
+                            exact_run_count += 1
+            if exact_run_count >= 1:
                 print(
-                    f"  [DEDUP GUARD] Planner repeating tool '{new_tool_name}' (already ran {tool_run_count}x). Forcing submit."
+                    f"  [DEDUP GUARD] Planner repeating identical tool call '{new_tool_name}' with same args (already ran {exact_run_count}x). Forcing submit."
                 )
                 fallback_plan = {
                     "destination": destination,
@@ -1719,7 +1662,7 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
                 "next_step": "End",
                 "trip_plan": emergency_plan,
                 "supervisor_instruction": "Plan Drafted",
-                "steps": [{"module": "Planner", "prompt": instruction, "response": f"Emergency plan generated after error: {err_str}"}],
+                "steps": [{"module": "Trip_Planner", "prompt": instruction, "response": f"Emergency plan generated after error: {err_str}"}],
             }
         return {"next_step": "Researcher", "supervisor_instruction": f"Error: {err_str}"}
 
@@ -1772,15 +1715,89 @@ def critique_node(state: AgentState) -> Dict[str, Any]:
 
 # 4. HUMAN APPROVAL NODE
 def human_approval_node(state: AgentState) -> Dict[str, Any]:
-    print("--- NODE: HUMAN APPROVAL (PAUSED) ---")
+    print("--- NODE: HUMAN APPROVAL ---")
     request_type = state.get("request_type", "")
-    # Partial requests (FlightOnly, HotelOnly, AttractionsOnly) are auto-approved —
-    # the planner's final_response is already in supervisor_instruction. Go to End.
-    partial_types = {"FlightOnly", "HotelOnly", "AttractionsOnly"}
-    if request_type in partial_types or state.get("user_query") == "approve_trip_plan":
+    pending_stages = state.get("pending_stages") or []
+    user_query = (state.get("user_query") or "").strip().lower()
+
+    # AttractionsOnly needs no confirmation — just present the results.
+    # Legacy "approve_trip_plan" signal also auto-approves.
+    if request_type == "AttractionsOnly" or user_query == "approve_trip_plan":
+        if pending_stages:
+            print(f"  [HUMAN APPROVAL] Auto-approve AttractionsOnly. Next stage: {pending_stages[0]}")
+            return {"next_step": "Supervisor"}
         return {"next_step": "End"}
-    # For full planning (legacy / future): route to Supervisor for review
-    return {"next_step": "Supervisor"}
+
+    # ---------- YES / NO / UNCLEAR detection ----------
+    _YES = {
+        "yes", "ok", "sure", "approved", "approve", "book", "great", "perfect",
+        "go ahead", "proceed", "confirm", "confirmed", "let's do it", "looks good",
+        "fine", "yep", "yeah", "yup", "absolutely", "sounds good", "do it",
+        "book it", "that works", "love it", "awesome", "deal",
+    }
+    _NO = {
+        "no", "nope", "cancel", "different", "change", "cheaper", "reject",
+        "not interested", "try again", "dont", "other", "another",
+        "not that", "not sure", "not what", "too expensive", "skip",
+    }
+
+    query_words = set(user_query.replace("'", "").split())
+    _YES_PHRASES = ("yes", "ok", "sure", "book it", "go ahead", "looks good", "perfect",
+                    "great", "sounds good", "yep", "yeah", "proceed", "let's do it")
+    _NO_PHRASES  = ("no ", " no", "nope", "cancel", "different option", "cheaper",
+                    "not that", "try again", "something else", "other option")
+
+    is_yes = bool(query_words & _YES) or any(p in user_query for p in _YES_PHRASES)
+    is_no  = bool(query_words & _NO)  or any(p in user_query for p in _NO_PHRASES)
+
+    # Edge: if both match (e.g. "no thanks, looks good") prefer YES so the user isn't
+    # bounced unexpectedly — but only when is_yes has a strong positive signal.
+    if is_yes and is_no:
+        is_no = False  # lean toward YES to avoid false rejection
+
+    if is_yes:
+        print(f"  [HUMAN APPROVAL] User accepted. pending_stages={pending_stages}")
+        if request_type == "FlightOnly":
+            confirm_msg = "✅ Flight confirmed! Your booking details have been saved."
+        elif request_type == "HotelOnly":
+            confirm_msg = "✅ Hotel confirmed! Your stay is all set."
+        else:
+            confirm_msg = "✅ Confirmed! Your choice has been saved."
+        if pending_stages:
+            return {
+                "next_step": "Supervisor",
+                "supervisor_instruction": confirm_msg,
+                "steps": [{"module": "Human_Approval", "prompt": user_query, "response": confirm_msg}],
+            }
+        return {
+            "next_step": "End",
+            "supervisor_instruction": confirm_msg,
+            "steps": [{"module": "Human_Approval", "prompt": user_query, "response": confirm_msg}],
+        }
+
+    if is_no:
+        rejection_msg = (
+            "No problem! What would you like to change — "
+            "the price range, travel dates, airline preference, or something else?"
+        )
+        print("  [HUMAN APPROVAL] User rejected.")
+        return {
+            "next_step": "End",
+            "supervisor_instruction": rejection_msg,
+            "steps": [{"module": "Human_Approval", "prompt": user_query, "response": rejection_msg}],
+        }
+
+    # Unclear / no keywords matched
+    clarify_msg = (
+        "I didn't quite catch that — would you like to go ahead with this option? "
+        "Please reply **yes** to confirm or **no** to see alternatives."
+    )
+    print("  [HUMAN APPROVAL] Unclear response — asking to clarify.")
+    return {
+        "next_step": "End",
+        "supervisor_instruction": clarify_msg,
+        "steps": [{"module": "Human_Approval", "prompt": user_query, "response": clarify_msg}],
+    }
 
 
 # 4. RESEARCHER NODE (Enhanced for Tools)
@@ -2017,13 +2034,13 @@ def researcher_node(state: AgentState) -> Dict[str, Any]:
     if steps:
         # Find the most recent step that was either Planner or Supervisor
         for s in reversed(steps):
-            if s.get("module") in ["Supervisor", "Planner", "Trip_Planner"]:
+            if s.get("module") in ["Supervisor", "Trip_Planner"]:
                 last_caller = s["module"]
                 break
 
     # Ensure standard names
     next_node = (
-        "Trip_Planner" if last_caller in ["Planner", "Trip_Planner"] else "Supervisor"
+        "Trip_Planner" if last_caller == "Trip_Planner" else "Supervisor"
     )
 
     # Quick fix: if we somehow got here with 0 duration and no destination,
@@ -2048,175 +2065,89 @@ def researcher_node(state: AgentState) -> Dict[str, Any]:
 # 5. ATTRACTIONS STUB NODE
 def attractions_node(state: AgentState) -> Dict[str, Any]:
     """
-    Expert node for Attractions, Restaurants, and Local Guide info.
-    Uses specialized tools to find things to do and places to eat.
+    RAG-first attractions node.
+    1. Build query from attractions_query + destination.
+    2. Call suggest_attractions_tool → top 3 results.
+    3. Call LLMOD to rewrite as 3 friendly recommendations.
+    4. Return formatted text → End.
     """
     print("--- NODE: ATTRACTIONS ---")
-    destination = state.get("destination")
+    destination = (state.get("destination") or "").strip() or "your destination"
+    attractions_query = (state.get("attractions_query") or state.get("user_query") or "").strip()
     user_query = state.get("user_query", "")
-    instruction = state.get("supervisor_instruction", "")
-    
-    # Check if we have a destination. If not, we might need a quick resolver or fail gracefully.
-    if not destination or destination.strip() == "":
-        # Safety fallback
-        destination = "your destination"
 
-    # Build user context
-    user_profile = state.get("user_profile")
-    user_profile_str = "None"
-    if user_profile:
-        user_profile_str = (
-            f"Style: {user_profile.travel_style or 'Any'}, "
-            f"Diet: {', '.join(user_profile.dietary_needs or [])}, "
-            f"Interests: {', '.join(user_profile.interests or [])}"
-        )
-
-    # Bind tools (RAG-first): do not use live POI search in normal recommendation flow.
-    tools = [suggest_attractions_tool, search_tours_activities_tool]
-    llm_with_tools = llm.bind_tools(tools)
-    
-    # Extract intent keywords to strengthen deterministic fallback tool calls.
-    lower_query = (user_query or "").lower()
-    dining_keywords = [
-        "coffee", "cafe", "restaurant", "food", "dining", "bar", "brunch",
-        "breakfast", "lunch", "dinner", "vegan", "vegetarian", "gluten-free", "gluten free",
-    ]
-    inferred_interests = [kw for kw in dining_keywords if kw in lower_query]
-
-    # 1. Deterministic-first retrieval (RAG), independent of LLM tool-calling.
-    tool_results = []
+    # ── Step 1: RAG retrieval ──────────────────────────────────────────────────
+    interests = [attractions_query] if attractions_query else None
+    raw_rag = ""
     try:
-        direct_args = {
+        raw_rag = suggest_attractions_tool.invoke({
             "destination": destination,
-            "interests": inferred_interests or None,
-            "trip_type": state.get("trip_type", "") or "",
-        }
-        direct_res = suggest_attractions_tool.invoke(direct_args)
-        tool_results.append(direct_res)
-        print("  [Attractions] Deterministic primary call invoked suggest_attractions_tool")
-    except Exception as e:
-        print(f"  [Attractions] Deterministic primary call failed: {e}")
-
-    # 2. LLM tool-routing fallback only when deterministic retrieval produced nothing.
-    if not tool_results:
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", ATTRACTIONS_SYSTEM_PROMPT),
-            ("human", "Destination: {destination}\nUser Query: {user_query}\nProfile: {user_profile}\nInstruction: {instruction}")
-        ])
-
-        chain = prompt | llm_with_tools
-        ai_msg = safe_llm_invoke(chain, {
-            "destination": destination,
-            "user_query": user_query,
-            "user_profile": user_profile_str,
-            "instruction": instruction
+            "interests": interests,
+            "trip_type": state.get("trip_type") or "",
         })
+        print(f"  [Attractions] RAG returned {len(raw_rag)} chars")
+    except Exception as e:
+        print(f"  [Attractions] RAG failed: {e}")
 
-        if ai_msg.tool_calls:
-            print(f"  [Attractions] Executing {len(ai_msg.tool_calls)} tool calls...")
-            available_tools = {
-                "suggest_attractions_tool": suggest_attractions_tool,
-                "search_tours_activities_tool": search_tours_activities_tool
-            }
+    # ── Step 2: Parse top 3 results ────────────────────────────────────────────
+    top_items: list = []
+    try:
+        payload = json.loads(raw_rag)
+        rows = payload if isinstance(payload, list) else payload.get("results", [])
+        for item in rows:
+            if isinstance(item, dict):
+                top_items.append(item)
+            if len(top_items) >= 3:
+                break
+    except Exception:
+        pass
 
-            for tool_call in ai_msg.tool_calls:
-                tool_name = tool_call["name"]
-                if tool_name in available_tools:
-                    try:
-                        res = available_tools[tool_name].invoke(tool_call["args"])
-                        tool_results.append(res)
-                    except Exception as e:
-                        print(f"  [Attractions] Tool {tool_name} failed: {e}")
-                    
-    # 2. Build final response deterministically from tool JSON.
-    # Avoids structured-output parsing failures and guarantees names are shown.
-    parsed_rows: List[Dict[str, Any]] = []
-    for raw in tool_results:
-        try:
-            payload = json.loads(raw)
-            if isinstance(payload, list):
-                for item in payload:
-                    if isinstance(item, dict):
-                        parsed_rows.append(item)
-            elif isinstance(payload, dict):
-                # Some tools may return a single object or wrapper object.
-                if isinstance(payload.get("results"), list):
-                    for item in payload.get("results", []):
-                        if isinstance(item, dict):
-                            parsed_rows.append(item)
-                else:
-                    parsed_rows.append(payload)
-        except Exception:
-            continue
+    raw_text = raw_rag or "No results found."
+    if top_items:
+        lines = []
+        for i, item in enumerate(top_items, 1):
+            name = item.get("name", f"Option {i}")
+            desc = (item.get("description") or item.get("category") or "")[:120]
+            lines.append(f"{i}. {name} — {desc}")
+        raw_text = "\n".join(lines)
 
-    # Secondary fallback: if we still have no parsed rows, force one more direct query
-    # with stronger dining hints for restaurant-like requests.
-    if not parsed_rows:
-        try:
-            enhanced_interests = inferred_interests or ["restaurants", "food"]
-            retry_res = suggest_attractions_tool.invoke(
-                {
-                    "destination": destination,
-                    "interests": enhanced_interests,
-                    "trip_type": state.get("trip_type", "") or "",
-                }
-            )
-            payload = json.loads(retry_res)
-            if isinstance(payload, list):
-                parsed_rows.extend([item for item in payload if isinstance(item, dict)])
-            elif isinstance(payload, dict) and isinstance(payload.get("results"), list):
-                parsed_rows.extend([item for item in payload["results"] if isinstance(item, dict)])
-        except Exception as e:
-            print(f"  [Attractions] Secondary fallback failed: {e}")
+    # ── Step 3: LLMOD formatting pass ─────────────────────────────────────────
+    format_prompt = (
+        f"The user is looking for: '{attractions_query}' in {destination}.\n"
+        f"Here are up to 3 results from our database:\n{raw_text}\n\n"
+        "Rewrite these as 3 clear, friendly recommendations. "
+        "For each: write the name in bold, then a single sentence describing why it matches the request. "
+        "Do not add extra headings or preamble."
+    )
+    formatted_response = ""
+    try:
+        from langchain_core.messages import HumanMessage as HMsg
+        llm_resp = llm.invoke([HMsg(content=format_prompt)])
+        formatted_response = llm_resp.content if hasattr(llm_resp, "content") else str(llm_resp)
+        print(f"  [Attractions] LLMOD formatted {len(formatted_response)} chars")
+    except Exception as e:
+        print(f"  [Attractions] LLMOD formatting failed: {e}")
+        formatted_response = f"Here are some recommendations in {destination}:\n{raw_text}"
 
-    # Deduplicate by name while preserving order.
-    seen_names = set()
-    unique_rows: List[Dict[str, Any]] = []
-    for row in parsed_rows:
-        name = str(row.get("name", "")).strip()
-        if not name or name.lower() in seen_names:
-            continue
-        seen_names.add(name.lower())
-        unique_rows.append(row)
-
-    top_rows = unique_rows[:5]
-    if top_rows:
-        lines = [f"Here are {len(top_rows)} recommendations in {destination}:"]
-        for idx, row in enumerate(top_rows, start=1):
-            name = str(row.get("name", "")).strip() or f"Option {idx}"
-            category = str(row.get("category", "")).strip()
-            description = str(row.get("description", "")).strip().replace("\n", " ")
-            short_desc = description[:90] + ("..." if len(description) > 90 else "")
-
-            detail_bits = []
-            if category:
-                detail_bits.append(category)
-            if short_desc:
-                detail_bits.append(short_desc)
-            detail = " - ".join(detail_bits) if detail_bits else "recommended match"
-            lines.append(f"{idx}. {name} - {detail}")
-
-        response_text = "\n".join(lines)
-    else:
-        response_text = (
-            f"I couldn't find specific restaurant names in {destination} yet. "
-            "Try adding a neighborhood or cuisine and I will narrow it down."
+    if not formatted_response.strip():
+        formatted_response = (
+            f"I found some options for '{attractions_query}' in {destination}:\n{raw_text}"
         )
 
+    # ── Step 4: Return ─────────────────────────────────────────────────────────
     from langchain_core.messages import AIMessage
-    
     messages = list(state.get("messages", []))
-    messages.append(AIMessage(content=response_text))
-    
+    messages.append(AIMessage(content=formatted_response))
+
     step_log = {
         "module": "Attractions",
         "prompt": user_query,
-        "response": response_text,
+        "response": formatted_response,
     }
-    
+
     return {
         "messages": messages,
-        "supervisor_instruction": response_text,
+        "supervisor_instruction": formatted_response,
         "next_step": "End",
         "steps": [step_log],
     }

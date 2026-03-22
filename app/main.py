@@ -110,16 +110,6 @@ def format_plan_to_markdown(plan: Dict[str, Any]) -> str:
                 md += f"- {details}\n"
         md += "\n"
 
-    # --- ITINERARY ---
-    md += "#### 📅 Itinerary\n"
-    itinerary = plan.get("itinerary", [])
-    if isinstance(itinerary, list):
-        for item in itinerary:
-            day = item.get("day", "?")
-            activity = item.get("activity", "No activity")
-            cost = item.get("cost", 0)
-            md += f"- **Day {day}**: {activity} (${cost})\n"
-
     return md
 
 
@@ -173,7 +163,7 @@ class ExecuteRequest(BaseModel):
 
 class ExecuteResponse(BaseModel):
     status: str
-    response: str
+    response: Optional[str]
     steps: List[Dict[str, Any]]
     error: Optional[str] = None
 
@@ -222,7 +212,7 @@ def get_agent_info():
                         "prompt": "...",
                         "response": "Routing to Planner",
                     },
-                    {"module": "Planner", "prompt": "...", "response": "Drafting plan"},
+                    {"module": "Trip_Planner", "prompt": "...", "response": "Drafting plan"},
                 ],
             }
         ],
@@ -336,7 +326,7 @@ def get_model_architecture():
         )
 
 
-@app.post("/api/execute", response_model=ExecuteResponse)
+@app.post("/api/execute")
 def execute_agent(request: ExecuteRequest):
     """
     Main Execution Endpoint.
@@ -350,37 +340,37 @@ def execute_agent(request: ExecuteRequest):
     }
     input_payload = {"user_query": request.prompt}
 
+    def _sanitize_steps(raw_steps: list) -> list:
+        """Keep only the required fields in each step."""
+        return [
+            {
+                "module": s.get("module", ""),
+                "prompt": s.get("prompt", ""),
+                "response": s.get("response", ""),
+            }
+            for s in raw_steps
+        ]
+
     try:
         final_state = graph.invoke(input_payload, config=config)
         plan = final_state.get("trip_plan")
         instruction = final_state.get("supervisor_instruction")
         budget_warning = final_state.get("budget_warning")
-        steps = final_state.get("steps", [])
+        steps = _sanitize_steps(final_state.get("steps", []))
 
-        # Extract metadata for UI sidebar
-        destination = final_state.get("destination") or None
-        budget = final_state.get("budget_limit") or None
-        if final_state.get("budget_currency") and budget:
-            budget = f"{budget} {final_state.get('budget_currency')}"
-        duration = final_state.get("duration_days") or None
-        user_profile = final_state.get("user_profile")
-        profile_dict = (
-            user_profile.dict()
-            if user_profile and hasattr(user_profile, "dict")
-            else {}
-        )
-
-        # Smart response selection: prefer real content over routing tags
         INTERNAL_TAGS = {"Plan Drafted", "Done", "None", ""}
 
         if plan:
-            final_text = format_plan_to_markdown(plan)
-            if budget_warning:
-                final_text = f"⚠️ **Budget Note:** {budget_warning}\n\n{final_text}"
+            plan_trip_type = plan.get("trip_type", "") if isinstance(plan, dict) else ""
+            if plan_trip_type in ("FlightOnly", "HotelOnly") and instruction and instruction not in INTERNAL_TAGS:
+                final_text = instruction
+            else:
+                final_text = format_plan_to_markdown(plan)
+                if budget_warning:
+                    final_text = f"⚠️ **Budget Note:** {budget_warning}\n\n{final_text}"
         elif instruction and instruction not in INTERNAL_TAGS:
             final_text = instruction
         else:
-            # Fallback: last step response with real content
             final_text = "Task completed."
             for step in reversed(steps):
                 resp = step.get("response", "")
@@ -391,23 +381,24 @@ def execute_agent(request: ExecuteRequest):
                     final_text = resp
                     break
 
-        return {
+        data = {
             "status": "ok",
+            "error": None,
             "response": final_text,
             "steps": steps,
-            "destination": destination,
-            "budget": budget,
-            "duration": duration,
-            "user_profile": profile_dict,
-            "error": None,
         }
+        return Response(content=json.dumps(data, indent=2, default=str),
+                        media_type="application/json")
     except Exception as e:
-        return {
+        data = {
             "status": "error",
-            "response": "An error occurred during execution.",
-            "steps": [],
             "error": str(e),
+            "response": None,
+            "steps": [],
         }
+        return Response(content=json.dumps(data, indent=2),
+                        media_type="application/json",
+                        status_code=500)
 
 
 @app.post("/api/stream")
@@ -478,11 +469,13 @@ async def stream_agent(request: ExecuteRequest):
 
                 if snapshot.next:
                     draft_plan = snapshot.values.get("trip_plan")
+                    approval_question = snapshot.values.get("supervisor_instruction", "")
                     await queue.put(
                         {
                             "type": "waiting_for_approval",
                             "thread_id": thread_id,
                             "preview": draft_plan,
+                            "message": approval_question,
                         }
                     )
                 else:

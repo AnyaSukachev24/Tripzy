@@ -182,3 +182,13 @@ class AgentState(TypedDict):
 
     # Placeholder for the Attractions capability output (implemented by another team member).
     attractions_result: Optional[Dict[str, Any]]
+
+    # --- 5. COMBINED REQUEST PIPELINE ---
+    # Holds remaining request types to execute after the current stage completes.
+    # e.g. ["HotelOnly"] means: after FlightOnly finishes, run HotelOnly next.
+    pending_stages: Optional[List[str]]
+
+    # --- 6. ATTRACTIONS ---
+    # Free-text description of what the user wants to see/do (used as RAG query).
+    # Set by supervisor_node when request_type == AttractionsOnly.
+    attractions_query: Optional[str]
