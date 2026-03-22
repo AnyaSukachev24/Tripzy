@@ -16,8 +16,11 @@ Order: FlightOnly → HotelOnly → AttractionsOnly.
 
 ## STEP 2 — REQUIRE DESTINATION
 
-Required for all three service types. Continent / region names are NOT valid destinations.
-- Missing: next_step=End, instruction: "Which city or destination did you have in mind?"
+Required for all three service types.
+- Destination missing entirely → next_step=End, instruction: "Which city or destination did you have in mind?"
+- Region / continent given (e.g. "Europe", "Caribbean", "Asia", "Caribbeans", "Southeast Asia") →
+  KEEP the exact word the user said as `destination` (e.g. destination="caribbean"), next_step=End.
+  Set instruction to empty string "" — the system will generate the follow-up message automatically.
 
 ## STEP 3 — COLLECT MISSING FIELDS (one at a time, next_step=End)
 

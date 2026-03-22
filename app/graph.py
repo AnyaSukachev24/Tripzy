@@ -948,18 +948,40 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
 
         # ────────────────────────────────────────────────────────────────────────
         # VAGUE DESTINATION GUARD
-        # If the user says "Europe", "Asia", etc. — not a real destination.
-        # Ask them to specify a city or country.
+        # If the user says "Europe", "Caribbean", etc. — not a real destination.
+        # Ask them to pick a specific city, with tailored examples per region.
         # ────────────────────────────────────────────────────────────────────────
         VAGUE_DESTINATIONS = {
             "europe", "european", "south america", "north america", "latin america",
             "central america", "asia", "southeast asia", "east asia", "south asia",
             "middle east", "africa", "sub-saharan africa", "north africa", "oceania",
-            "pacific", "caribbean", "scandinavia", "nordic", "mediterranean", "balkans",
-            "eastern europe", "western europe", "central asia", "the world",
-            "somewhere", "anywhere", "abroad", "overseas", "international",
-            "a nice place", "a good place", "somewhere nice", "somewhere warm",
-            "somewhere cold", "somewhere sunny", "somewhere exotic",
+            "pacific", "caribbean", "caribbeans", "scandinavia", "nordic",
+            "mediterranean", "balkans", "eastern europe", "western europe",
+            "central asia", "the world", "somewhere", "anywhere", "abroad",
+            "overseas", "international", "a nice place", "a good place",
+            "somewhere nice", "somewhere warm", "somewhere cold", "somewhere sunny",
+            "somewhere exotic",
+        }
+
+        _REGION_EXAMPLES = {
+            "caribbean":      "Aruba, Bahamas (Nassau), Barbados, Curaçao, or Cancún",
+            "caribbeans":     "Aruba, Bahamas (Nassau), Barbados, Curaçao, or Cancún",
+            "europe":         "Paris, Rome, Barcelona, Amsterdam, or Prague",
+            "european":       "Paris, Rome, Barcelona, Amsterdam, or Prague",
+            "mediterranean":  "Barcelona, Nice, Santorini, Dubrovnik, or Malta",
+            "scandinavia":    "Stockholm, Copenhagen, Oslo, Helsinki, or Reykjavik",
+            "nordic":         "Stockholm, Copenhagen, Oslo, Helsinki, or Reykjavik",
+            "southeast asia": "Bangkok, Bali, Singapore, Ho Chi Minh City, or Kuala Lumpur",
+            "east asia":      "Tokyo, Seoul, Hong Kong, Taipei, or Shanghai",
+            "south asia":     "Mumbai, Delhi, Colombo, Kathmandu, or Dhaka",
+            "middle east":    "Dubai, Tel Aviv, Amman, Doha, or Muscat",
+            "africa":         "Cape Town, Marrakech, Nairobi, Cairo, or Lagos",
+            "north africa":   "Marrakech, Cairo, Tunis, Casablanca, or Alexandria",
+            "south america":  "Buenos Aires, Rio de Janeiro, Lima, Medellín, or Cartagena",
+            "latin america":  "Mexico City, Bogotá, Buenos Aires, Lima, or San José",
+            "central america":"San José, Panama City, Guatemala City, or Antigua",
+            "oceania":        "Sydney, Auckland, Melbourne, Fiji, or Bora Bora",
+            "pacific":        "Sydney, Auckland, Honolulu, Fiji, or Bora Bora",
         }
 
         def _is_vague_destination(dest: str) -> bool:
@@ -967,13 +989,38 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
                 return False
             return dest.strip().lower() in VAGUE_DESTINATIONS
 
+        def _vague_dest_message(dest: str, request_type: str) -> str:
+            key = dest.strip().lower()
+            examples = _REGION_EXAMPLES.get(key)
+            region_name = dest.strip().title()
+            if examples:
+                return (
+                    f"**{region_name}** is a broad region — flights and hotels need a specific "
+                    f"city or island. Which one did you have in mind? For example: {examples}."
+                )
+            service = {"FlightOnly": "flights", "HotelOnly": "hotels"}.get(request_type, "this search")
+            return (
+                f"**{region_name}** is a broad region and {service} require a specific city or "
+                "destination. Could you tell me which city or place you'd like to visit?"
+            )
+
         raw_destination = result.destination or state.get("destination") or ""
-        if result.request_type in ("FlightOnly", "HotelOnly", "AttractionsOnly") and _is_vague_destination(raw_destination):
+        # Fallback: LLM sometimes clears destination when it recognises a vague region.
+        # Scan the raw user query for any known vague keyword so the guard still fires.
+        if not raw_destination:
+            _uq_lower = user_query.lower()
+            for _vd in sorted(VAGUE_DESTINATIONS, key=len, reverse=True):  # longest match first
+                if _vd in _uq_lower:
+                    raw_destination = _vd
+                    print(f"  [VAGUE DEST FALLBACK] Extracted '{_vd}' from user query (LLM cleared destination)")
+                    break
+        if result.request_type in ("FlightOnly", "HotelOnly") and _is_vague_destination(raw_destination):
             print(f"  [VAGUE DEST GUARD] '{raw_destination}' is a region → asking for specific city.")
+            _vague_msg = _vague_dest_message(raw_destination, result.request_type)
             return _apply_updates(
                 {
                     "next_step": "End",
-                    "supervisor_instruction": "Which city or destination did you have in mind?",
+                    "supervisor_instruction": _vague_msg,
                     "destination": "",
                     "request_type": result.request_type,
                     "pending_stages": result.pending_stages or [],
