@@ -30,6 +30,7 @@ const API_BASE = window.location.protocol === 'file:'
 let sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 console.log('Window thread created:', sessionId);
 let lastProgressMessage = '';
+let lastUserPrompt = '';
 
 function mapToolToProgressMessage(toolName) {
     const name = (toolName || '').toLowerCase();
@@ -110,6 +111,64 @@ function appendMessage(role, text) {
     chatDisplay.scrollTop = chatDisplay.scrollHeight;
 }
 
+function appendAgentMessage(text, steps) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'agent-message-wrapper';
+
+    // ── Agent response bubble ──
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'message agent';
+    msgDiv.innerHTML = marked.parse(text);
+    wrapper.appendChild(msgDiv);
+
+    // ── Toggle button for steps ──
+    const stepCount = (steps || []).length;
+    const btn = document.createElement('button');
+    btn.className = 'btn-run-agent';
+    btn.textContent = stepCount > 0 ? `▶ Show Steps (${stepCount})` : 'No Steps';
+    if (stepCount === 0) btn.disabled = true;
+    wrapper.appendChild(btn);
+
+    // ── Steps panel (hidden initially) ──
+    const stepsPanel = document.createElement('div');
+    stepsPanel.className = 'steps-panel hidden';
+    wrapper.appendChild(stepsPanel);
+
+    if (stepCount > 0) {
+        // Populate steps immediately (data already available)
+        stepsPanel.innerHTML = `<div class="steps-header">Agent Steps (${stepCount} total)</div>`;
+        steps.forEach((step, i) => {
+            const item = document.createElement('div');
+            item.className = 'step-item';
+            item.innerHTML = `
+                <div class="step-title">
+                    <span class="step-num">${i + 1}</span>
+                    <span class="step-module">${escapeHtml(step.module || 'Unknown')}</span>
+                </div>
+                <div class="step-field"><span class="step-label">Prompt</span><pre class="step-content">${escapeHtml(String(step.prompt || ''))}</pre></div>
+                <div class="step-field"><span class="step-label">Response</span><pre class="step-content">${escapeHtml(String(step.response || ''))}</pre></div>
+            `;
+            stepsPanel.appendChild(item);
+        });
+
+        // Toggle open/close
+        btn.addEventListener('click', () => {
+            const isHidden = stepsPanel.classList.toggle('hidden');
+            btn.textContent = isHidden
+                ? `▶ Show Steps (${stepCount})`
+                : `▼ Hide Steps (${stepCount})`;
+            if (!isHidden) chatDisplay.scrollTop = chatDisplay.scrollHeight;
+        });
+    }
+
+    chatDisplay.appendChild(wrapper);
+    chatDisplay.scrollTop = chatDisplay.scrollHeight;
+}
+
+function escapeHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
 runBtn.addEventListener('click', async () => {
     const prompt = promptInput.value.trim();
     if (!prompt) return;
@@ -118,6 +177,7 @@ runBtn.addEventListener('click', async () => {
     // Reset Input
     promptInput.value = '';
     promptInput.style.height = 'auto';
+    lastUserPrompt = prompt;
     appendMessage('user', prompt);
 
     // Hide suggestions once the conversation starts
@@ -126,61 +186,51 @@ runBtn.addEventListener('click', async () => {
     // Update UI Status
     runBtn.disabled = true;
     if (statStatus) {
-        statStatus.textContent = 'Initializing...';
+        statStatus.textContent = 'Running...';
         statStatus.style.color = 'var(--accent)';
     }
-    agentThought.textContent = 'Connecting to the Tripzy Engine...';
+    agentThought.textContent = 'Calling the Tripzy Agent...';
+
+    // ── Placeholder bubble while waiting ──
+    const loadingDiv = document.createElement('div');
+    loadingDiv.className = 'message agent loading-bubble';
+    loadingDiv.textContent = 'Thinking…';
+    chatDisplay.appendChild(loadingDiv);
+    chatDisplay.scrollTop = chatDisplay.scrollHeight;
 
     try {
-        const response = await fetch(`${API_BASE}/api/stream`, {
+        const res = await fetch(`${API_BASE}/api/execute`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                prompt: prompt,
-                thread_id: sessionId  // Pass persistent session ID
-            })
+            body: JSON.stringify({ prompt: prompt, thread_id: sessionId })
         });
 
-        if (!response.ok) {
-            throw new Error(`API error ${response.status}: ${response.statusText}`);
-        }
-        if (!response.body) {
-            throw new Error('Stream response has no body. Check server logs and proxy settings.');
-        }
+        loadingDiv.remove();
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
+        const data = await res.json();
 
-        while (true) {
-            const { value, done } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n\n');
-            buffer = lines.pop();
-
-            for (const line of lines) {
-                if (line.trim().startsWith('data: ')) {
-                    const data = JSON.parse(line.trim().substring(6));
-                    handleStreamEvent(data);
-                }
-            }
+        if (data.status === 'error') {
+            appendMessage('system', `Error: ${data.error || 'Unknown error'}`);
+            if (statStatus) statStatus.textContent = 'Error';
+            return;
         }
 
-    } catch (e) {
-        console.error('Stream error:', e);
-        console.error('Error type:', e.name);
-        console.error('Error message:', e.message);
-        console.error('Error stack:', e.stack);
-        appendMessage('system', `Connection failed: ${e.message}. API base: ${API_BASE}. Please check the console for details.`);
-        if (statStatus) statStatus.textContent = 'Offline';
-    } finally {
-        runBtn.disabled = false;
+        // Display agent response + collapsible steps
+        appendAgentMessage(data.response || '(no response)', data.steps || []);
+
+        agentThought.textContent = 'Done.';
         if (statStatus) {
             statStatus.textContent = 'Completed';
             statStatus.style.color = 'var(--success)';
         }
+
+    } catch (e) {
+        loadingDiv.remove();
+        console.error('Execute error:', e);
+        appendMessage('system', `Connection failed: ${e.message}. API base: ${API_BASE}.`);
+        if (statStatus) statStatus.textContent = 'Offline';
+    } finally {
+        runBtn.disabled = false;
     }
 });
 
@@ -240,7 +290,7 @@ function handleStreamEvent(data) {
             approvalSection.classList.remove('hidden');
             break;
         case 'final_response':
-            appendMessage('agent', data.content);
+            appendAgentMessage(data.content, []);
             agentThought.textContent = 'Trip plan finalized.';
             break;
         case 'error':

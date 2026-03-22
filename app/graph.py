@@ -1511,7 +1511,7 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
         print(f"  Tool Calls: {_safe(tool_calls)}")
 
         step_log = {
-            "module": "Planner",
+            "module": "Trip_Planner",
             "prompt": instruction,
             "response": content_str if content_str else "Executing Tools...",
         }
@@ -1719,7 +1719,7 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
                 "next_step": "End",
                 "trip_plan": emergency_plan,
                 "supervisor_instruction": "Plan Drafted",
-                "steps": [{"module": "Planner", "prompt": instruction, "response": f"Emergency plan generated after error: {err_str}"}],
+                "steps": [{"module": "Trip_Planner", "prompt": instruction, "response": f"Emergency plan generated after error: {err_str}"}],
             }
         return {"next_step": "Researcher", "supervisor_instruction": f"Error: {err_str}"}
 
@@ -2017,13 +2017,13 @@ def researcher_node(state: AgentState) -> Dict[str, Any]:
     if steps:
         # Find the most recent step that was either Planner or Supervisor
         for s in reversed(steps):
-            if s.get("module") in ["Supervisor", "Planner", "Trip_Planner"]:
+            if s.get("module") in ["Supervisor", "Trip_Planner"]:
                 last_caller = s["module"]
                 break
 
     # Ensure standard names
     next_node = (
-        "Trip_Planner" if last_caller in ["Planner", "Trip_Planner"] else "Supervisor"
+        "Trip_Planner" if last_caller == "Trip_Planner" else "Supervisor"
     )
 
     # Quick fix: if we somehow got here with 0 duration and no destination,
