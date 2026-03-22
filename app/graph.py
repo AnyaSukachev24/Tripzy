@@ -1180,14 +1180,35 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
             "request_type": result.request_type,
             "pending_stages": result.pending_stages if result.pending_stages else (state.get("pending_stages") or []),
             "steps": [step_log],
-            # Persist backfilled attractions_query so the Attractions node has it.
-            "attractions_query": (
-                state.get("attractions_query")
-                or getattr(result, "_backfill_attractions_q", None)
-                or state.get("user_query")
-                or ""
-            ) if result.request_type == "AttractionsOnly" else state.get("attractions_query", ""),
         }
+
+        # ── ATTRACTIONS_QUERY PERSISTENCE ────────────────────────────────────
+        # a) Follow-up: user already had an attractions result and is now asking
+        #    for something different (e.g. "and museums? maybe local history").
+        #    → OVERWRITE attractions_query with the fresh user message so the
+        #      Attractions node searches only the new intent.
+        # b) First-time / backfill: no prior attractions_query in state yet.
+        #    → Fill from the fallback chain: existing value → backfill tag →
+        #      current user_query.
+        if result.request_type == "AttractionsOnly":
+            _prior_attr_q = (state.get("attractions_query") or "").strip()
+            if _prior_attr_q and user_query.strip():
+                print(
+                    f"  [ATTRACTIONS FOLLOW-UP] Replacing stale query "
+                    f"{_prior_attr_q!r} with new intent {user_query.strip()!r}"
+                )
+                updates["attractions_query"] = user_query.strip()
+            else:
+                updates["attractions_query"] = (
+                    _prior_attr_q
+                    or getattr(result, "_backfill_attractions_q", None)
+                    or user_query.strip()
+                    or ""
+                )
+        else:
+            updates["attractions_query"] = state.get("attractions_query", "")
+        # ─────────────────────────────────────────────────────────────────────
+
         return _apply_updates(
             updates,
             extracted_prefs=result.preferences,
