@@ -387,10 +387,11 @@ def execute_agent(request: ExecuteRequest):
         return Response(content=json.dumps(data, indent=2, default=str),
                         media_type="application/json")
     except Exception as e:
+        error_msg = "Sorry, we couldn't process your request. Please try again later."
         data = {
             "status": "error",
             "error": str(e),
-            "response": None,
+            "response": error_msg,
             "steps": [],
         }
         return Response(content=json.dumps(data, indent=2),

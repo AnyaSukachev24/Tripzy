@@ -1102,6 +1102,33 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
 # ... (Previous code remains the same up to Planner Node)
 
 
+def _validate_plan_output(request_type: str, trip_plan_data: dict) -> tuple:
+    """
+    Validates that the plan actually contains the expected data for the request type.
+    Returns (is_valid: bool, sorry_message: str | None).
+    """
+    if request_type == "FlightOnly":
+        outbound = trip_plan_data.get("outbound_flight") or {}
+        if not outbound:
+            flights = trip_plan_data.get("flights") or []
+            outbound = flights[0] if flights else {}
+        if not outbound:
+            return False, (
+                "Sorry, we couldn't find any available flights for your route. "
+                "This may be due to limited availability or a temporary issue with the "
+                "flight search. Please try different dates or a different route."
+            )
+    elif request_type == "HotelOnly":
+        hotels = trip_plan_data.get("hotels") or []
+        if not hotels:
+            return False, (
+                "Sorry, we couldn't find any available hotels for your destination. "
+                "This may be due to limited availability or a temporary issue with the "
+                "hotel search. Please try adjusting your dates or preferences."
+            )
+    return True, None
+
+
 def _build_staged_approval_msg(
     request_type: str,
     trip_plan: dict,
@@ -1161,7 +1188,6 @@ def _build_staged_approval_msg(
         elif price_raw:
             msg += f"**Price:** {price_raw}\n"
 
-        msg += "\n**Do you want to book this flight? (yes / no)**"
         return msg
 
     elif request_type == "HotelOnly":
@@ -1193,7 +1219,6 @@ def _build_staged_approval_msg(
             amenity_strs = [str(a) for a in amenities[:5]]
             msg += f"**Amenities:** {', '.join(amenity_strs)}\n"
 
-        msg += "\n**Do you want to book this hotel? (yes / no)**"
         return msg
 
     else:
@@ -1458,6 +1483,17 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
             final_response_from_llm = submission.get("final_response", "")
             updates["trip_plan"] = trip_plan_data
 
+            # ── OUTPUT VALIDATION: abort early if no usable results were found ──
+            is_valid, sorry_msg = _validate_plan_output(request_type, trip_plan_data)
+            if not is_valid:
+                print(f"  [VALIDATION] No results for {request_type}: {sorry_msg}")
+                step_log["response"] = sorry_msg
+                updates["trip_plan"] = None  # clear so /api/execute shows instruction, not empty plan
+                updates["steps"] = [step_log]
+                updates["supervisor_instruction"] = sorry_msg
+                updates["next_step"] = "End"
+                return updates
+
             # Build a staged, single-option approval message instead of passing
             # the raw LLM response. AttractionsOnly gets the LLM text (no gate needed).
             approval_msg = _build_staged_approval_msg(
@@ -1470,11 +1506,24 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
                 budget_currency=budget_currency or "USD",
                 fallback_response=final_response_from_llm,
             )
-            step_log["response"] = approval_msg
+            # No approval gate for flights or hotels — present result immediately.
+            # If more stages are pending (e.g. hotel after flight, attractions after hotel),
+            # continue to Supervisor to handle the next stage.
+            pending_stages = state.get("pending_stages") or []
+            # Append closing message only on the very last stage
+            final_msg = approval_msg
+            if request_type in ("FlightOnly", "HotelOnly") and not pending_stages:
+                final_msg = approval_msg + "\n\n---\n✈️ Enjoy your trip! Safe travels from the Tripzy team. 🌍"
+            step_log["response"] = final_msg
             updates["steps"] = [step_log]
-            updates["supervisor_instruction"] = approval_msg
-            # Skip Critique for staged flow — route directly to Human_Approval
-            updates["next_step"] = "Human_Approval"
+            updates["supervisor_instruction"] = final_msg
+            if request_type in ("FlightOnly", "HotelOnly"):
+                if pending_stages:
+                    updates["next_step"] = "Supervisor"
+                else:
+                    updates["next_step"] = "End"
+            else:
+                updates["next_step"] = "Human_Approval"
             return updates
 
         if not tool_calls:
@@ -1557,10 +1606,8 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
                             if prior_sig == new_call_sig:
                                 exact_run_count += 1
                     except Exception:
-                        # Fallback: if we can't parse, do a loose name-only check as before
-                        if new_tool_name in prior_prompt:
-                            exact_run_count += 1
-            if exact_run_count >= 1:
+                        pass  # skip unparseable steps — don't count as duplicate
+            if exact_run_count >= 2:
                 print(
                     f"  [DEDUP GUARD] Planner repeating identical tool call '{new_tool_name}' with same args (already ran {exact_run_count}x). Forcing submit."
                 )
@@ -1595,7 +1642,7 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
                     or "no flights" in last_response.lower()
                     or last_response.strip() == ""
                 )
-                if no_results and new_tool_city:
+                if no_results:
                     if "hotel" in new_tool_name:
                         user_msg = (
                             f"I couldn't find available hotels in {destination} for those dates. "
@@ -1618,7 +1665,8 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
                         "Would you like to refine the search or try different options?"
                     )
                 updates["supervisor_instruction"] = user_msg
-                updates["next_step"] = "Human_Approval"
+                _pending = state.get("pending_stages") or []
+                updates["next_step"] = "Supervisor" if _pending else "End"
                 return updates
 
         # Serialize tool calls for Researcher
@@ -2139,15 +2187,18 @@ def attractions_node(state: AgentState) -> Dict[str, Any]:
     messages = list(state.get("messages", []))
     messages.append(AIMessage(content=formatted_response))
 
+    closing = "\n\n---\n✈️ Enjoy your trip! Safe travels from the Tripzy team. 🌍"
+    final_attractions_response = formatted_response + closing
+
     step_log = {
         "module": "Attractions",
         "prompt": user_query,
-        "response": formatted_response,
+        "response": final_attractions_response,
     }
 
     return {
         "messages": messages,
-        "supervisor_instruction": formatted_response,
+        "supervisor_instruction": final_attractions_response,
         "next_step": "End",
         "steps": [step_log],
     }
